@@ -30,7 +30,7 @@ class ControllerNode(Node):
 
         if data is not None:
             rX = data[1]
-            rT = (data[2]) - 1 #up is negative, so changed to positive
+            rT = (data[2]) + 1 #changes values from -1-1 to 0-2
             lT = data[3] + 1 #changes values from -1-1 to 0-2
             rY = data[4] + 1
             #drift reduction
