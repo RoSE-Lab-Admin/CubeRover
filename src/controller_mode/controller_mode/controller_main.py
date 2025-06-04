@@ -20,7 +20,7 @@ class ControllerNode(Node):
         self.controller = ControllerReader()
         self.controller.connect()
 
-        self.create_timer(0.1, self.send_input)
+        self.create_timer(1, self.send_input)
 
     def send_input(self):
         data = self.controller.get_input()
