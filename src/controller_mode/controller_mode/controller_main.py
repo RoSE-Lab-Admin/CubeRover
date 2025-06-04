@@ -24,7 +24,7 @@ class ControllerNode(Node):
 
     def send_input(self):
         data = self.controller.get_input()
-        print("Controller Data:", data)
+        # print("Controller Data:", data)
         velRequest = VelocityCommand.Request()
         DELAY = 100
 
@@ -33,14 +33,13 @@ class ControllerNode(Node):
             rY = data[2] * -1 #up is negative, so changed to positive
             lT = data[3] + 1 #changes values from -1-1 to 0-2
             rT = data[4] + 1
-
             #drift reduction
             if rX < .1 and rX > -.1:
                 rX = 0
 
             if rY < .1 and rY > -.1:
                 rY = 0
-
+            print(f"rX: {rX}, rY: {rY}, lT: {lT}, rT: {rT}")
             #if nothing is being pressed, base case:
             if lT == 0 and rT == 0 and rX == 0 and rY == 0:
                 velRequest.leftspeed = 0
@@ -74,6 +73,7 @@ class ControllerNode(Node):
                 velRequest.leftspeed = int(vel)
                 velRequest.rightspeed = int(vel1)
                 velRequest.timetodrive = DELAY
+        print(f"Left Speed: {velRequest.leftspeed}, Right Speed: {velRequest.rightspeed}")
         future = self.velsrv.call_async(velRequest)
 
         if future.result() is not None:
