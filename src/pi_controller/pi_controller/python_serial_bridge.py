@@ -23,7 +23,7 @@ class Serial(Node):
 
         try:
             self.link.open()
-            time.sleep(10)
+            time.sleep(0.1)
             self.get_logger().info("Serial connection opened successfully")
         except Exception as e:
             self.get_logger().error(f"Failed to open serial port: {e}")
