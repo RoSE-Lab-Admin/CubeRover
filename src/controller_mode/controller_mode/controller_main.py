@@ -33,7 +33,6 @@ class ControllerNode(Node):
             rY = data[2] * -1 #up is negative, so changed to positive
             lT = data[3] + 1 #changes values from -1-1 to 0-2
             rT = data[4] + 1
-            xbut = data[5]
 
             #drift reduction
             if rX < .1 and rX > -.1:
