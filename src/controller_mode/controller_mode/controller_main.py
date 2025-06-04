@@ -33,13 +33,14 @@ class ControllerNode(Node):
             rT = (data[2]) + 1 #changes values from -1-1 to 0-2
             lT = data[3] + 1 #changes values from -1-1 to 0-2
             rY = data[4] + 1
+            extra = data[5]
             #drift reduction
             if rX < .1 and rX > -.1:
                 rX = 0
 
             if rY < .1 and rY > -.1:
                 rY = 0
-            print(f"rX: {rX}, rY: {rY}, lT: {lT}, rT: {rT}")
+            print(f"rX: {rX}, rY: {rY}, lT: {lT}, rT: {rT} ?: {extra}")
             #if nothing is being pressed, base case:
             if lT == 0 and rT == 0 and rX == 0 and rY == 0:
                 velRequest.leftspeed = 0
