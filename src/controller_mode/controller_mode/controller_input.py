@@ -16,20 +16,39 @@ class ControllerReader:
         return f"The {self.stick} is in position {self.pos}"
 
 #functions
+    # def connect(self):
+    #     pygame.event.pump()
+    #     for event in pygame.event.get():
+    #         if event.type == pygame. JOYDEVICEADDED:
+    #             print("Controller Connected!")
+    #             self.controller = pygame.joystick.Joystick(0) #only registers the first on connected
+    #         return
+
+    #     if pygame.joystick.get_count() == 0:
+    #         if not self.found_Message:
+    #             print("No controller found... Waiting...")
+    #             self.found_Message = True
+    #         self.controller = None
+    #         return
     def connect(self):
         pygame.event.pump()
         for event in pygame.event.get():
-            if event.type == pygame. JOYDEVICEADDED:
+            if event.type == pygame.JOYDEVICEADDED:
                 print("Controller Connected!")
-                self.controller = pygame.joystick.Joystick(0) #only registers the first on connected
-            return
+                self.controller = pygame.joystick.Joystick(0)
+                self.controller.init()
+                
+                print("Controller Name:", self.controller.get_name())
+                print("Number of Axes:", self.controller.get_numaxes())
+                print("Number of Buttons:", self.controller.get_numbuttons())
 
-        if pygame.joystick.get_count() == 0:
-            if not self.found_Message:
-                print("No controller found... Waiting...")
-                self.found_Message = True
-            self.controller = None
-            return
+                # Print axis values to map what is what
+                for i in range(self.controller.get_numaxes()):
+                    print(f"Axis {i}: {self.controller.get_axis(i)}")
+
+                for b in range(self.controller.get_numbuttons()):
+                    print(f"Button {b}: {self.controller.get_button(b)}")
+                return
 
     def get_input(self): #read and returns controller input
         #assigning axis'
