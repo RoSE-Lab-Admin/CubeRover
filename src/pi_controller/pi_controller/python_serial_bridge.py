@@ -10,7 +10,7 @@ COMPORT = '/dev/ttyACM0'
 
 class Serial(Node):
     def __init__(self):
-        super().__init__('Serial_Comm')
+        super().__init__('Serial_Bridge')
         self.serial_lock = threading.Lock()
         #declare parameters for ros node
         self.declare_parameter('COMPORT', '/dev/ttyACM0')
@@ -18,13 +18,12 @@ class Serial(Node):
 
         COMPORT = self.get_parameter('COMPORT').get_parameter_value().string_value
         BAUD = self.get_parameter('BaudRate').get_parameter_value().integer_value
-        COMPORT = '/dev/ttyACM0'
 
         self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
 
         try:
             self.link.open()
-            time.sleep(6)
+            time.sleep(10)
             self.get_logger().info("Serial connection opened successfully")
         except Exception as e:
             self.get_logger().error(f"Failed to open serial port: {e}")
@@ -32,7 +31,7 @@ class Serial(Node):
 
         self.publisher = self.create_publisher(TelemData, 'Telemetry', 20)
         self.timer = self.create_timer(0.5, self.read_serial)
-        self.srv = self.create_service(RoverCommand, 'RoverSerialCommand', self.send_command_callback)
+        self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
 
     def read_serial(self):
         with self.serial_lock:
@@ -92,8 +91,11 @@ class Serial(Node):
             with self.serial_lock:
                 datasize = self.link.tx_obj(header, start_pos=datasize, val_type_override='c')
                 for data in request.data:
-                    self.get_logger().info(f"data: {data}")
-                    datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='f')
+                    try:
+                        datasize = self.link.tx_obj(data, datasize, val_type_override='f')
+                        self.get_logger().info(f"data: {data}")
+                    except Exception as e:
+                        self.get_logger().error("Error adding data: {e}")
                 print(self.link.send(datasize))
                 response.success = True
                 self.get_logger().info(f"data sent")
