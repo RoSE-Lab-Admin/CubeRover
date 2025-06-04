@@ -46,10 +46,10 @@ class ControllerReader:
                 return
             
         #pull joystick values
-        right_Xaxis = self.controller.get_axis(3)
-        right_Yaxis = self.controller.get_axis(4)
-        left_Trig = self.controller.get_axis(2)
-        right_Trig = self.controller.get_axis(5)
+        right_Xaxis = self.controller.get_axis(4) #3
+        right_Yaxis = self.controller.get_axis(5) #4
+        left_Trig = self.controller.get_axis(2) #2
+        right_Trig = self.controller.get_axis(3) #5
         x_button = self.controller.get_button(2) #TODO: check to see if this is correct
 
         return [right_Xaxis, right_Yaxis, left_Trig, right_Trig, x_button]
