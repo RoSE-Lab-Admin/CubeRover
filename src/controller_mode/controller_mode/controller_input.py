@@ -47,7 +47,7 @@ class ControllerReader:
             
         #pull joystick values
         right_Xaxis = self.controller.get_axis(4) #rX is actually on axis 4
-        right_Yaxis = self.controller.get_axis(6) #this is on some other axis
+        right_Yaxis = self.controller.get_axis(0) #this is on some other axis
         left_Trig = self.controller.get_axis(2) #lT is actually on axis 2
         right_Trig = self.controller.get_axis(3) #rT is actually on axis 3
         x_button = self.controller.get_button(2) #TODO: check to see if this is correct
