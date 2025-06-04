@@ -40,7 +40,7 @@ class ControllerNode(Node):
 
             if rY < .1 and rY > -.1:
                 rY = 0
-            print(f"rX: {rX}, rY: {rY}, lT: {lT}, rT: {rT} ?: {extra}")
+            print(f"rX: {rX}, rY: {rY}, lT: {lT}, rT: {rT} extra: {extra}")
             #if nothing is being pressed, base case:
             if lT == 0 and rT == 0 and rX == 0 and rY == 0:
                 velRequest.leftspeed = 0
