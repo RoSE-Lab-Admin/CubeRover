@@ -55,24 +55,24 @@ class ControllerNode(Node):
                 else:
                     trig = rT
                 angle, radius, vel1, vel2 = ic.turn_calc(rX, rY, trig)
-                velRequest.leftspeed = vel1
-                velRequest.rightspeed = vel2
+                velRequest.leftspeed = int(vel1)
+                velRequest.rightspeed = int(vel2)
                 velRequest.timetodrive = DELAY
 
             #if right trigger is a non zero val, move forwards
             elif rT:
                 vel = abs(float(ic.linvel_calc(rT)))
                 vel1 = vel
-                velRequest.leftspeed = vel
-                velRequest.rightspeed = vel1
+                velRequest.leftspeed = int(vel)
+                velRequest.rightspeed = int(vel1)
                 velRequest.timetodrive = DELAY
 
             #if left trigger is non zero val, move backwards
             elif lT:
                 vel = -1*abs(float(ic.linvel_calc(lT)))
                 vel1 = vel
-                velRequest.leftspeed = vel
-                velRequest.rightspeed = vel1
+                velRequest.leftspeed = int(vel)
+                velRequest.rightspeed = int(vel1)
                 velRequest.timetodrive = DELAY
         future = self.velsrv.call_async(velRequest)
 
