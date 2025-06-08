@@ -29,7 +29,9 @@ class Serial(Node):
             self.get_logger().error(f"Failed to open serial port: {e}")
             return
 
-        self.publisher = self.create_publisher(TelemData, 'Telemetry', 20)
+        self.encPub = self.create_publisher(TelemData, 'Enc_Telem', 20)
+        self.imuPub = self.create_publisher(TelemData, 'IMU_Telem', 20)
+        self.encPub = self.create_publisher(TelemData, 'Enc_Telem', 20)
         self.timer = self.create_timer(0.5, self.read_serial)
         self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
 
