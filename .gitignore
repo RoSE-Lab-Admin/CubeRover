@@ -3,4 +3,4 @@ install/
 log/
 .vscode
 venv/
-
+src/.vscode
