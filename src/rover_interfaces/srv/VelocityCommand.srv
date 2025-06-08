@@ -1,5 +1,7 @@
-int32 leftspeed
-int32 rightspeed
-int32 timetodrive
+#Standard message for commanding rover velocity
+
+int32 leftspeed #speed of left wheels (cm/s) - Does not calculate slip
+int32 rightspeed #speed of right wheels (cm/s) - Does not calculate slip
+int32 timetodrive #time for the velocity to run at (includes accel but not deaccel ATM)
 ---
 bool success
