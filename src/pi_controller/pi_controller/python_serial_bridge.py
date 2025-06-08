@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from rover_interfaces.msg import TelemData
+from rover_interfaces.msg import TelemData, IMUData, IMUPose, MotorData
 from rover_interfaces.srv import RoverCommand
 from pySerialTransfer import pySerialTransfer as tx
 import time
@@ -14,10 +14,10 @@ class Serial(Node):
         self.serial_lock = threading.Lock()
         #declare parameters for ros node
         self.declare_parameter('COMPORT', '/dev/ttyAMA0')
-        self.declare_parameter('BaudRate', 38400)
+        self.declare_parameter('BAUD', 38400)
 
         COMPORT = self.get_parameter('COMPORT').get_parameter_value().string_value
-        BAUD = self.get_parameter('BaudRate').get_parameter_value().integer_value
+        BAUD = self.get_parameter('BAUD').get_parameter_value().integer_value
 
         self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
 
@@ -29,9 +29,9 @@ class Serial(Node):
             self.get_logger().error(f"Failed to open serial port: {e}")
             return
 
-        self.encPub = self.create_publisher(TelemData, 'Enc_Telem', 20)
-        self.imuPub = self.create_publisher(TelemData, 'IMU_Telem', 20)
-        self.encPub = self.create_publisher(TelemData, 'Enc_Telem', 20)
+        self.encPub = self.create_publisher(MotorData, 'Enc_Telem', 20)
+        self.imuPub = self.create_publisher(IMUData, 'IMU_Telem', 20)
+        self.posePub = self.create_publisher(IMUPose, 'Pose_Telem', 20)
         self.timer = self.create_timer(0.5, self.read_serial)
         self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
 
@@ -47,41 +47,44 @@ class Serial(Node):
                     self.get_logger().error(f"Error with serial read: {e}")
                     return
                 
-                data = TelemData()
-                data.enc1 = telemOutput[0]
-                data.enc2 = telemOutput[1]
-                data.enc3 = telemOutput[2]
-                data.enc4 = telemOutput[3]
-                data.vel1 = telemOutput[4]
-                data.vel2 = telemOutput[5]
-                data.vel3 = telemOutput[6]
-                data.vel4 = telemOutput[7]
+                #data = TelemData()
 
-                data.m1current = telemOutput[8]
-                data.m2current = telemOutput[9]
-                data.m3current = telemOutput[10]
-                data.m4current = telemOutput[11]
+                motorData = MotorData()
+                motorData.enc1 = telemOutput[0]
+                motorData.enc2 = telemOutput[1]
+                motorData.enc3 = telemOutput[2]
+                motorData.enc4 = telemOutput[3]
 
-                data.heading_x = telemOutput[12]
-                data.heading_y = telemOutput[13]
-                data.heading_z = telemOutput[14]
+                motorData.vel1 = telemOutput[4]
+                motorData.vel2 = telemOutput[5]
+                motorData.vel3 = telemOutput[6]
+                motorData.vel4 = telemOutput[7]
 
-                data.heading_pos = telemOutput[15]
-                data.heading_vel = telemOutput[16]
+                motorData.m1current = telemOutput[8]
+                motorData.m2current = telemOutput[9]
+                motorData.m3current = telemOutput[10]
+                motorData.m4current = telemOutput[11]
 
-                data.accel_x = telemOutput[17]
-                data.accel_y = telemOutput[18]
-                data.accel_z = telemOutput[19]
+                # data.heading_x = telemOutput[12]
+                # data.heading_y = telemOutput[13]
+                # data.heading_z = telemOutput[14]
 
-                data.ang_accel_x = telemOutput[20]
-                data.ang_accel_y = telemOutput[21]
-                data.ang_accel_z = telemOutput[22]
+                # data.heading_pos = telemOutput[15]
+                # data.heading_vel = telemOutput[16]
 
-                self.publisher.publish(data)
+                # data.accel_x = telemOutput[17]
+                # data.accel_y = telemOutput[18]
+                # data.accel_z = telemOutput[19]
+
+                # data.ang_accel_x = telemOutput[20]
+                # data.ang_accel_y = telemOutput[21]
+                # data.ang_accel_z = telemOutput[22]
+
+                self.encPub.publish(motorData)
                 self.get_logger().info("Published telem data")
                 return
             else:
-                self.get_logger().info("Serial not available")
+                self.get_logger().error("Serial not available")
                 return
 
     def send_command_callback(self, request, response):
