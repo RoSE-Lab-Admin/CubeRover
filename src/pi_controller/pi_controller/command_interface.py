@@ -34,7 +34,7 @@ class CommandNode(Node):
         serial_request.data[5] = request.accel
         serial_request.data[6] = request.deaccel
 
-        self.get_logger().info(f"sending packet: {request.l1}, {request.r1}, {request.timetodrive}, {request.accel}")
+        self.get_logger().info(f"sending packet: {request.l1}, {request.l2}, {request.r1}, {request.r2}, {request.timetodrive}, {request.accel}")
 
         future = self.serialsrv.call_async(serial_request)
 
