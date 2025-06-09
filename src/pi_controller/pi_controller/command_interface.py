@@ -25,10 +25,14 @@ class CommandNode(Node):
         
         serial_request = RoverCommand.Request()
         serial_request.type = 'V'
-        serial_request.data = np.zeros(3, dtype=np.float32)
-        serial_request.data[0] = request.leftspeed
-        serial_request.data[1] = request.rightspeed
-        serial_request.data[2] = request.timetodrive
+        serial_request.data = np.zeros(7, dtype=np.int32)
+        serial_request.data[0] = request.l1
+        serial_request.data[1] = request.l2
+        serial_request.data[2] = request.r1
+        serial_request.data[0] = request.r2
+        serial_request.data[1] = request.timetodrive
+        serial_request.data[2] = request.accel
+        serial_request.data[2] = request.deaccel
 
         future = self.serialsrv.call_async(serial_request)
 

@@ -95,7 +95,7 @@ class Serial(Node):
                 datasize = self.link.tx_obj(header, start_pos=datasize, val_type_override='c')
                 for data in request.data:
                     try:
-                        datasize = self.link.tx_obj(data, datasize, val_type_override='f')
+                        datasize = self.link.tx_obj(data, datasize, val_type_override='i')
                         self.get_logger().info(f"data: {data}")
                     except Exception as e:
                         self.get_logger().error("Error adding data: {e}")
