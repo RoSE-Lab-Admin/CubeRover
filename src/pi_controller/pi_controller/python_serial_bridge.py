@@ -38,8 +38,8 @@ class Serial(Node):
             if self.link.available():
                 try:
                     telemOutput = []
-                    for i in range(23): #get each value from telemetry serial
-                            val = self.link.rx_obj(obj_type='f', start_pos=i*4)
+                    for i in range(12): #get each value from telemetry serial
+                            val = self.link.rx_obj(obj_type='i', start_pos=i*4)
                             telemOutput.append(val)
                 except Exception as e:
                     self.get_logger().error(f"Error with serial read: {e}")
