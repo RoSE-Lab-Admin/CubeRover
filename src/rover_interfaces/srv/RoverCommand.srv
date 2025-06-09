@@ -1,6 +1,6 @@
 #Barebones serial message to the motor controller board
 string type
-float32[] data
+int32[] data
 
 ---
 bool success
