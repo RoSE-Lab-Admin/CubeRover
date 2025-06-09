@@ -30,7 +30,7 @@ class Serial(Node):
             return
 
         self.encPub = self.create_publisher(MotorData, 'Enc_Telem', 20)
-        self.timer = self.create_timer(0.5, self.read_serial)
+        self.timer = self.create_timer(0.05, self.read_serial)
         self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
 
     def read_serial(self):
@@ -79,7 +79,7 @@ class Serial(Node):
                 # data.ang_accel_z = telemOutput[22]
 
                 self.encPub.publish(motorData)
-                self.get_logger().info("Published telem data")
+                #self.get_logger().info("Published telem data")
                 return
             else:
                 self.get_logger().error("Serial not available")
