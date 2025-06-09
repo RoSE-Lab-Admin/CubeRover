@@ -27,6 +27,8 @@ class ControllerNode(Node):
         # print("Controller Data:", data)
         velRequest = VelocityCommand.Request()
         DELAY = 300
+        velRequest.accel = 1500
+        velRequest.deaccel = 1500
 
         if data is not None:
             rX = data[0]
@@ -43,8 +45,10 @@ class ControllerNode(Node):
             print(f"rX: {rX}, rY: {rY}, lT: {lT}, rT: {rT}")
             #if nothing is being pressed, base case:
             if lT == 0 and rT == 0 and rX == 0 and rY == 0:
-                velRequest.leftspeed = 0
-                velRequest.rightspeed = 0
+                velRequest.l1 = 0
+                velRequest.l2 = 0
+                velRequest.r1 = 0
+                velRequest.r2 = 0
                 velRequest.timetodrive = DELAY
 
 
@@ -55,24 +59,28 @@ class ControllerNode(Node):
                 else:
                     trig = rT
                 angle, radius, vel1, vel2 = ic.turn_calc(rX, rY, trig)
-                velRequest.leftspeed = int(vel1)
-                velRequest.rightspeed = int(vel2)
+                velRequest.l1 = int(vel1)
+                velRequest.l2 = int(vel1)
+                velRequest.r1 = int(vel2)
+                velRequest.r2 = int(vel2)
                 velRequest.timetodrive = DELAY
 
             #if right trigger is a non zero val, move forwards
             elif rT:
                 vel = abs(float(ic.linvel_calc(rT)))
-                vel1 = vel
-                velRequest.leftspeed = int(vel)
-                velRequest.rightspeed = int(vel1)
+                velRequest.l1 = int(vel)
+                velRequest.l2 = int(vel)
+                velRequest.r1 = int(vel)
+                velRequest.r2 = int(vel)
                 velRequest.timetodrive = DELAY
 
             #if left trigger is non zero val, move backwards
             elif lT:
                 vel = -1*abs(float(ic.linvel_calc(lT)))
-                vel1 = vel
-                velRequest.leftspeed = int(vel)
-                velRequest.rightspeed = int(vel1)
+                velRequest.l1 = int(vel)
+                velRequest.l2 = int(vel)
+                velRequest.r1 = int(vel)
+                velRequest.r2 = int(vel)
                 velRequest.timetodrive = DELAY
         print(f"Left Speed: {velRequest.leftspeed}, Right Speed: {velRequest.rightspeed}")
         future = self.velsrv.call_async(velRequest)
