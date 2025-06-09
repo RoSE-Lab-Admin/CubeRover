@@ -35,7 +35,7 @@ RoboClaw ROBOCLAW_2 = RoboClaw(&Serial3, 10000);
 void setup(void) {
   // Init serial ports for PI / computer communication
   Serial.begin(38400); // Built-in USB port for Teensy
-  Serial.println("Booting...");
+  //Serial.println("Booting...");
 
   // Init serial ports for roboclaws
   ROBOCLAW_1.begin(38400);
@@ -102,7 +102,7 @@ void loop() { // Stuff to loop over
   if (sendTimer > 500) {
     SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2, bno), 12);
     sendTimer = 0;
-    Serial.print("Running");
+    //Serial.print("Running");
   }
   delay(20);
 }
@@ -113,7 +113,7 @@ ControlPacket* SerialDecode () {
   char ID; // stores ID of current packet decoder
   ControlPacket * controlTemp = nullptr; // temp pointer to decoded packet
   recievePOS = rx.rxObj(ID, recievePOS); // store ID char
-  Serial.print(ID);
+  //Serial.print(ID);
   if (ID == 'V') { // Velocity control
     controlTemp = new VelPID(RetrieveSerial<int>(7, recievePOS)); // creates new packet of type Velocity
   } else if (ID == 'P') { // Distance / Position control
@@ -148,7 +148,7 @@ void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
   float fsettings[10] = {0}; // stores float settings in an array. [vP,vI,vD,pP,pI,pD,pMI,Deadzone]
   for (size_t i = 0; i < 8*4; i = i + 4) {
     EEPROM.get((i), fsettings[i/4]);
-    Serial.println(fsettings[i/4]);
+    //Serial.println(fsettings[i/4]);
   }
   RC1.SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
   RC1.SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
@@ -164,8 +164,8 @@ void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
 // Writes val to the EEPROM memory at address
 void MemWrite(int adr, float val) {
   EEPROM.put(adr, val);
-  Serial.println(adr);
-  Serial.println(val);
+  // Serial.println(adr);
+  // Serial.println(val);
 }
 
 

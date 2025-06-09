@@ -1,7 +1,7 @@
 #ifndef CONTROL_PACKET_H
 #define CONTROL_PACKET_H
 
-#define DEBUG
+//#define DEBUG
 
 #include <RoboClaw.h>
 #include <Wire.h>
