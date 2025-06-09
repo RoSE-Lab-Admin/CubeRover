@@ -32,21 +32,23 @@ class ControlPacket { // Basic controlpacket parent class
 
 class VelPID : public ControlPacket {
  public:
-    VelPID(float * data, int acceleration, int deacceleration);
+    VelPID(int * data);
     void resolve(RoboClaw * RC1, RoboClaw * RC2) final;
     bool fulfilled(RingBuf<ControlPacket*, 20>& packetBuff) final;
     void stop() final;
   private:
     int _accel;
     int _deaccel;
-    int _vL;
-    int _vR;
+    int _vL1;
+    int _vL2;
+    int _vR1;
+    int _vR2;
     long unsigned int _time;
 };
 
 class PosPID : public ControlPacket {
  public:
-    PosPID(float * data, int acceleration, int deacceleration);
+    PosPID(int * data);
     void resolve(RoboClaw * RC1, RoboClaw * RC2) final;
     bool fulfilled(RingBuf<ControlPacket*, 20>& packetBuff  ) final;
     void stop() final;
@@ -99,15 +101,17 @@ ControlPacket::~ControlPacket() {
 
 
 
-VelPID::VelPID(float * data, int acceleration, int deacceleration) { // initilizes the Velocity PID speed control packet
+VelPID::VelPID(int * data) { // initilizes the Velocity PID speed control packet
   // grabs the data from the inputted array
-  _vL = data[0];
-  _vR = data[1];
-  _time = data[2];
+  _vL1 = data[0];
+  _vL2 = data[1];
+  _vR1 = data[2];
+  _vR2 = data[3];
+  _time = data[4];
 
   // saves the acceleration and deacceleration values from initialization
-  _accel = acceleration;
-  _deaccel = deacceleration;
+  _accel = data[5];
+  _deaccel = data[6];
 
   // deletes the data array to prevent a memory leak
   delete[] data;
@@ -119,42 +123,54 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
   _RC2 = RC2;
 
   // status conditions to make sure recieved packet is valid
-  uint8_t status1,status2;
-  bool valid1,valid2;
-  int32_t speed1 = _RC1->ReadSpeedM1(0x80, &status1, &valid1);
-  int32_t speed2 = _RC2->ReadSpeedM1(0x80, &status2, &valid2);
+  uint8_t status1,status2,status3,status4;
+  bool valid1,valid2,valid3,valid4;
+  int32_t speedL1 = _RC1->ReadSpeedM1(0x80, &status1, &valid1);
+  int32_t speedL2 = _RC1->ReadSpeedM2(0x80, &status2, &valid2);
+  int32_t speedR1 = _RC2->ReadSpeedM1(0x80, &status3, &valid3);
+  int32_t speedR2 = _RC2->ReadSpeedM2(0x80, &status4, &valid4);
 
-  while(!valid1 && !valid2) { // if invalid reading, read until valid encoder setpoint
-    int32_t speed1 = _RC1->ReadSpeedM1(0x80, &status1, &valid1);
-    int32_t speed2 = _RC2->ReadSpeedM1(0x80, &status2, &valid2);
+  while(!valid1 && !valid2 && !valid3 && !valid4) { // if invalid reading, read until valid encoder setpoint
+    int32_t speedL1 = _RC1->ReadSpeedM1(0x80, &status1, &valid1);
+    int32_t speedL2 = _RC1->ReadSpeedM2(0x80, &status2, &valid2);
+    int32_t speedR1 = _RC2->ReadSpeedM1(0x80, &status3, &valid3);
+    int32_t speedR2 = _RC2->ReadSpeedM2(0x80, &status4, &valid4);
   }
 
-  // commanding left roboclaws
-  bool speedingUp = (_vL - speed1) * _vL > 0;
+  // commanding l1
+  bool speedingUp = (_vL1 - speedL1) * _vL1 > 0;
   int accelToUse = speedingUp ? _accel : _deaccel;
-  _RC1->SpeedAccelM1(0x80, accelToUse, _vL);
-  _RC1->SpeedAccelM2(0x80, accelToUse, _vL);
+  _RC1->SpeedAccelM1(0x80, accelToUse, _vL1);
+  
+  // commanding l2
+  speedingUp = (_vL2 - speedL2) * _vL2 > 0;
+  accelToUse = speedingUp ? _accel : _deaccel;
+  _RC1->SpeedAccelM2(0x80, accelToUse, _vL2);
 
   #ifdef DEBUG
     Serial.print("VL: ");
-    Serial.print(speed1);
+    Serial.print(speedL1);
     Serial.print(" | VR: ");
-    Serial.print(speed2);
+    Serial.print(speedL2);
 
     Serial.print(" | VL: ");
-    Serial.print(_vL);
+    Serial.print(_vL1);
     Serial.print(" | VR: ");
-    Serial.print(_vR);
+    Serial.print(_vR1);
 
     Serial.print(" | Accel: ");
     Serial.println(accelToUse);
   #endif
 
-  // commanding right roboclaws
-  speedingUp = (_vR - speed1) * _vR > 0;
+  // commanding r1
+  speedingUp = (_vR1 - speedR1) * _vR1 > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
-  _RC2->SpeedAccelM1(0x80, accelToUse, _vR);
-  _RC2->SpeedAccelM2(0x80, accelToUse, _vR);
+  _RC2->SpeedAccelM1(0x80, accelToUse, _vR1);
+  
+  // commanding r2
+  speedingUp = (_vR2 - speedR2) * _vR2 > 0;
+  accelToUse = speedingUp ? _accel : _deaccel;
+  _RC2->SpeedAccelM2(0x80, accelToUse, _vR2);
 
   // set run timer to 0
   _packTimer = 0;
@@ -202,14 +218,14 @@ void VelPID::stop() { // sets the roboclaws to stop
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-PosPID::PosPID(float * data, int Acceleration, int Deacceleration) { // initilizes the POSPID Class, for position control
+PosPID::PosPID(int * data) { // initilizes the POSPID Class, for position control
   // grabs the data from the inputted array
   _dist = data[0];
   _vel = data[1];
 
   // saves the acceleration and deacceleration values from initialization
-  _accel = Acceleration;
-  _deaccel = Deacceleration;
+  _accel = 0;
+  _deaccel = 0;
 
   // deletes the data array to prevent a memory leak
   delete[] data;
