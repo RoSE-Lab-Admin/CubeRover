@@ -99,7 +99,7 @@ void loop() { // Stuff to loop over
     }
   }
 
-  if (sendTimer > 500) {
+  if (sendTimer > 50) {
     SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2, bno), 12);
     sendTimer = 0;
     //Serial.print("Running");
