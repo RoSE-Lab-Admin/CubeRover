@@ -14,7 +14,7 @@ class Serial(Node):
         self.serial_lock = threading.Lock()
         #declare parameters for ros node
         self.declare_parameter('COMPORT', '/dev/ttyACM0')
-        self.declare_parameter('BAUD', 38400)
+        self.declare_parameter('BAUD', 115200)
 
         COMPORT = self.get_parameter('COMPORT').get_parameter_value().string_value
         BAUD = self.get_parameter('BAUD').get_parameter_value().integer_value
