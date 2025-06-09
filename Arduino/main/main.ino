@@ -1,5 +1,5 @@
 
-
+// Including packages
 #include <RingBuf.h>
 #include <elapsedMillis.h>
 #include <SerialTransfer.h>
@@ -9,7 +9,7 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h>
+#include <Adafruit_BNO055.h> // soon to be removed and ported to the PI
 
 
 
@@ -18,8 +18,7 @@
 // float Ki = 0.345;   // integral constant for velocity PID
 // float Kd = 0;   // derivative constant for velocity PID
 float qpps = 3400; // countable quadrature pulses per second -> found using roboclaw's basicMicro tool
-float acceleration = 0;
-float deacceleration = 0;
+
 
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 
@@ -36,11 +35,6 @@ RoboClaw ROBOCLAW_2 = RoboClaw(&Serial3, 10000);
 void setup(void) {
   // Init serial ports for PI / computer communication
   Serial.begin(38400); // Built-in USB port for Teensy
-
-  while (!Serial8) {
-    delay(100);
-    Serial.print("waiting for GPIO form raspi");
-  }
   Serial.println("Booting...");
 
   // Init serial ports for roboclaws
@@ -56,18 +50,18 @@ void setup(void) {
 
   delay(100);
 
-  if (!bno.begin())
-  {
-    for(int i = 0; i < 20; i++) {
-      if (!bno.begin()) {
-        Serial.print("No BNO055 detected");
-        digitalWrite(13,!digitalRead(13));
-        delay(500);
-      }
-    }
-  }
+  // if (!bno.begin())
+  // {
+  //   for(int i = 0; i < 20; i++) {
+  //     if (!bno.begin()) {
+  //       Serial.print("No BNO055 detected");
+  //       digitalWrite(13,!digitalRead(13));
+  //       delay(500);
+  //     }
+  //   }
+  // }
   //bno.setExtCrystalUse(true);
-  delay(10000);
+  delay(3000);
   Serial8.begin(38400); // GPIO pins for Raspberry Pi
   rx.begin(Serial8);
   Serial.println("Complete!");
@@ -104,9 +98,9 @@ void loop() { // Stuff to loop over
       }
     }
   }
-  updatePose(bno); // update the IMU pose
+
   if (sendTimer > 500) {
-    SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2, bno), 23);
+    SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2, bno), 12);
     sendTimer = 0;
     Serial.print("Running");
   }
@@ -115,21 +109,22 @@ void loop() { // Stuff to loop over
 
 
 ControlPacket* SerialDecode () {
-  //delay(5000);
   uint16_t recievePOS = 0; // stores position of iterator in recieving buffer
   char ID; // stores ID of current packet decoder
   ControlPacket * controlTemp = nullptr; // temp pointer to decoded packet
   recievePOS = rx.rxObj(ID, recievePOS); // store ID char
   Serial.print(ID);
   if (ID == 'V') { // Velocity control
-    controlTemp = new VelPID(RetrieveSerial<float>(3, recievePOS), acceleration, deacceleration); // creates new packet of type Velocity
+    controlTemp = new VelPID(RetrieveSerial<int>(7, recievePOS)); // creates new packet of type Velocity
   } else if (ID == 'P') { // Distance / Position control
     //Serial.write("Distance!");
-    controlTemp = new PosPID(RetrieveSerial<float>(2,recievePOS), acceleration, deacceleration);
-  } else if (ID == 'T') {
-    //Serial.write("Turning!");
-    controlTemp = new AngPID(RetrieveSerial<float>(3,recievePOS), bno, acceleration, deacceleration);
-  } else if (ID == 'E') { // stops the rover and empties the packet buffer -> ideally for emergency / resetting the rover
+    controlTemp = new PosPID(RetrieveSerial<int>(2,recievePOS));
+  } 
+  // else if (ID == 'T') {
+  //   //Serial.write("Turning!");
+  //   controlTemp = new AngPID(RetrieveSerial<float>(3,recievePOS), bno, acceleration, deacceleration);
+  // }
+   else if (ID == 'E') { // stops the rover and empties the packet buffer -> ideally for emergency / resetting the rover --> FIX
     if (control != nullptr) {
       //Serial.println("STOP");
       control->stop();
@@ -150,8 +145,8 @@ ControlPacket* SerialDecode () {
 
 // fetch stored configuration parameters and assign to required locations
 void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
-  float fsettings[10] = {0}; // stores float settings in an array. [vP,vI,vD,pP,pI,pD,pMI,Deadzone, Acceleration, Deacceleration]
-  for (size_t i = 0; i < 10*4; i = i + 4) {
+  float fsettings[10] = {0}; // stores float settings in an array. [vP,vI,vD,pP,pI,pD,pMI,Deadzone]
+  for (size_t i = 0; i < 8*4; i = i + 4) {
     EEPROM.get((i), fsettings[i/4]);
     Serial.println(fsettings[i/4]);
   }
@@ -163,8 +158,6 @@ void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
   RC1.SetM2PositionPID(0x80, fsettings[3], fsettings[4], fsettings[5], static_cast<int>(fsettings[6]), fsettings[7], -10000, 10000);
   RC2.SetM1PositionPID(0x80, fsettings[3], fsettings[4], fsettings[5], static_cast<int>(fsettings[6]), fsettings[7], -10000, 10000);
   RC2.SetM2PositionPID(0x80, fsettings[3], fsettings[4], fsettings[5], static_cast<int>(fsettings[6]), fsettings[7], -10000, 10000);
-  acceleration = fsettings[8];    // set acceleration variable
-  deacceleration = fsettings[9];    // set deacceleration variable
 }
 
 
@@ -189,16 +182,10 @@ T * RetrieveSerial(size_t len, uint16_t & recievePOS) {
 }
 
 float * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2, Adafruit_BNO055 &IMU){
-  // Get Timestamp with millis - 1 val
   // Retrieve Encoder count and speed - 8 vals
-  // Retrieve Motor currents
-  // Retrieve IMU heading - 3 vals
-  // Retrieve IMU acceleration - 3 vals
-  // Calculate IMU estimated dist traveled - 1 vals
-  // Calculate IMU heading velocity - 1 vals
-  // Retrieve IMU angular acceleration - 3 vals
+  // Retrieve Motor currents - 4 vals
 
-  float * telemetryData = new float[23];
+  float * telemetryData = new float[12];
 
   // Retrieve Encoder counts
   telemetryData[0] = RC1.ReadEncM1(0x80);
@@ -212,38 +199,13 @@ float * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2, Adafruit_BNO055 &IMU){
   telemetryData[6] = RC2.ReadSpeedM1(0x80);
   telemetryData[7] = RC2.ReadSpeedM2(0x80);
 
-  int16_t c1,c2,c3,c4;
+  int16_t c1,c2,c3,c4; // fix? currnetly currents are not correct values
   RC1.ReadCurrents(0x80, c1, c2);
   RC2.ReadCurrents(0x80, c3, c4);
   telemetryData[8] = static_cast<float>(c1);
   telemetryData[9] = static_cast<float>(c2);
   telemetryData[10] = static_cast<float>(c3);
   telemetryData[11] = static_cast<float>(c4);
-
-  // Retrieve IMU Data
-  sensors_event_t orientationData , linearAccelData, angVelData;
-  IMU.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-  IMU.getEvent(&angVelData, Adafruit_BNO055::VECTOR_GYROSCOPE);
-  IMU.getEvent(&linearAccelData, Adafruit_BNO055::VECTOR_LINEARACCEL);  
-
-  // Collect Heading
-  telemetryData[12] = orientationData.orientation.x;
-  telemetryData[13] = orientationData.orientation.y;
-  telemetryData[14] = orientationData.orientation.z;
-
-  // Collect estimated IMU position and Velocity
-  telemetryData[15] = hPos;
-  telemetryData[16] = hVel;
-
-  // Collect IMU acceleration
-  telemetryData[17] = linearAccelData.acceleration.x;
-  telemetryData[18] = linearAccelData.acceleration.y;
-  telemetryData[19] = linearAccelData.acceleration.z;
-
-  // collect IMU ang acceleration
-  telemetryData[20] = angVelData.acceleration.x;
-  telemetryData[21] = angVelData.acceleration.y;
-  telemetryData[22] = angVelData.acceleration.z;
 
   return telemetryData;
 }
@@ -256,15 +218,6 @@ void SendTelem(float * data, size_t len) {
   rx.sendData(sendSize);
   delete[] data;
   return;
-}
-
-void updatePose(Adafruit_BNO055 & IMU) {
-  sensors_event_t orientationData , linearAccelData;
-  IMU.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-  IMU.getEvent(&linearAccelData, Adafruit_BNO055::VECTOR_LINEARACCEL);
-  hPos = hPos + (0.5 * linearAccelData.acceleration.x * (dt * dt) / (1000*1000)); // updates position from IMU
-  hVel = hVel + (linearAccelData.acceleration.x * (dt / 1000)) * cos(0.01745329251 * orientationData.orientation.x); // updates header velocity
-  dt = 0;
 }
 
 
