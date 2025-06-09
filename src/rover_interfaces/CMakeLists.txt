@@ -11,6 +11,9 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TelemData.msg"
+  "msg/MotorData.msg"
+  "msg/IMUData.msg"
+  "msg/IMUPose.msg"
   "srv/RoverCommand.srv"
   "srv/PositionCommand.srv"
   "srv/TurnCommand.srv"
