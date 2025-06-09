@@ -30,8 +30,6 @@ class Serial(Node):
             return
 
         self.encPub = self.create_publisher(MotorData, 'Enc_Telem', 20)
-        self.imuPub = self.create_publisher(IMUData, 'IMU_Telem', 20)
-        self.posePub = self.create_publisher(IMUPose, 'Pose_Telem', 20)
         self.timer = self.create_timer(0.5, self.read_serial)
         self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
 
