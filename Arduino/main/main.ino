@@ -62,8 +62,8 @@ void setup(void) {
   // }
   //bno.setExtCrystalUse(true);
   delay(3000);
-  Serial8.begin(38400); // GPIO pins for Raspberry Pi
-  rx.begin(Serial8);
+  // Serial8.begin(38400); // GPIO pins for Raspberry Pi
+  rx.begin(Serial);
   Serial.println("Complete!");
 }
 
@@ -181,11 +181,11 @@ T * RetrieveSerial(size_t len, uint16_t & recievePOS) {
   return data;
 }
 
-float * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2, Adafruit_BNO055 &IMU){
+int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2, Adafruit_BNO055 &IMU){
   // Retrieve Encoder count and speed - 8 vals
   // Retrieve Motor currents - 4 vals
 
-  float * telemetryData = new float[12];
+  int * telemetryData = new int[12];
 
   // Retrieve Encoder counts
   telemetryData[0] = RC1.ReadEncM1(0x80);
@@ -210,7 +210,7 @@ float * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2, Adafruit_BNO055 &IMU){
   return telemetryData;
 }
 
-void SendTelem(float * data, size_t len) {
+void SendTelem(int * data, size_t len) {
   size_t sendSize = 0;
   for (size_t i = 0; i < len; i++) {
     sendSize = rx.txObj(data[i],sendSize);
