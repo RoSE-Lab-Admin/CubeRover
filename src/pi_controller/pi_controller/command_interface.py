@@ -29,10 +29,10 @@ class CommandNode(Node):
         serial_request.data[0] = request.l1
         serial_request.data[1] = request.l2
         serial_request.data[2] = request.r1
-        serial_request.data[0] = request.r2
-        serial_request.data[1] = request.timetodrive
-        serial_request.data[2] = request.accel
-        serial_request.data[2] = request.deaccel
+        serial_request.data[3] = request.r2
+        serial_request.data[4] = request.timetodrive
+        serial_request.data[5] = request.accel
+        serial_request.data[6] = request.deaccel
 
         self.get_logger().info(f"sending packet: {request.l1}, {request.r1}, {request.timetodrive}, {request.accel}")
 
