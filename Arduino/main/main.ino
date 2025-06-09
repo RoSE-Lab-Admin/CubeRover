@@ -34,7 +34,7 @@ RoboClaw ROBOCLAW_2 = RoboClaw(&Serial3, 10000);
 
 void setup(void) {
   // Init serial ports for PI / computer communication
-  Serial.begin(38400); // Built-in USB port for Teensy
+  Serial.begin(115200); // Built-in USB port for Teensy
   //Serial.println("Booting...");
 
   // Init serial ports for roboclaws
@@ -104,7 +104,7 @@ void loop() { // Stuff to loop over
     sendTimer = 0;
     //Serial.print("Running");
   }
-  delay(20);
+  // delay(20);
 }
 
 
