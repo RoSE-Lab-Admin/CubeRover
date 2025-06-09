@@ -147,21 +147,6 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC1->SpeedAccelM2(0x80, accelToUse, _vL2);
 
-  #ifdef DEBUG
-    Serial.print("VL: ");
-    Serial.print(speedL1);
-    Serial.print(" | VR: ");
-    Serial.print(speedL2);
-
-    Serial.print(" | VL: ");
-    Serial.print(_vL1);
-    Serial.print(" | VR: ");
-    Serial.print(_vR1);
-
-    Serial.print(" | Accel: ");
-    Serial.println(accelToUse);
-  #endif
-
   // commanding r1
   speedingUp = (_vR1 - speedR1) * _vR1 > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
@@ -174,6 +159,22 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
 
   // set run timer to 0
   _packTimer = 0;
+
+  //debug prints if necessary
+  #ifdef DEBUG
+    Serial.print("VL: ");
+    Serial.print(speedL1);
+    Serial.print(" | VR: ");
+    Serial.print(speedR1);
+
+    Serial.print(" | VL: ");
+    Serial.print(_vL1);
+    Serial.print(" | VR: ");
+    Serial.print(_vR1);
+
+    Serial.print(" | Accel: ");
+    Serial.println(accelToUse);
+  #endif
 }
 
 bool VelPID::fulfilled(RingBuf<ControlPacket*, 20>& packetBuff) {    // checks if packet is complete (based on placeholder 2 second timer)
