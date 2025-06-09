@@ -82,7 +82,7 @@ class ControllerNode(Node):
                 velRequest.r1 = int(vel)
                 velRequest.r2 = int(vel)
                 velRequest.timetodrive = DELAY
-        print(f"Left Speed: {velRequest.leftspeed}, Right Speed: {velRequest.rightspeed}")
+        print(f"Left Speed: {velRequest.l1}, Right Speed: {velRequest.r1}")
         future = self.velsrv.call_async(velRequest)
 
         if future.result() is not None:

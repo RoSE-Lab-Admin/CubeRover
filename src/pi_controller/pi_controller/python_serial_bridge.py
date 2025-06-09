@@ -13,7 +13,7 @@ class Serial(Node):
         super().__init__('Serial_Bridge')
         self.serial_lock = threading.Lock()
         #declare parameters for ros node
-        self.declare_parameter('COMPORT', '/dev/ttyAMA0')
+        self.declare_parameter('COMPORT', '/dev/ttyACM0')
         self.declare_parameter('BAUD', 38400)
 
         COMPORT = self.get_parameter('COMPORT').get_parameter_value().string_value
