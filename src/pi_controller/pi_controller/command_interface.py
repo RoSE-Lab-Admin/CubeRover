@@ -34,6 +34,7 @@ class CommandNode(Node):
         serial_request.data[2] = request.accel
         serial_request.data[2] = request.deaccel
 
+
         future = self.serialsrv.call_async(serial_request)
 
         if future.result() is not None:
