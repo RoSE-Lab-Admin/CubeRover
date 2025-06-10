@@ -29,12 +29,12 @@
 # Example parameters for a UART connection to the BNO055 motion sensor.
 bno055:
   ros__parameters:
-    ros_topic_prefix: "bno055/"
+    ros_topic_prefix: "RoverTelem/bno055"
     connection_type: "uart"
-    uart_port: "/dev/ttyUSB0"
+    uart_port: "/dev/ttyAMA0"
     uart_baudrate: 115200
     uart_timeout: 0.1
-    data_query_frequency: 100
+    data_query_frequency: 300
     calib_status_frequency: 0.1
     frame_id: "bno055"
     operation_mode: 0x0C
