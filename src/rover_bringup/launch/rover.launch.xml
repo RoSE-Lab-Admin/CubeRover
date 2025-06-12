@@ -1,8 +1,8 @@
 <launch>
-    <node pkg="pi_controller" exec="Serial">
-
+    <node pkg="pi_controller" exec="serial">
+        <param from = "$(find-pkg-share rover_bringup)/config/rover.params.yaml"/>
     </node>
-    <node pkg="pi_controller" exec="Command">
+    <node pkg="pi_controller" exec="command">
     
     </node>
 </launch>
