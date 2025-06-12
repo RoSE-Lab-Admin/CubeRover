@@ -6,15 +6,20 @@ from pySerialTransfer import pySerialTransfer as tx
 import time
 import threading
 
-COMPORT = '/dev/ttyACM0'
 
 class Serial(Node):
     def __init__(self):
-        super().__init__('Serial_Bridge')
+        super().__init__('serial_bridge')
         self.serial_lock = threading.Lock()
+
         #declare parameters for ros node
-        self.declare_parameter('COMPORT', '/dev/ttyACM0')
-        self.declare_parameter('BAUD', 115200)
+        self.declare_parameters(
+            namespace='',
+            parameters=[
+                ("COMPORT", '/dev/ttyACM0')
+                ("BAUD", 115200)
+            ]
+        )
 
         COMPORT = self.get_parameter('COMPORT').get_parameter_value().string_value
         BAUD = self.get_parameter('BAUD').get_parameter_value().integer_value
@@ -62,21 +67,6 @@ class Serial(Node):
                 motorData.m2current = telemOutput[9]
                 motorData.m3current = telemOutput[10]
                 motorData.m4current = telemOutput[11]
-
-                # data.heading_x = telemOutput[12]
-                # data.heading_y = telemOutput[13]
-                # data.heading_z = telemOutput[14]
-
-                # data.heading_pos = telemOutput[15]
-                # data.heading_vel = telemOutput[16]
-
-                # data.accel_x = telemOutput[17]
-                # data.accel_y = telemOutput[18]
-                # data.accel_z = telemOutput[19]
-
-                # data.ang_accel_x = telemOutput[20]
-                # data.ang_accel_y = telemOutput[21]
-                # data.ang_accel_z = telemOutput[22]
 
                 self.encPub.publish(motorData)
                 #self.get_logger().info("Published telem data")

@@ -27,8 +27,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'Serial = pi_controller.python_serial_bridge:main',
-            'Command = pi_controller.command_interface:main',
+            'serial = pi_controller.python_serial_bridge:main',
+            'command = pi_controller.command_interface:main',
         ],
     },
 )

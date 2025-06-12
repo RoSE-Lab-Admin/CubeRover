@@ -6,7 +6,7 @@ import numpy as np
 
 class CommandNode(Node):
     def __init__(self):
-        super().__init__("Command_Interface")
+        super().__init__("command_interface")
         self.get_logger().info("CommandNode Init")
 
         self.serialsrv = self.create_client(RoverCommand, 'SerialCommand')
