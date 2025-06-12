@@ -16,8 +16,8 @@ class Serial(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ("COMPORT", "/dev/ttyACM0")
-                ("BAUD", rclpy.Parameter.Type.INTEGER)
+                ('COMPORT', '/dev/ttyACM0')
+                ('BAUD', rclpy.Parameter.Type.INTEGER)
             ]
         )
 
