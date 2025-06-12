@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 import os
 from glob import glob
 
-package_name = 'pi_controller'
+package_name = 'rover_node_pkg'
 
 
 
@@ -27,8 +27,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'serial = pi_controller.python_serial_bridge:main',
-            'command = pi_controller.command_interface:main',
+            'serial = rover_node_pkg.python_serial_bridge:main',
+            'command = rover_node_pkg.command_interface:main',
         ],
     },
 )

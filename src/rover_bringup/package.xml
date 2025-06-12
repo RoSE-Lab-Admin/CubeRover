@@ -9,10 +9,9 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>pi_controller</exec_depend>
+  <exec_depend>rover_node_pkg</exec_depend>
+  <exec_depend>bno055</exec_depend>
 
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

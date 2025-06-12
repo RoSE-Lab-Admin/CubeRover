@@ -16,24 +16,26 @@ class Serial(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ("COMPORT", '/dev/ttyACM0')
-                ("BAUD", 115200)
+                ("COMPORT", "/dev/ttyACM0")
+                ("BAUD", rclpy.Parameter.Type.INTEGER)
             ]
         )
 
-        COMPORT = self.get_parameter('COMPORT').get_parameter_value().string_value
-        BAUD = self.get_parameter('BAUD').get_parameter_value().integer_value
-
-        self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
+        #get parameters
+        COMPORT = self.get_parameter('COMPORT')
+        BAUD = self.get_parameter('BAUD')
 
         try:
+            self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
             self.link.open()
             time.sleep(0.1)
             self.get_logger().info("Serial connection opened successfully")
         except Exception as e:
-            self.get_logger().error(f"Failed to open serial port: {e}")
+            self.get_logger().error(f"Failed to start node: {e}")
+            self.destroy_node()
             return
 
+        #create publisher, service, and timer to publish data
         self.encPub = self.create_publisher(MotorData, 'Enc_Telem', 20)
         self.timer = self.create_timer(0.025, self.read_serial)
         self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
@@ -49,8 +51,6 @@ class Serial(Node):
                 except Exception as e:
                     self.get_logger().error(f"Error with serial read: {e}")
                     return
-                
-                #data = TelemData()
 
                 motorData = MotorData()
                 motorData.enc1 = telemOutput[0]
@@ -69,34 +69,26 @@ class Serial(Node):
                 motorData.m4current = telemOutput[11]
 
                 self.encPub.publish(motorData)
-                #self.get_logger().info("Published telem data")
                 return
             else:
-                #self.get_logger().error("Serial not available")
                 return
 
     def send_command_callback(self, request, response):
-        #self.get_logger().info("Sending data to Arduino")
         datasize = 0
         header = request.type[0]
-        #self.get_logger().info(f"header: {header}")
         try:
             with self.serial_lock:
                 datasize = self.link.tx_obj(header, start_pos=datasize, val_type_override='c')
                 for data in request.data:
                     try:
                         datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='i')
-                        #self.get_logger().info(f"data: {data}")
                     except Exception as e:
                         self.get_logger().error(f"Error adding data: {e}")
                 self.link.send(datasize)
-                #print(self.link.send(datasize))
                 response.success = True
-                #self.get_logger().info(f"data sent")
         except Exception as e:
             self.get_logger().error(f"Error sending telem: {e}")
             response = False
-        #self.get_logger().info(f"responded")
         return response
 
 

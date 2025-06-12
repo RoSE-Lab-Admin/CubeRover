@@ -21,7 +21,7 @@ class CommandNode(Node):
         # self.create_service(TurnCommand, 'VelocityCommand', self.turn_callback)
     
 
-    def vel_callback(self, request, response):
+    def vel_callback(self, request, response): #TODO -> adjust values to be entered in as cm/s not encoder values
         
         serial_request = RoverCommand.Request()
         serial_request.type = 'V'
