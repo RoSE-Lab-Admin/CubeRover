@@ -13,9 +13,9 @@ class ImageSub(Node):
 
     def image_callback(self, data):
         self.get_logger().info('recieved frame')
-        current_frame = self.cv.imgmsg_to_cv2(data)
-        cv2.imshow("Camera", current_frame)
-        cv2.waitKey(1)
+        #current_frame = self.cv.imgmsg_to_cv2(data)
+        #cv2.imshow("Camera", current_frame)
+        #cv2.waitKey(1)
     def destroy_node(self):
         return super().destroy_node()
     
