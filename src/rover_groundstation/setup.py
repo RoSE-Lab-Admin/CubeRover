@@ -20,8 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'cameraviewer = rover_groundstation.image_sub:main.py'
-            'testinterface = rover_groundstation.'
+            'cameraviewer = rover_groundstation.image_sub:main.py',
         ],
     },
 )
