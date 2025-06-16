@@ -1,4 +1,5 @@
 import rclpy
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -7,7 +8,7 @@ import cv2
 class ImageSub(Node):
     def __init__(self):
         super().__init__("image_sub")
-        self.subscription = self.create_subscription(Image, '/camera/image_raw',self.image_callback,10)
+        self.subscription = self.create_subscription(Image, '/camera/image_raw',self.image_callback,qos_profile=qos_profile_sensor_data)
         self.cv = CvBridge()
 
     def image_callback(self, data):
