@@ -1,0 +1,31 @@
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import cv2
+
+class ImageSub(Node):
+    def __init__(self):
+        super().__init__("image_sub")
+        self.subscription = self.create_subscription(Image, '/camera/image_raw',self.image_callback,10)
+        self.cv = CvBridge()
+
+    def image_callback(self, data):
+        self.get_logger().info('recieved frame')
+        current_frame = self.cv.imgmsg_to_cv2(data)
+        cv2.imshow("Camera", current_frame)
+        cv2.waitkey(1)
+    def destroy_node(self):
+        return super().destroy_node()
+    
+def main(args = None):
+    rclpy.init(args=args)
+    Node = ImageSub()
+    try:
+        rclpy.spin(Node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        Node.destroy_node()
+        rclpy.shutdown()
+    
