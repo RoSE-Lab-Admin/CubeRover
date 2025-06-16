@@ -137,7 +137,7 @@ RCLCPP_COMPONENTS_REGISTER_NODE(camera::CameraNode)
 
 libcamera::StreamRole
 get_role(const std::string &role)
-{
+{ 
   static const std::unordered_map<std::string, libcamera::StreamRole> roles_map = {
     {"raw", libcamera::StreamRole::Raw},
     {"still", libcamera::StreamRole::StillCapture},
