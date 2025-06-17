@@ -7,7 +7,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
-
+ 
 def generate_launch_description() -> LaunchDescription:
     """
     Generate a launch description with for the camera node and a visualiser.
@@ -31,7 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     format_param_name = "format"
-    format_param_default = str()
+    format_param_default = str("PC1R")
     format_param = LaunchConfiguration(
         format_param_name,
         default=format_param_default,
@@ -49,10 +49,9 @@ def generate_launch_description() -> LaunchDescription:
             plugin='camera::CameraNode',
             parameters=[{
                 "camera": camera_param,
-                "width": 1280,
-                "height": 720,
+                "width": 2328,
+                "height": 1748,
                 "format": format_param,
-                "role":"raw"
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
         ),
