@@ -31,7 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     format_param_name = "format"
-    format_param_default = str("PC1R")
+    format_param_default = str("SRGGB10")
     format_param = LaunchConfiguration(
         format_param_name,
         default=format_param_default,
