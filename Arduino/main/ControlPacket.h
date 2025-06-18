@@ -1,7 +1,7 @@
 #ifndef CONTROL_PACKET_H
 #define CONTROL_PACKET_H
 
-//#define DEBUG
+#define DEBUG
 
 #include <RoboClaw.h>
 #include <Wire.h>
@@ -108,14 +108,18 @@ VelPID::VelPID(int * data) { // initilizes the Velocity PID speed control packet
   _vR1 = data[2];
   _vR2 = data[3];
   _time = data[4];
+  Serial.println("got vals");
 
   // saves the acceleration and deacceleration values from initialization
   _accel = data[5];
   _deaccel = data[6];
+  Serial.println("got vals2");
 
   // deletes the data array to prevent a memory leak
   delete[] data;
-   digitalWrite(13,LOW);
+  Serial.print("deleted array");
+  digitalWrite(13,LOW);
+  Serial.print("init");
 }
 
 void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go at speed denoted by the only number in data
@@ -136,25 +140,26 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
     int32_t speedL2 = _RC1->ReadSpeedM2(0x80, &status2, &valid2);
     int32_t speedR1 = _RC2->ReadSpeedM1(0x80, &status3, &valid3);
     int32_t speedR2 = _RC2->ReadSpeedM2(0x80, &status4, &valid4);
+    Serial.print("oops im stuck");
   }
 
   // commanding l1
-  bool speedingUp = (_vL1 - speedL1) * _vL1 > 0;
+  bool speedingUp = (_vL1 - speedL1) > 0;
   int accelToUse = speedingUp ? _accel : _deaccel;
   _RC1->SpeedAccelM1(0x80, accelToUse, _vL1);
   
   // commanding l2
-  speedingUp = (_vL2 - speedL2) * _vL2 > 0;
+  speedingUp = (_vL2 - speedL2) > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC1->SpeedAccelM2(0x80, accelToUse, _vL2);
 
   // commanding r1
-  speedingUp = (_vR1 - speedR1) * _vR1 > 0;
+  speedingUp = (_vR1 - speedR1) > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC2->SpeedAccelM1(0x80, accelToUse, _vR1);
   
   // commanding r2
-  speedingUp = (_vR2 - speedR2) * _vR2 > 0;
+  speedingUp = (_vR2 - speedR2) > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC2->SpeedAccelM2(0x80, accelToUse, _vR2);
 

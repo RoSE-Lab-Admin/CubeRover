@@ -43,9 +43,10 @@ void setup(void) {
   // Init roboclaw values from memory
   MemSetup(ROBOCLAW_1, ROBOCLAW_2);
 
-  delay(3000);
+  delay(10000);
   rx.begin(Serial);
   Serial.println("Complete!");
+  
 }
 
 
@@ -77,10 +78,26 @@ void loop() { // Stuff to loop over
   }
 
   if (sendTimer > 200) {
-    SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 12);
+    //SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 12);
     sendTimer = 0;
   }
   delay(20);
+
+
+  // Serial.print("hi");
+  // int * testvals = new int[7];
+  // testvals[0] = 500;
+  // testvals[1] = 500;
+  // testvals[2] = 500;
+  // testvals[3] = 500;
+  // testvals[4] = 4000;
+  // testvals[5] = 500;
+  // testvals[6] = 500;
+
+  // ControlPacket * test = new VelPID(testvals);
+  // test->resolve(&ROBOCLAW_1, &ROBOCLAW_2);
+  // delay(16000);
+
 }
 
 
@@ -89,7 +106,7 @@ ControlPacket* SerialDecode () {
   char ID; // stores ID of current packet decoder
   ControlPacket * controlTemp = nullptr; // temp pointer to decoded packet
   recievePOS = rx.rxObj(ID, recievePOS); // store ID char
-  //Serial.print(ID);
+  Serial.print(ID);
   if (ID == 'V') { // Velocity control
     controlTemp = new VelPID(RetrieveSerial<int>(7, recievePOS)); // creates new packet of type Velocity
   } else if (ID == 'P') { // Distance / Position control
