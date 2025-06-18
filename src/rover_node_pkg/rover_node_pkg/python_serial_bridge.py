@@ -35,7 +35,7 @@ class Serial(Node):
             self.get_logger().info("Serial connection opened successfully")
         except Exception as e:
             self.get_logger().error(f"Failed to start node: {e}")
-            self.destroy_node()
+            rclpy.shutdown()
             return
 
         #create publisher, service, and timer to publish data
