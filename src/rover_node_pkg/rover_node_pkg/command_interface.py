@@ -67,7 +67,7 @@ def main(args=None):
 
 
 def v_to_e(v):
-    return (v/RADIUS)/(2*np.pi)*ENCODER
+    return int((v/RADIUS)/(2*np.pi)*ENCODER)
 
 def a_to_e(a):
-    return (a/RADIUS)/(2*np.pi)*ENCODER
+    return int((a/RADIUS)/(2*np.pi)*ENCODER)
