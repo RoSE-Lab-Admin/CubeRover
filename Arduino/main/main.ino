@@ -8,8 +8,6 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h> // soon to be removed and ported to the PI
 
 
 
@@ -18,9 +16,6 @@
 // float Ki = 0.345;   // integral constant for velocity PID
 // float Kd = 0;   // derivative constant for velocity PID
 float qpps = 3400; // countable quadrature pulses per second -> found using roboclaw's basicMicro tool
-
-
-Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 
 
 // Serial Transfer declaration
@@ -48,21 +43,7 @@ void setup(void) {
   // Init roboclaw values from memory
   MemSetup(ROBOCLAW_1, ROBOCLAW_2);
 
-  delay(100);
-
-  // if (!bno.begin())
-  // {
-  //   for(int i = 0; i < 20; i++) {
-  //     if (!bno.begin()) {
-  //       Serial.print("No BNO055 detected");
-  //       digitalWrite(13,!digitalRead(13));
-  //       delay(500);
-  //     }
-  //   }
-  // }
-  //bno.setExtCrystalUse(true);
   delay(3000);
-  // Serial8.begin(38400); // GPIO pins for Raspberry Pi
   rx.begin(Serial);
   Serial.println("Complete!");
 }
@@ -70,11 +51,7 @@ void setup(void) {
 
 ControlPacket * control = nullptr; // control pointer variable to keep track of what command is being done
 RingBuf<ControlPacket*, 20> packetBuff; // packet buffer to keep commands if one is currently being resolved
-elapsedMillis dt = 0;
 elapsedMillis sendTimer = 0;
-float hPos = 0;
-float hVel = 0;
-bool dataRequest = false;
 
 void loop() { // Stuff to loop over
   if (control == nullptr) {   // checks if there is currently a control packet commanding the rover, if yes:
@@ -99,12 +76,11 @@ void loop() { // Stuff to loop over
     }
   }
 
-  if (sendTimer > 50) {
-    SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2, bno), 12);
+  if (sendTimer > 200) {
+    SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 12);
     sendTimer = 0;
-    //Serial.print("Running");
   }
-  // delay(20);
+  delay(20);
 }
 
 
@@ -119,14 +95,8 @@ ControlPacket* SerialDecode () {
   } else if (ID == 'P') { // Distance / Position control
     //Serial.write("Distance!");
     controlTemp = new PosPID(RetrieveSerial<int>(2,recievePOS));
-  } 
-  // else if (ID == 'T') {
-  //   //Serial.write("Turning!");
-  //   controlTemp = new AngPID(RetrieveSerial<float>(3,recievePOS), bno, acceleration, deacceleration);
-  // }
-   else if (ID == 'E') { // stops the rover and empties the packet buffer -> ideally for emergency / resetting the rover --> FIX
+  } else if (ID == 'E') { // stops the rover and empties the packet buffer -> ideally for emergency / resetting the rover --> FIX
     if (control != nullptr) {
-      //Serial.println("STOP");
       control->stop();
       packetBuff.clear();
       delete control;
@@ -148,7 +118,6 @@ void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
   float fsettings[10] = {0}; // stores float settings in an array. [vP,vI,vD,pP,pI,pD,pMI,Deadzone]
   for (size_t i = 0; i < 8*4; i = i + 4) {
     EEPROM.get((i), fsettings[i/4]);
-    //Serial.println(fsettings[i/4]);
   }
   RC1.SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
   RC1.SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
@@ -164,8 +133,6 @@ void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
 // Writes val to the EEPROM memory at address
 void MemWrite(int adr, float val) {
   EEPROM.put(adr, val);
-  // Serial.println(adr);
-  // Serial.println(val);
 }
 
 
@@ -181,7 +148,7 @@ T * RetrieveSerial(size_t len, uint16_t & recievePOS) {
   return data;
 }
 
-int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2, Adafruit_BNO055 &IMU){
+int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
   // Retrieve Encoder count and speed - 8 vals
   // Retrieve Motor currents - 4 vals
 
