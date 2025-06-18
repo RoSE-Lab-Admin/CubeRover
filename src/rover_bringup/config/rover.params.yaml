@@ -1,7 +1,7 @@
 #parameter file for the serial bridge node
 serial_bridge:
   ros__parameters:
-    COMPORT: '/dev/ttyACM0'
+    COMPORT: "dev/ttyAMA0"
     BAUD: 115200
     PREFIX: 'RoverTelem/roboclaw/'
 
