@@ -5,51 +5,46 @@ import numpy as np
 def turn_calc(rX, rY, trig):
     rX = .01 if rX == 0 else rX
 
-    encoder = 5281.7 #encoder counts per rotation
+    MAXSPEED = 35 #cm/s
+    WHEELBASE = 40.96 / 2 #cm for dist from each wheel to center
 
-    fraction = rY/rX
-    angle = np.arctan(fraction) * 180/np.pi
+
+    angle = np.arctan2(rY, rX)  # radians, -pi to pi
 
     #turning radius
-    min = .2048 
-    max = 1.60 #based off of bailey's mobility tests
+    min = 20.48
+    max = 160 #based off of bailey's mobility tests
 
-    range = max-min
+    norm_angle = abs(np.rad2deg(angle))  # 0 to 180 degrees
+    turn_radius = (norm_angle / 180.0) * (max - min) + max
 
-    ang = anglin_calc(abs(trig))
-
-    if rX > 0: 
-        norm_angle = 90-angle
-        radius = abs(norm_angle)/180 * range + min #normalizes 
-        r1 = radius+.2048
-        r2 = radius-.2048
-
+    if rX > 0:
+        r_inner = turn_radius - WHEELBASE
+        r_outer = turn_radius + WHEELBASE
     else:
-        norm_angle = -90-angle
-        radius = abs(norm_angle)/180 * range + min #normalizes 
-        r1 = radius-.2048
-        r2 = radius+.2048
-
+        r_inner = turn_radius + WHEELBASE
+        r_outer = turn_radius - WHEELBASE
     
-    vel1 = ang*r1 #rot/sec
-    vel2 = ang*r2
-    
-    vel1_enc = vel1
-    vel2_enc = vel2
+    v = vel_calc(trig)
+    omega = v / turn_radius  # rad/s
 
+    vL = omega * r_inner
+    vR = omega * r_outer
+
+    # Flip sign for reverse
     if trig < 0:
-        vel1_enc = -1 * vel1_enc
-        vel2_enc = -1 * vel2_enc
+        vL *= -1
+        vR *= -1
+
+    return np.rad2deg(angle), turn_radius, vL, vR
 
 
 
     return norm_angle, radius, vel1_enc, vel2_enc
 
-def anglin_calc(trig):
+def vel_calc(trig):
     max_speed = 35 #cm/s
-
-    ang = trig/2 * max_speed
-    return ang
+    return trig/2 * max_speed
 
 def linvel_calc(trig):
     #10 cm/s fastest speed. wheel radius 15 cm 
