@@ -31,11 +31,11 @@ def turn_calc(rX, rY, trig):
         r2 = radius+.2048
 
     
-    vel1 = ang*r1/(2*np.pi) #rot/sec
-    vel2 = ang*r2/(2*np.pi)
+    vel1 = ang*r1 #rot/sec
+    vel2 = ang*r2
     
-    vel1_enc = vel1*encoder
-    vel2_enc = vel2*encoder
+    vel1_enc = vel1
+    vel2_enc = vel2
 
     if trig < 0:
         vel1_enc = -1 * vel1_enc
@@ -47,10 +47,8 @@ def turn_calc(rX, rY, trig):
 
 def anglin_calc(trig):
     max_speed = 35 #cm/s
-    wheel_radius = 15 #cm
 
-    max_ang = (max_speed/wheel_radius)
-    ang = trig/2 * max_ang
+    ang = trig/2 * max_speed
     return ang
 
 def linvel_calc(trig):
@@ -63,7 +61,7 @@ def linvel_calc(trig):
     max_speed = 35 #cm/s
     wheel_radius = 15 #cm
 
-    max_enc = (max_speed/wheel_radius)/(2*np.pi)*encoder #max val in en/s
+    max_enc = max_speed #max val in en/s
 
     enc_speed = trig/2 * max_enc
 
