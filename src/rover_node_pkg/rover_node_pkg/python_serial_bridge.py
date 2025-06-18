@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+import rclpy.parameter
 from rover_interfaces.msg import TelemData, MotorData
 from rover_interfaces.srv import RoverCommand
 from pySerialTransfer import pySerialTransfer as tx
@@ -18,12 +19,14 @@ class Serial(Node):
             parameters=[
                 ('COMPORT', '/dev/ttyACM0')
                 ('BAUD', rclpy.Parameter.Type.INTEGER)
+                ('PREFIX',rclpy.Parameter.Type.STRING)
             ]
         )
 
         #get parameters
         COMPORT = self.get_parameter('COMPORT')
         BAUD = self.get_parameter('BAUD')
+        PREFIX = self.get_parameter('PREFIX')
 
         try:
             self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
@@ -36,7 +39,7 @@ class Serial(Node):
             return
 
         #create publisher, service, and timer to publish data
-        self.encPub = self.create_publisher(MotorData, 'Enc_Telem', 20)
+        self.encPub = self.create_publisher(MotorData, PREFIX + 'Enc_Telem', 20)
         self.timer = self.create_timer(0.025, self.read_serial)
         self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
 

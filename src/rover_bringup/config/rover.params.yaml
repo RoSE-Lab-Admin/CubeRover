@@ -3,6 +3,7 @@ serial_bridge:
   ros__parameters:
     COMPORT: '/dev/ttyACM0'
     BAUD: 115200
+    PREFIX: 'RoverTelem/roboclaw/'
 
 command_interface:
   ros_parameters:
