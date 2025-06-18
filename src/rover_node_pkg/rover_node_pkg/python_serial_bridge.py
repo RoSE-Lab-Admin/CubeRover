@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 import rclpy.parameter
-from rover_interfaces.msg import TelemData, MotorData
+from rover_interfaces.msg import MotorData
 from rover_interfaces.srv import RoverCommand
 from pySerialTransfer import pySerialTransfer as tx
 import time
