@@ -70,10 +70,10 @@ class Serial(Node):
                 motorData.m2current = telemOutput[9]
                 motorData.m3current = telemOutput[10]
                 motorData.m4current = telemOutput[11]
-
                 self.encPub.publish(motorData)
                 return
             else:
+                self.get_logger.info("serial not available?")
                 return
 
     def send_command_callback(self, request, response):
@@ -87,6 +87,7 @@ class Serial(Node):
                         datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='i')
                     except Exception as e:
                         self.get_logger().error(f"Error adding data: {e}")
+                self.get_logger().info("sent command to teensy")
                 self.link.send(datasize)
                 response.success = True
         except Exception as e:
