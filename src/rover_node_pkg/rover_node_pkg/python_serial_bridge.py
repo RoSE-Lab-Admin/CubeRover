@@ -85,7 +85,7 @@ class Serial(Node):
                 for data in request.data:
                     try:
                         datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='i')
-                        self.get_logger(f"sent {data}")
+                        self.get_logger().info(f"sent {data}")
                     except Exception as e:
                         self.get_logger().error(f"Error adding data: {e}")
                 self.get_logger().info("sent command to teensy")
