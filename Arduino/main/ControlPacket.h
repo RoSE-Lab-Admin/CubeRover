@@ -115,6 +115,7 @@ VelPID::VelPID(int * data) { // initilizes the Velocity PID speed control packet
 
   // deletes the data array to prevent a memory leak
   delete[] data;
+   digitalWrite(13,LOW);
 }
 
 void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go at speed denoted by the only number in data
