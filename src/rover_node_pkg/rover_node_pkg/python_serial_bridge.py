@@ -73,7 +73,7 @@ class Serial(Node):
                 self.encPub.publish(motorData)
                 return
             else:
-                self.get_logger.info("serial not available?")
+                self.get_logger().info("serial not available?")
                 return
 
     def send_command_callback(self, request, response):
