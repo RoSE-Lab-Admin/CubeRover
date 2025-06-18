@@ -17,7 +17,7 @@ class Serial(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('COMPORT', "/dev/ttyACM0"),
+                ('COMPORT', "/dev/ttyAMA0"),
                 ('BAUD', 115200),
                 ('PREFIX', "RoverTelem/roboclaw/"),
             ]
