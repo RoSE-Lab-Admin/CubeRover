@@ -24,9 +24,9 @@ class Serial(Node):
         )
 
         #get parameters
-        COMPORT = str(self.get_parameter('COMPORT').get_parameter_value)
-        BAUD = int(self.get_parameter('BAUD').get_parameter_value)
-        PREFIX = str(self.get_parameter('PREFIX').get_parameter_value)
+        COMPORT = self.get_parameter('COMPORT').value
+        BAUD = self.get_parameter('BAUD').value
+        PREFIX = self.get_parameter('PREFIX').value
 
         try:
             self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
