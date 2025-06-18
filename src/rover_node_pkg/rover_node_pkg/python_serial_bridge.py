@@ -73,7 +73,7 @@ class Serial(Node):
                 self.encPub.publish(motorData)
                 return
             else:
-                self.get_logger().info("serial not available?")
+                #self.get_logger().info("serial not available?")
                 return
 
     def send_command_callback(self, request, response):
@@ -85,6 +85,7 @@ class Serial(Node):
                 for data in request.data:
                     try:
                         datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='i')
+                        self.get_logger(f"sent {data}")
                     except Exception as e:
                         self.get_logger().error(f"Error adding data: {e}")
                 self.get_logger().info("sent command to teensy")
