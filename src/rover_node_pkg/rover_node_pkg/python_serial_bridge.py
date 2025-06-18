@@ -79,6 +79,7 @@ class Serial(Node):
     def send_command_callback(self, request, response):
         datasize = 0
         header = request.type[0]
+        self.get_logger().info(f"header: {request.type[0]}")
         try:
             with self.serial_lock:
                 datasize = self.link.tx_obj(header, start_pos=datasize, val_type_override='c')
