@@ -18,8 +18,8 @@ class Serial(Node):
             namespace='',
             parameters=[
                 ('COMPORT', "/dev/ttyACM0"),
-                ('BAUD', rclpy.Parameter.Type.INTEGER),
-                ('PREFIX',rclpy.Parameter.Type.STRING),
+                ('BAUD', 115200),
+                ('PREFIX', "RoverTelem/roboclaw/"),
             ]
         )
 
