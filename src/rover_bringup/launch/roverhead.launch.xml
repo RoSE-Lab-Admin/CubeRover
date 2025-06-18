@@ -1,7 +1,7 @@
 <launch>
-    <node pkg="rover_node_pkg" exec="serial">
+    <!--<node pkg="rover_node_pkg" exec="serial">
         <param from = "$(find-pkg-share rover_bringup)/config/rover.params.yaml"/>
-    </node>
+    </node>-->
     <node pkg="rover_node_pkg" exec="command">
         <param from = "$(find-pkg-share rover_bringup)/config/rover.params.yaml"/>
     </node>
