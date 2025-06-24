@@ -31,7 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     format_param_name = "format"
-    format_param_default = str("SRGGB10_CSI2P") #prefered image format
+    format_param_default = str("SRGGB8") #prefered image format
     format_param = LaunchConfiguration(
         format_param_name,
         default=format_param_default,
@@ -49,10 +49,12 @@ def generate_launch_description() -> LaunchDescription:
             plugin='camera::CameraNode',
             parameters=[{
                 "camera": camera_param,
-                "width": 2328,
-                "height": 1748,
+                "width": 1920,
+                "height": 1080,
                 "format": format_param,
-                "sensor_mode": "video",
+                "role": "video",
+                "sensor_mode": "4656:3496"
+
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
         ),
