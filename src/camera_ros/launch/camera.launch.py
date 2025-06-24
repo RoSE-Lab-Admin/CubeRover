@@ -48,9 +48,9 @@ def generate_launch_description() -> LaunchDescription:
             package='camera_ros',
             plugin='camera::CameraNode',
             parameters=[{
-                #"sensor_mode": "4656:3496",
+                "sensor_mode": "2328:1748",
                 "camera": camera_param,
-                "role": "video",
+                "role": "viewfinder",
                 "format": format_param,
                 "width": 1920,
                 "height": 1080,
