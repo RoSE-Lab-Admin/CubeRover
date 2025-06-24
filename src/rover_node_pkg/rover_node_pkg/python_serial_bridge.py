@@ -30,8 +30,8 @@ class Serial(Node):
 
         try:
             self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
-            self.link.open()
             time.sleep(0.1)
+            self.link.open()
             self.get_logger().info("Serial connection opened successfully")
         except Exception as e:
             self.get_logger().error(f"Failed to start node: {e}")
@@ -73,7 +73,7 @@ class Serial(Node):
                 self.encPub.publish(motorData)
                 return
             else:
-                #self.get_logger().info("serial not available?")
+                # self.get_logger().error("serial not available?")
                 return
 
     def send_command_callback(self, request, response):
