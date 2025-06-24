@@ -31,7 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     format_param_name = "format"
-    format_param_default = str("SRGGB8") #prefered image format
+    format_param_default = str("SBGGR8") #prefered image format
     format_param = LaunchConfiguration(
         format_param_name,
         default=format_param_default,
@@ -48,12 +48,12 @@ def generate_launch_description() -> LaunchDescription:
             package='camera_ros',
             plugin='camera::CameraNode',
             parameters=[{
+                "sensor_mode": "4656:3496",
                 "camera": camera_param,
+                "role": "video",
+                "format": format_param,
                 "width": 1920,
                 "height": 1080,
-                "format": format_param,
-                "role": "video",
-                "sensor_mode": "4656:3496"
 
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
