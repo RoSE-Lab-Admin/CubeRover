@@ -29,6 +29,7 @@ setup(
         'console_scripts': [
             'serial = rover_node_pkg.python_serial_bridge:main',
             'command = rover_node_pkg.command_interface:main',
+            'actionserv = rover_node_pkg.vel_action_server:main',
         ],
     },
 )
