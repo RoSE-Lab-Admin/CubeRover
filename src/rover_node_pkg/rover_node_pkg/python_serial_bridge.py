@@ -39,9 +39,10 @@ class Serial(Node):
             return
 
         #create publisher, service, and timer to publish data
-        self.encPub = self.create_publisher(MotorData, PREFIX + 'Enc_Telem', 20)
+        self.encPub = self.create_publisher(MotorData, PREFIX + 'enc_telem', 20)
         self.timer = self.create_timer(0.025, self.read_serial)
-        self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
+        #self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
+        self.motorStream = self.create_subscription(RoverCommand, 'motor_stream', self.motor_stream_callback)
 
     def read_serial(self):
         with self.serial_lock:
@@ -76,7 +77,7 @@ class Serial(Node):
                 # self.get_logger().error("serial not available?")
                 return
 
-    def send_command_callback(self, request, response):
+    def motor_stream_callback(self, request):
         datasize = 0
         header = request.type[0]
         self.get_logger().info(f"header: {request.type[0]}")

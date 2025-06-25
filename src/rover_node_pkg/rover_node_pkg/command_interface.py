@@ -33,7 +33,7 @@ class CommandNode(Node):
         serial_request.data[1] = v_to_e(request.l2)
         serial_request.data[2] = v_to_e(request.r1)
         serial_request.data[3] = v_to_e(request.r2)
-        serial_request.data[4] = request.timetodrive
+        serial_request.data[4] = request.time_to_drive
         serial_request.data[5] = a_to_e(request.accel)
         serial_request.data[6] = a_to_e(request.deaccel)
 
