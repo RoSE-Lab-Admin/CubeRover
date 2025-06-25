@@ -42,7 +42,7 @@ class Serial(Node):
         self.encPub = self.create_publisher(MotorData, PREFIX + 'enc_telem', 20)
         self.timer = self.create_timer(0.025, self.read_serial)
         #self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
-        self.motorStream = self.create_subscription(RoverCommand, 'motor_stream', self.motor_stream_callback)
+        self.motorStream = self.create_subscription(RoverCommand, 'motor_stream', self.motor_stream_callback, 10)
 
     def read_serial(self):
         with self.serial_lock:

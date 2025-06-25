@@ -20,7 +20,7 @@ class VelActionServer(Node):
             self.action_callback
         )
         self.motorStream = self.create_publisher(RoverCommand, 'motor_stream', 20)
-        
+
     def action_callback(self, goal_handle):
         #create velocity service command
         velRequest = RoverCommand()
@@ -52,21 +52,20 @@ class VelActionServer(Node):
             time.sleep(0.05)
         
         
-        start = time.time()
-        velRequest.data[0] = v_to_e(v_L)
-        velRequest.data[1] = v_to_e(v_L)
-        velRequest.data[2] = v_to_e(v_L)
-        velRequest.data[3] = v_to_e(v_L)
+        velRequest.data[0] = v_to_e(0)
+        velRequest.data[1] = v_to_e(0)
+        velRequest.data[2] = v_to_e(0)
+        velRequest.data[3] = v_to_e(0)
         velRequest.data[4] = 250
         velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
 
-        while (start - time.time < (goal_handle.request.accel_deacel_duration / 1000)):
+        while (start - time.time < (goal_handle.request.run_duration / 1000)):
             self.vel_serv.call_async(velRequest)
             time.sleep(0.05)
 
         goal_handle.succeed()
-        return
+        return 
         
 
 
@@ -75,3 +74,15 @@ def v_to_e(v):
 
 def a_to_e(a):
     return int((a/RADIUS)/(2*np.pi)*ENCODER)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = VelActionServer()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()

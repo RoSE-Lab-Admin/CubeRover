@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, Image
 from cv_bridge import CvBridge
 import cv2
 
@@ -13,7 +13,7 @@ class ImageSub(Node):
 
     def image_callback(self, data):
         self.get_logger().info('recieved frame')
-        current_frame = self.cv.imgmsg_to_cv2(data)
+        current_frame = self.cv.compressed_imgmsg_to_cv2(data)
         cv2.imshow("Camera", current_frame)
         cv2.waitKey(1)
     def destroy_node(self):

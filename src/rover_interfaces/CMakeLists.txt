@@ -8,12 +8,16 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 
+
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MotorData.msg"
-  "srv/RoverCommand.srv"
+  "msg/RoverCommand.msg"
   "srv/VelocityCommand.srv"
+  "action/TestCommand.action"
+  "srv/BagStart.srv"
 )
+
 
 
 ament_package()
