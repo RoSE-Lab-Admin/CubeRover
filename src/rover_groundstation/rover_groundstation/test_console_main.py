@@ -17,6 +17,7 @@ import subprocess
 class TestConsole(Node):
     def __init__(self):
         super().__init__("testing_console")
+
         self.action_cli = ActionClient(
             self,
             TestCommand,
@@ -40,64 +41,12 @@ class TestConsole(Node):
         turn_rad = float(input("Trial turning radius (cm): (enter anything bigger than 1E6 for straight)"))
         input("Press enter to start trial...")
 
-
-
-        #start bag
-        self.start_bags()
-
-
-
-        #send lidar service command [todo]
-        future_cap = self.start_lidar()
-
-        #wait until lidar scan done
-        rclpy.spin_until_future_complete(self, future=future_cap)
-
-
-        response_cap = future_cap.result()
-        lidar_cap_data = json.loads(response_cap.outdata)
-
-        downloadname_request = DownloadName.Request()
-        downloadname_request.name = lidar_cap_data["outname"]
-
-        self.get_logger().info(f"Lidar bag 1 name: {downloadname_request.name}")
-
-        future_down = self.gant_download.call_async(downloadname_request)
-        rclpy.spin_until_future_complete(self, future=future_down)
-        downloadname_response = future_down.result()
-
-        self.get_logger().info("got call")
-
-        downloadname_response_dict = json.loads(downloadname_response.outdata)
-
-        cap_1_url = downloadname_response_dict["url"]
-
-        self.get_logger().info(f"Lidar bag 1 download url: {cap_1_url}")
-
-
-        subprocess.Popen(["wget", "-r", "-P", f"{self.path}", f"{cap_1_url}"])
-
         #send rover action command
-        goal = TestCommand.Goal()
-        goal.linear_speed = lin_vel
-        goal.turning_radius = turn_rad
-        goal.run_duration = 40000
-        goal.accel_deaccel_duration = 5000
-        future = self.action_cli.send_goal_async(goal)
-
-        #rover stops
-        rclpy.spin_until_future_complete(self, future=future)
-        
-        #send lidar service command [todo]
-
-        #wait 10s
-        time.sleep(10)
-
-        #stop bag
-        self.stop_bags()
-        self.get_logger().info("trial complete.")
-        self.get_logger().info(f"bag saved to {self.path}")
-        self.destroy_node()
+        self.goal = TestCommand.Goal()
+        self.goal.linear_speed = lin_vel
+        self.goal.turning_radius = turn_rad
+        self.goal.run_duration = 40000
+        self.goal.accel_deaccel_duration = 5000
 
     def discover_baggers(self):
         
@@ -138,26 +87,31 @@ class TestConsole(Node):
     def start_lidar(self):
         capture_request = Capture.Request()
         capture_request.outname = self.test_name + "_lidar"
-        capture_request.sensors = ["l515_center", "l515_west", "l515_east"]
+        capture_request.sensors = ["l515_east"]
         capture_request.duration = 10.0
         future_cap = self.gant_capture.call_async(capture_request)
         return future_cap
     
-    def download_lidar(self):  
-        test = 2
-
-    def start_rover(self):
-        test = 1
     
-
-        
-
-
+    def download_lidar(self, lidar_response):
+        downloadname_request = DownloadName.Request()
+        downloadname_request.name = json.loads(lidar_response.outdata)["outname"]
+        future_down = self.gant_download.call_async(downloadname_request)
+        rclpy.spin_until_future_complete(self, future=future_down)
+        downloadname_response = future_down.result()
+        cap_1_url = json.loads(downloadname_response.outdata)["url"]
+        subprocess.Popen(["wget", "-r", "-P", f"{self.path}", f"{cap_1_url}"])
+        return
+    
+    def start_rover(self):
+        future = self.action_cli.send_goal_async(self.goal)
+        return future
+    
 
 
 def main(args=None):
     rclpy.init(args=args)
-
+ 
     #start node and init
     node = TestConsole()
 
@@ -165,27 +119,33 @@ def main(args=None):
     node.start_bags()
 
     #init lidar scan
+    lidar_capture = node.start_lidar()
 
     #wait for lidar scan
+    rclpy.spin_until_future_complete(node, future=lidar_capture)
+    lidar_data = lidar_capture.result()
 
     #download lidar scan
+    node.download_lidar(lidar_data)
 
     #run rover
+    rover_command_future = node.start_rover()
 
     #wait
 
-    #init 2nd lidar scan
+    rclpy.spin_until_future_complete(node, future=rover_command_future)
 
+    #init 2nd lidar scan
+    #lidar_capture = node.start_lidar()
+    time.sleep(10)
     #stop bag
 
     #download lidar scan
 
     #close ros node
+    node.stop_bags()
+    node.get_logger().info("trial complete.")
+    node.get_logger().info(f"bag saved to {node.path}")
 
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    node.destroy_node()
+    rclpy.shutdown()

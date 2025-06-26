@@ -24,6 +24,7 @@ setup(
             'motorbag = rover_groundstation.motor_bag:main',
             'univbag = rover_groundstation.universal_bag:main',
             'console = rover_groundstation.test_console:main',
+            'console2 = rover_groundstation.test_console_main:main',
         ],
     },
 )
