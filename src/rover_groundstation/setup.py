@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'cameraviewer = rover_groundstation.image_sub:main',
+            'motorbag = rover_groundstation.motor_bag:main',
         ],
     },
 )
