@@ -9,6 +9,7 @@ import time
 TRACKWIDTH = 40.96 / 2
 ENCODER = 5281.7
 RADIUS = 15
+DELAY = 200
 
 class VelActionServer(Node):
     def __init__(self):
@@ -42,14 +43,14 @@ class VelActionServer(Node):
         velRequest.data[1] = v_to_e(v_L)
         velRequest.data[2] = v_to_e(v_L)
         velRequest.data[3] = v_to_e(v_L)
-        velRequest.data[4] = 250
+        velRequest.data[4] = DELAY
         velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
         
         
         while ((time.time() - start) < (driveTime / 1000)):
             self.motorStream.publish(velRequest)
-            self.get_logger().info(f"time: {start - time.time()}")
+            self.get_logger().info(f"time: {(time.time() - start)}")
             time.sleep(0.05)
         
         
@@ -57,13 +58,13 @@ class VelActionServer(Node):
         velRequest.data[1] = v_to_e(0)
         velRequest.data[2] = v_to_e(0)
         velRequest.data[3] = v_to_e(0)
-        velRequest.data[4] = 250
+        velRequest.data[4] = DELAY
         velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
 
         while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
             self.motorStream.publish(velRequest)
-            self.get_logger().info(f"time: {start - time.time()}")
+            self.get_logger().info(f"time: {(time.time() - start)}")
             time.sleep(0.05)
 
         goal_handle.succeed()
