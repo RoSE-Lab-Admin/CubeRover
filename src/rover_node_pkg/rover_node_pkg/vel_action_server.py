@@ -49,7 +49,7 @@ class VelActionServer(Node):
         
         while ((time.time() - start) < (driveTime / 1000)):
             self.motorStream.publish(velRequest)
-            self.get_logger.info(f"time: {start - time.time()}")
+            self.get_logger().info(f"time: {start - time.time()}")
             time.sleep(0.05)
         
         
@@ -63,7 +63,7 @@ class VelActionServer(Node):
 
         while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
             self.motorStream.publish(velRequest)
-            self.get_logger.info(f"time: {start - time.time()}")
+            self.get_logger().info(f"time: {start - time.time()}")
             time.sleep(0.05)
 
         goal_handle.succeed()

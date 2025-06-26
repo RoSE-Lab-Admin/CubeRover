@@ -92,11 +92,9 @@ class Serial(Node):
                         self.get_logger().error(f"Error adding data: {e}")
                 self.get_logger().info("sent command to teensy")
                 self.link.send(datasize)
-                response.success = True
         except Exception as e:
             self.get_logger().error(f"Error sending telem: {e}")
-            response = False
-        return response
+        return 
 
 
     def destroy_node(self):
