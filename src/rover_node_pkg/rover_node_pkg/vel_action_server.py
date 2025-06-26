@@ -47,7 +47,7 @@ class VelActionServer(Node):
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
         
         
-        while ((start - time.time()) < (driveTime / 1000)):
+        while ((time.time() - start) < (driveTime / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger.info(f"time: {start - time.time()}")
             time.sleep(0.05)
@@ -61,7 +61,7 @@ class VelActionServer(Node):
         velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
 
-        while ((start - time.time()) < (goal_handle.request.run_duration / 1000)):
+        while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger.info(f"time: {start - time.time()}")
             time.sleep(0.05)
