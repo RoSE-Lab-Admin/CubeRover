@@ -67,7 +67,7 @@ class VelActionServer(Node):
             time.sleep(0.05)
 
         goal_handle.succeed()
-        return 
+        return goal_handle.result
         
 
 
