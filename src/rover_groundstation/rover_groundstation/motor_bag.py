@@ -3,7 +3,7 @@ from rclpy.node import Node
 from rclpy.serialization import serialize_message
 from rover_interfaces.msg import MotorData
 from rover_interfaces.srv import BagStart
-from std_srvs import Trigger
+from std_srvs.srv import Trigger
 
 import rosbag2_py
 
