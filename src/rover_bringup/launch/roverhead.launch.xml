@@ -2,8 +2,6 @@
     <node pkg="rover_node_pkg" exec="serial">
         <param from = "$(find-pkg-share rover_bringup)/config/rover.params.yaml"/>
     </node>
-    <node pkg="rover_node_pkg" exec="command">
-        <param from = "$(find-pkg-share rover_bringup)/config/rover.params.yaml"/>
-    </node>
+    <node pkg="rover_node_pkg" exec="actionserv"/>
     <include file="$(find-pkg-share bno055)/launch/bno055.launch.py"/>
 </launch>

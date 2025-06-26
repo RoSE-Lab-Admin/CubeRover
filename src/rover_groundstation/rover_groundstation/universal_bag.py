@@ -46,15 +46,15 @@ class IMUBagger(Node):
             10)
         
 
-        self.start_serv = self.create_service(BagStart, self.get_name() + "_start",self.start_bag_callback)
-        self.stop_serv = self.create_service(Trigger, self.get_name() + "_stop", self.stop_bag_callback)
+        self.start_serv = self.create_service(BagStart, self.get_name() + "/start",self.start_bag_callback)
+        self.stop_serv = self.create_service(Trigger, self.get_name() + "/stop", self.stop_bag_callback)
 
         self.lock = True
 
 
     def start_bag_callback(self, request, response):
         storage_options = rosbag2_py.StorageOptions(
-            uri=request.uri,
+            uri=request.uri + "/" + self.get_name(),
             storage_id='mcap')
         converter_options = rosbag2_py.ConverterOptions('', '')
         self.writer.open(storage_options, converter_options)
@@ -78,7 +78,7 @@ class IMUBagger(Node):
                 self.topic_name,
                 serialize_message(msg),
                 self.get_clock().now().nanoseconds)
-            #self.get_logger().info("bagged msg")
+            self.get_logger().info("bagged msg")
 
     def destroy_node(self):
         self.writer.close()

@@ -22,6 +22,8 @@ setup(
         'console_scripts': [
             'cameraviewer = rover_groundstation.image_sub:main',
             'motorbag = rover_groundstation.motor_bag:main',
+            'univbag = rover_groundstation.universal_bag:main',
+            'console = rover_groundstation.test_console:main',
         ],
     },
 )

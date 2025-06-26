@@ -16,7 +16,7 @@ class TestConsole(Node):
         self.action_cli = ActionClient(
             self,
             TestCommand,
-            'vel_server',
+            'TestingActionServer',
         )
 
         #set up service client for lidar
@@ -28,7 +28,7 @@ class TestConsole(Node):
 
 
         bag_name = str(input("Bag folder name: "))
-        self.path = Path.home() + "/rosbags/" + bag_name
+        self.path = str(Path.home() / "rosbags" / bag_name)
         lin_vel = float(input("Trial linear speed (cm/s): "))
         turn_rad = float(input("Trial turning radius (cm): (enter anything bigger than 1E6 for straight)"))
         input("Press enter to start trial...")
@@ -61,16 +61,19 @@ class TestConsole(Node):
         #stop bag
         self.stop_bags()
         self.get_logger().info("trial complete.")
+        self.get_logger().info(f"bag saved to {self.path}")
+        self.destroy_node()
 
     def discover_baggers(self):
         
         all_nodes = self.get_node_names()
-
+        print(all_nodes)
         for name in all_nodes:
             if "bag" in name:
                 start_bag = self.create_client(BagStart, f"{name}/start")
+                self.get_logger().info(f"service name:{name}/start")
                 stop_bag = self.create_client(Trigger, f"{name}/stop")
-
+                self.get_logger().info(f"service name:{name}/stop")
                 if not start_bag.wait_for_service(timeout_sec=2.0):
                     self.get_logger().error(f"{name} start service not connected")
                     continue
@@ -85,7 +88,7 @@ class TestConsole(Node):
                 self.get_logger().info(f"connected to bag services on {name}")
     
     def start_bags(self):
-        request = BagStart().Request()
+        request = BagStart.Request()
         request.uri = self.path
         for client in self.start_bag_serv:
             client.call_async(request)

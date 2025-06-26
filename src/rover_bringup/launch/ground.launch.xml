@@ -1,19 +1,19 @@
 <launch>
     <node pkg="rover_groundstation" exec="univbag" name="motor_bag">
-        <param name= "topic_name" value="RoverTelem/roboclaw/enc_telem" />
+        <param name= "topic_name" value="/RoverTelem/roboclaw/enc_telem" />
         <param name= "msg_type" value="rover_interfaces.msg.MotorData" />
     </node>
     <node pkg="rover_groundstation" exec="univbag" name="imu_bag">
-        <param name= "topic_name" value="bno055/imu" />
+        <param name= "topic_name" value="/RoverTelem/bno055/imu" />
         <param name= "msg_type" value="sensor_msgs.msg.Imu" />
     </node>
     <node pkg="rover_groundstation" exec="univbag" name="mocap_bag">
-        <param name= "topic_name" value="RoverTelem/roboclaw/enc_telem" />
-        <param name= "msg_type" value="rover_interfaces.msg.MotorData" />
+        <param name= "topic_name" value="/CubeRover_V1/pose" />
+        <param name= "msg_type" value="geometry_msgs.msg.PoseStamped" />
     </node>
     <node pkg="rover_groundstation" exec="univbag" name="cam_bag">
-        <param name= "topic_name" value="RoverTelem/raw_image/compressed" />
+        <param name= "topic_name" value="/RoverTelem/camera/image_raw/compressed" />
         <param name= "msg_type" value="sensor_msgs.msg.CompressedImage" />
     </node>
-    <node pkg="rover_groundstation" exec="cameraviewer"/>
+    <!--<node pkg="rover_groundstation" exec="cameraviewer"/>-->
 </launch>
