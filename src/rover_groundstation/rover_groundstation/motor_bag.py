@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.serialization import serialize_message
 from rover_interfaces.msg import MotorData
-from rover_interfaces.src import BagStart
+from rover_interfaces.srv import BagStart
 from std_srvs import Trigger
 
 import rosbag2_py
@@ -35,8 +35,8 @@ class IMUBagger(Node):
             uri=request.uri,
             storage_id='mcap')
         converter_options = rosbag2_py.ConverterOptions('', '')
-        self.writer.create_topic(self.topic_info)
         self.writer.open(storage_options, converter_options)
+        self.writer.create_topic(self.topic_info)
         self.lock = False
         return response
 
