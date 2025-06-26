@@ -38,12 +38,14 @@ class IMUBagger(Node):
         self.writer.open(storage_options, converter_options)
         self.writer.create_topic(self.topic_info)
         self.lock = False
+        self.get_logger().info("started bagging")
         return response
 
     def stop_bag_callback(self, request, response):
         self.writer.close()
         response.success = True
         self.lock = True
+        self.get_logger().info("stopped")
         return response
     
     def destroy_node(self):
@@ -56,6 +58,7 @@ class IMUBagger(Node):
                 'RoverTelem/roboclaw/enc_telem',
                 serialize_message(msg),
                 self.get_clock().now().nanoseconds)
+            self.get_logger().info("bagged msg")
             
 def main(args=None):
     rclpy.init(args=args)
