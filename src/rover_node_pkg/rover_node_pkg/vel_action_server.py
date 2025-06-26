@@ -48,7 +48,7 @@ class VelActionServer(Node):
         
         
         while (start - time.time() < (driveTime / 1000)):
-            self.vel_serv.call_async(velRequest)
+            self.motorStream.publish(velRequest)
             time.sleep(0.05)
         
         
@@ -61,7 +61,7 @@ class VelActionServer(Node):
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deacel_duration / 1000)))
 
         while (start - time.time < (goal_handle.request.run_duration / 1000)):
-            self.vel_serv.call_async(velRequest)
+            self.motorStream.publish(velRequest)
             time.sleep(0.05)
 
         goal_handle.succeed()
