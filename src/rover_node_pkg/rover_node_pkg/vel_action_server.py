@@ -30,11 +30,11 @@ class VelActionServer(Node):
         v_L = goal_handle.request.linear_speed
         v_R = goal_handle.request.linear_speed
         if (goal_handle.request.turning_radius < 1E6):
-            if (goal_handle.request.turning_radius == 0):   # turn in place
+            if np.isclose(goal_handle.request.turning_radius, 0):   # turn in place
                 v_R = -v_L
             else:   #radius turn
-                v_L = goal_handle.request.linear_speed * (goal_handle.request.turning_radius - TRACKWIDTH) / goal_handle.request.turning_radius
-                v_R = goal_handle.request.linear_speed * (goal_handle.request.turning_radius + TRACKWIDTH) / goal_handle.request.turning_radius
+                v_L = (goal_handle.request.linear_speed * (goal_handle.request.turning_radius - TRACKWIDTH)) / goal_handle.request.turning_radius
+                v_R = (goal_handle.request.linear_speed * (goal_handle.request.turning_radius + TRACKWIDTH)) / goal_handle.request.turning_radius
 
         start = time.time()
         driveTime = goal_handle.request.run_duration - goal_handle.request.accel_deacel_duration
@@ -51,7 +51,7 @@ class VelActionServer(Node):
         while ((time.time() - start) < (driveTime / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(0.05)
+            time.sleep(0.1)
         
         
         velRequest.data[0] = v_to_e(0)
@@ -65,10 +65,10 @@ class VelActionServer(Node):
         while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(0.05)
+            time.sleep(0.1)
 
         goal_handle.succeed()
-        return goal_handle.result
+        return TestCommand.Result()
         
 
 
