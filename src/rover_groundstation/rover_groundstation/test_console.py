@@ -20,6 +20,7 @@ class TestConsole(Node):
         )
 
         #set up service client for lidar
+        self.capture = self.create_client()
 
         #set up service client for bag nodes
         self.start_bag_serv = []
