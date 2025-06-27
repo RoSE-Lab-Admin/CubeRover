@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
+import rclpy.wait_for_message
 from rover_interfaces.action import TestCommand
 from rover_interfaces.srv import BagStart
 from gantry_lidar_interfaces.srv import Capture, DownloadName, DownloadTimeRange, DeleteName, DeleteTimeRange
@@ -10,8 +11,6 @@ from pathlib import Path
 import time
 import json
 import subprocess
-
-
 
 
 class TestConsole(Node):
@@ -87,7 +86,7 @@ class TestConsole(Node):
     def start_lidar(self):
         capture_request = Capture.Request()
         capture_request.outname = self.test_name + "_lidar"
-        capture_request.sensors = ["l515_east"]
+        capture_request.sensors = ["l515_center", "l515_east", "l515_west"]
         capture_request.duration = 10.0
         future_cap = self.gant_capture.call_async(capture_request)
         return future_cap
@@ -104,8 +103,7 @@ class TestConsole(Node):
         return
     
     def start_rover(self):
-        future = self.action_cli.send_goal_async(self.goal)
-        return future
+        return self.action_cli.send_goal_async(self.goal)
     
 
 
@@ -132,15 +130,20 @@ def main(args=None):
     rover_command_future = node.start_rover()
 
     #wait
-
-    rclpy.spin_until_future_complete(node, future=rover_command_future)
+    while not rover_command_future.done():
+        rclpy.spin_until_future_complete(node, future=rover_command_future)
 
     #init 2nd lidar scan
-    #lidar_capture = node.start_lidar()
-    time.sleep(10)
-    #stop bag
+    lidar_capture = node.start_lidar()
 
-    #download lidar scan
+    #wait until lidar scan complete
+    rclpy.spin_until_future_complete(node, future=lidar_capture)
+
+    #stop bags
+    node.stop_bags()
+
+    #download lidardata into test bag
+    lidar_data = lidar_capture.result()
 
     #close ros node
     node.stop_bags()
