@@ -25,6 +25,7 @@ setup(
             'univbag = rover_groundstation.universal_bag:main',
             'console = rover_groundstation.test_console:main',
             'console2 = rover_groundstation.test_console_main:main',
+            'cam_cali = rover_groundstation.camera_calibration.py:main',
         ],
     },
 )

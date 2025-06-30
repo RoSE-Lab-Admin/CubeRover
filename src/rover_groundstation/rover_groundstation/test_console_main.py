@@ -109,7 +109,7 @@ class TestConsole(Node):
             fut = cli.call_async(Trigger.Request())
             rclpy.spin_until_future_complete(self, fut)
             fut.result()
-            self.get_logger().info("Bag stopped successfully.")
+            self.get_logger().info(f"Bag stopped successfully. {fut.message} messages.")
         self.bags_running = False
 
     def start_lidar(self):

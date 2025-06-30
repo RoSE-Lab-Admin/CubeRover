@@ -25,7 +25,6 @@ class IMUBagger(Node):
         self.msg_type_str = self.get_parameter('msg_type').get_parameter_value().string_value
         self.ser_format = self.get_parameter('serialization_format').get_parameter_value().string_value
 
-
         #import message type
         pkg, msg = self.msg_type_str.split(".msg.")
         msg_module = importlib.import_module(f"{pkg}.msg")
