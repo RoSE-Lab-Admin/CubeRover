@@ -11,6 +11,8 @@ import threading
 class Serial(Node):
     def __init__(self):
         super().__init__('serial_bridge')
+
+        #start lock for serial to prevent overlap
         self.serial_lock = threading.Lock()
 
         #declare parameters for ros node
@@ -29,7 +31,7 @@ class Serial(Node):
         PREFIX = self.get_parameter('PREFIX').value
 
         try:
-            self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT defined above
+            self.link = tx.SerialTransfer(COMPORT, BAUD) #set pySerialTransfer on COMPORT parameter with specified baud
             time.sleep(0.1)
             self.link.open()
             self.get_logger().info("Serial connection opened successfully")
@@ -38,10 +40,9 @@ class Serial(Node):
             rclpy.shutdown()
             return
 
-        #create publisher, service, and timer to publish data
+        #create publisher, and timer to publish data
         self.encPub = self.create_publisher(MotorData, PREFIX + 'enc_telem', 20)
         self.timer = self.create_timer(0.025, self.read_serial)
-        #self.srv = self.create_service(RoverCommand, 'SerialCommand', self.send_command_callback)
         self.motorStream = self.create_subscription(RoverCommand, 'motor_stream', self.motor_stream_callback, 10)
 
     def read_serial(self):
@@ -74,7 +75,7 @@ class Serial(Node):
                 self.encPub.publish(motorData)
                 return
             else:
-                # self.get_logger().error("serial not available?")
+                # self.get_logger().error("nothing in serial / serial not available")
                 return
 
     def motor_stream_callback(self, request):
@@ -87,10 +88,10 @@ class Serial(Node):
                 for data in request.data:
                     try:
                         datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='i')
-                        self.get_logger().info(f"sent {data}")
+                        #self.get_logger().info(f"sent {data}")
                     except Exception as e:
                         self.get_logger().error(f"Error adding data: {e}")
-                self.get_logger().info("sent command to teensy")
+                #self.get_logger().info("sent command to teensy")
                 self.link.send(datasize)
         except Exception as e:
             self.get_logger().error(f"Error sending telem: {e}")

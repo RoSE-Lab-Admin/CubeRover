@@ -14,12 +14,16 @@ DELAY = 200
 class VelActionServer(Node):
     def __init__(self):
         super().__init__("velocity_action_server")
+
+        #create action server
         self.action_serv = ActionServer(
             self,
             TestCommand,
             'TestingActionServer',
             self.action_callback
         )
+
+        #create publisher for motor command stream
         self.motorStream = self.create_publisher(RoverCommand, 'motor_stream', 20)
 
     def action_callback(self, goal_handle):
@@ -41,8 +45,8 @@ class VelActionServer(Node):
         
         velRequest.data[0] = v_to_e(v_L)
         velRequest.data[1] = v_to_e(v_L)
-        velRequest.data[2] = v_to_e(v_L)
-        velRequest.data[3] = v_to_e(v_L)
+        velRequest.data[2] = v_to_e(v_R)
+        velRequest.data[3] = v_to_e(v_R)
         velRequest.data[4] = DELAY
         velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deaccel_duration / 1000)))
         velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deaccel_duration / 1000)))
@@ -51,7 +55,7 @@ class VelActionServer(Node):
         while ((time.time() - start) < (driveTime / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(0.1)
+            time.sleep(0.025)
         
         
         velRequest.data[0] = v_to_e(0)
@@ -65,7 +69,7 @@ class VelActionServer(Node):
         while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(0.1)
+            time.sleep(0.025)
 
         goal_handle.succeed()
         return TestCommand.Result()
