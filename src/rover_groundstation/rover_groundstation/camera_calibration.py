@@ -50,7 +50,7 @@ class ImageSub(Node):
                 ret, corners = cv2.findChessboardCorners(gray_cropped_image, PATTERN, None)
                 if ret and (i not in Calibrated):
                     obj_points[i].append(objp)
-                    corners2 = cv2.cornerSubPix(gray_cropped_image,corners, PATTERN, (-1,-1), CRITERIA) #? on (11,11) and (-1,-1)
+                    corners2 = cv2.cornerSubPix(gray_cropped_image,corners, (11,11), (-1,-1), CRITERIA) #? on (11,11) and (-1,-1)
                     img_points[i].append(corners2)
                     count[i] = count[i] + 1
                     cv2.drawChessboardCorners(cropped_image,PATTERN,corners,ret)
