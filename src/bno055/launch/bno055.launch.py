@@ -39,6 +39,7 @@ def generate_launch_description():
         )
         
     node=Node(
+        namespace='Rover',
         package = 'bno055',
         executable = 'bno055',
         parameters = [config]

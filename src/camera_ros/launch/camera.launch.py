@@ -31,7 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     format_param_name = "format"
-    format_param_default = str("SBGGR8") #prefered image format
+    format_param_default = str("SRGGB8") #prefered image format
     format_param = LaunchConfiguration(
         format_param_name,
         default=format_param_default,
@@ -75,7 +75,7 @@ def generate_launch_description() -> LaunchDescription:
     # composable nodes in single container
     container = ComposableNodeContainer(
         name='camera_container',
-        namespace='',
+        namespace='Rover',
         package='rclcpp_components',
         executable='component_container',
         composable_node_descriptions=composable_nodes,
