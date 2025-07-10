@@ -3,69 +3,59 @@ from nicegui import ui
 
 #import ros packages
 import rclpy
-from testhandle_node import TestConsole
+#from testhandle_node import TestConsole
 from plot_node import MultiPlot
 
 #import python packages
 import threading
 import datetime
 import numpy as np
-import random
 
 #create a lock for trials
 trial_lock = threading.Lock()
 
-x = np.linspace(0.0,10.0,50)
-y = []
-for i in range(50):
-    y.append(random.randint(0,15))
 
 #startup ros and all ros nodes
-def test_node_startup():
-    global TestHandle
-    TestHandle = TestConsole()
-    try:
-        rclpy.spin(TestHandle)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        TestHandle.destroy_node()
+# def test_node_startup():
+#     global TestHandle
+#     TestHandle = TestConsole()
+#     try:
+#         rclpy.spin(TestHandle)
+#     except KeyboardInterrupt:
+#         pass
+#     finally:
+#         TestHandle.destroy_node()
 
 def plot_helper_startup():
     global Plotter
     Plotter = MultiPlot()
-    try:
-        rclpy.spin(Plotter)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        Plotter.destroy_node()
+    rclpy.spin(Plotter)
 
 #setup gui web interface
 def setup_gui():
     #wraps gui cards horrizontally
     with ui.row().classes('flex-wrap items-start'):
-        #Parameter set widget
-        with ui.card():
-            trialname = ''
-            ui.label('Testing Parameters')
-            linvel = ui.number(label='Linear velocity (cm/s)', value=0.00, format='%i')
-            turnrad = ui.number(label='Trial turning radius (cm) (enter >1E6 for straight, 0 for turn in place): ', value=0.00, format='%.2f')
-            slope = ui.number(label='Trial regolith slope (deg) ', value=0.00, format='%.2f')
-            trialnum = ui.number(label='Trial number ', value=1, format='%i')
+        # #Parameter set widget
+        # with ui.card():
+        #     trialname = ''
+        #     ui.label('Testing Parameters')
+        #     linvel = ui.number(label='Linear velocity (cm/s)', value=0.00, format='%i')
+        #     turnrad = ui.number(label='Trial turning radius (cm) (enter >1E6 for straight, 0 for turn in place): ', value=0.00, format='%.2f')
+        #     slope = ui.number(label='Trial regolith slope (deg) ', value=0.00, format='%.2f')
+        #     trialnum = ui.number(label='Trial number ', value=1, format='%i')
 
-            def set_params():
-                ui.notify("set trial parameters")
-                trialname = f"Trial_{int(linvel.value)}cm_{turnrad.value}radius_{slope.value}slope_Trial{int(trialnum.value)}_{datetime.datetime.now().strftime("%m%d%Y_%H_%M_%S")}"
-                TestHandle.set_params(linvel.value, turnrad.value, trialname)
+        #     def set_params():
+        #         ui.notify("set trial parameters")
+        #         trialname = f"Trial_{int(linvel.value)}cm_{turnrad.value}radius_{slope.value}slope_Trial{int(trialnum.value)}_{datetime.datetime.now().strftime("%m%d%Y_%H_%M_%S")}"
+        #         TestHandle.set_params(linvel.value, turnrad.value, trialname)
 
-            def start_trial():
-                ui.notify(f"starting trial: {trialname}")
-                with trial_lock:
-                    threading.Thread(target=TestHandle.start_test, daemon=True).start()
+        #     def start_trial():
+        #         ui.notify(f"starting trial: {trialname}")
+        #         with trial_lock:
+        #             threading.Thread(target=TestHandle.start_test, daemon=True).start()
 
-            ui.button('Set parameters', on_click=set_params)
-            ui.button("Start trial", on_click=start_trial)
+        #     ui.button('Set parameters', on_click=set_params)
+        #     ui.button("Start trial", on_click=start_trial)
 
         #Plot widgets (init to null values)
         with ui.grid(rows=2, columns=3):
@@ -111,28 +101,28 @@ def setup_gui():
                     x = np.array(Plotter.motor_data['time'])
 
                     ax1.clear()
-                    for i in range(3):     
+                    for i in range(4):     
                         y = np.array(Plotter.motor_data['pos'][i])
                         ax1.plot(x,y,'-', label=f"Enc pos: m{i + 1}")
                     ax1.legend()
                     ax1.figure.canvas.draw()
 
                     ax2.clear()
-                    for i in range(3):
+                    for i in range(4):
                         y = np.array(Plotter.motor_data['vel'][i])
                         ax2.plot(x,y,'-', label=f"Enc vel: m{i + 1}")
                     ax2.legend()
                     ax2.figure.canvas.draw()
 
                     ax3.clear()
-                    for i in range(1):
+                    for i in range(4):
                         y = np.array(Plotter.motor_data['volt'][i])
                         ax3.plot(x,y,'-', label=f"Roboclaw voltage: r{i + 1}")
                     ax3.legend()
                     ax3.figure.canvas.draw()
 
                     ax4.clear()
-                    for i in range(3):
+                    for i in range(4):
                         y = np.array(Plotter.motor_data['amp'][i])
                         ax4.plot(x,y,'-', label=f"Motor current: m{i + 1}")
                     ax4.legend()
@@ -143,32 +133,40 @@ def setup_gui():
                     x = np.array(Plotter.imu_data['time'])
 
                     ax5.clear()
-                    for i in range(2):
+                    for i in range(3):
                         y = np.array(Plotter.imu_data['lin_accel'][i])
                         ax5.plot(x,y,'-', label=f"IMU acceleration: axis {chr(ord('X') + i)}")
                     ax5.legend()
                     ax5.figure.canvas.draw()
 
                 if Plotter.mocap_data["time"]:
-                    x = np.array(Plotter.mocap_data['time'])
-
-                    ax6.clear()
-                    for i in range(2):
-                        y = np.array(Plotter.imu_data['pose'][i])
-                        ax6.plot(x,y,'-', label=f"Mocap pose: axis {chr(ord('X') + i)}")
-                    ax6.legend()
-                    ax6.figure.canvas.draw()
-
-            ui.timer(0.1,update_plots)
+                        ax6.clear()
+                        x = np.array(Plotter.mocap_data.get('time'))
+                        # ax6.set_xlim(Plotter.mocap_data.get("time")[0], Plotter.mocap_data.get("time")[-1])
+                        for i in range(3):
+                            if Plotter.mocap_data.get('pose')[i]:
+                                y = np.array(Plotter.mocap_data.get('pose')[i])
+                                ui.notify(f"{y.shape}; {np.sum(np.isnan(y))}; {y}")
+                                ax6.plot(x,y,'-', label=f"Mocap pose: axis {chr(ord('X') + i)}")
+                                ui.notify(f"plotted {chr(ord('X') + i)}")
+                            else:
+                                ui.notify("no data")
+                        ax6.legend()
+                        ax6.figure.canvas.draw()
+                ui.notify("plot update")
+            ui.timer(5,update_plots)
 
 def main():
     try:
         rclpy.init()
-        threading.Thread(target=test_node_startup, daemon=True).start()
-        threading.Thread(target=test_node_startup, daemon=True).start()
+        #threading.Thread(target=test_node_startup, daemon=True).start()
+        plotthread = threading.Thread(target=plot_helper_startup, daemon=True)
+        plotthread.start()
         setup_gui()
         ui.run(host='0.0.0.0', port=5000)
     except KeyboardInterrupt:
+        plotthread.close()
+        print("why")
         pass
     finally:
         rclpy.shutdown()
