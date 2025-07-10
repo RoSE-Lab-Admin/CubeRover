@@ -10,6 +10,7 @@ from collections import deque
 
 import threading
 
+
 class MultiPlot(Node):
     def __init__(self):
         super().__init__("plot_updater")
@@ -74,10 +75,10 @@ class MultiPlot(Node):
             self.imu_data['lin_accel'][2].append(msg.linear_acceleration.z) #change to linaccel z
 
     def mocap_callback(self, msg):
-        # with self.mocaplock:
-        self.mocap_data['time'].append(self.get_clock().now().nanoseconds * 1e-9 - self.start)
-        print(f"{msg.pose.position.x}, {msg.pose.position.y}, {msg.pose.position.z}")
-        self.mocap_data.get('pose')[0].append(msg.pose.position.x) #change to linaccel x
-        self.mocap_data.get('pose')[1].append(msg.pose.position.y) #change to linaccel y
-        self.mocap_data.get('pose')[2].append(msg.pose.position.z) #change to linaccel z
+        with self.mocaplock:
+            self.mocap_data['time'].append(self.get_clock().now().nanoseconds * 1e-9 - self.start)
+            print(f"{msg.pose.position.x}, {msg.pose.position.y}, {msg.pose.position.z}")
+            self.mocap_data.get('pose')[0].append(msg.pose.position.x) #change to linaccel x
+            self.mocap_data.get('pose')[1].append(msg.pose.position.y) #change to linaccel y
+            self.mocap_data.get('pose')[2].append(msg.pose.position.z) #change to linaccel z
             # print(f"{}, {msg.pose.position.y}, {msg.pose.position.z}")
