@@ -78,7 +78,11 @@ class MultiPlot(Node):
         with self.mocaplock:
             self.mocap_data['time'].append(self.get_clock().now().nanoseconds * 1e-9 - self.start)
             print(f"{msg.pose.position.x}, {msg.pose.position.y}, {msg.pose.position.z}")
-            self.mocap_data.get('pose')[0].append(msg.pose.position.x) #change to linaccel x
+            self.mocap_data['pose'][0].append(msg.pose.position.x) #change to linaccel x
             self.mocap_data.get('pose')[1].append(msg.pose.position.y) #change to linaccel y
             self.mocap_data.get('pose')[2].append(msg.pose.position.z) #change to linaccel z
-            # print(f"{}, {msg.pose.position.y}, {msg.pose.position.z}")
+            print(f"{len(self.mocap_data['pose'][0])}")
+
+    def get_mocap(self):
+        with self.mocaplock:
+            return self.mocap_data

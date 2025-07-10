@@ -139,22 +139,22 @@ def setup_gui():
                     ax5.legend()
                     ax5.figure.canvas.draw()
 
-                with Plotter.mocaplock:
-                    if Plotter.mocap_data["time"]:
-                            ax6.clear()
-                            x = np.array(Plotter.mocap_data.get('time'))
-                            # ax6.set_xlim(Plotter.mocap_data.get("time")[0], Plotter.mocap_data.get("time")[-1])
-                            for i in range(3):
-                                y = np.array(Plotter.mocap_data['pose'][i])
-                                print(f"{y.shape}; {np.sum(np.isnan(y))}; {y}")
-                                ax6.plot(x,y,'-', label=f"Mocap pose: axis {chr(ord('X') + i)}")
-                                ui.notify(f"plotted {chr(ord('X') + i)}")
-                            else:
-                                ui.notify("no data")
-                            ax6.legend()
-                            ax6.figure.canvas.draw()
+                mocap = Plotter.get_mocap()
+                if mocap["time"]:
+                        ax6.clear()
+                        x = np.array(mocap.get('time'))
+                        # ax6.set_xlim(Plotter.mocap_data.get("time")[0], Plotter.mocap_data.get("time")[-1])
+                        for i in range(3):
+                            y = np.array(mocap['pose'][i])
+                            print(f"{len(y)}; {np.sum(np.isnan(y))}; {y}")
+                            ax6.plot(x,y,'-', label=f"Mocap pose: axis {chr(ord('X') + i)}")
+                            ui.notify(f"plotted {chr(ord('X') + i)}")
+                        else:
+                            ui.notify("no data")
+                        ax6.legend()
+                        ax6.figure.canvas.draw()
                 ui.notify("plot update")
-            ui.timer(5,update_plots)
+            ui.timer(0.5,update_plots)
 
 def main():
     try:
