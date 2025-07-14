@@ -5,6 +5,7 @@ from nicegui import ui
 import rclpy
 #from testhandle_node import TestConsole
 from plot_node import MultiPlot
+from typing import Optional
 
 #import python packages
 import threading
@@ -13,6 +14,11 @@ import numpy as np
 
 #create a lock for trials
 trial_lock = threading.Lock()
+plotter_ready = threading.Event()
+
+global Plotter
+Plotter: Optional[MultiPlot] = None
+
 
 
 #startup ros and all ros nodes
@@ -29,7 +35,10 @@ trial_lock = threading.Lock()
 def plot_helper_startup():
     global Plotter
     Plotter = MultiPlot()
+    print(f"plotter id: {id(Plotter)}")
+    plotter_ready.set()
     rclpy.spin(Plotter)
+
 
 #setup gui web interface
 def setup_gui():
@@ -97,6 +106,7 @@ def setup_gui():
                     ax6.plot([],[],'-')
             
             def update_plots():
+                assert Plotter is not None
                 if Plotter.motor_data['time']:
                     x = np.array(Plotter.motor_data['time'])
 
@@ -139,20 +149,22 @@ def setup_gui():
                     ax5.legend()
                     ax5.figure.canvas.draw()
 
-                mocap = Plotter.get_mocap()
-                if mocap["time"]:
+
+                print(f"plotter id: {id(Plotter)}")
+                with Plotter.mocaplock:
+                    if Plotter.mocap_data["time"]:
+                        time = np.array(Plotter.mocap_data["time"])
+                        pose = [np.array(d) for d in Plotter.mocap_data["pose"]]
+                        print(time)
                         ax6.clear()
-                        x = np.array(mocap.get('time'))
-                        # ax6.set_xlim(Plotter.mocap_data.get("time")[0], Plotter.mocap_data.get("time")[-1])
-                        for i in range(3):
-                            y = np.array(mocap['pose'][i])
-                            print(f"{len(y)}; {np.sum(np.isnan(y))}; {y}")
-                            ax6.plot(x,y,'-', label=f"Mocap pose: axis {chr(ord('X') + i)}")
+                        for i, ori in enumerate(pose):
+                            print(f"{len(ori)}; {np.sum(np.isnan(ori))}; {ori}")
+                            ax6.plot(time,ori,'-', label=f"Mocap pose: axis {chr(ord('X') + i)}")
                             ui.notify(f"plotted {chr(ord('X') + i)}")
-                        else:
-                            ui.notify("no data")
                         ax6.legend()
                         ax6.figure.canvas.draw()
+                    else:
+                        print("no time?")
                 ui.notify("plot update")
             ui.timer(0.5,update_plots)
 
@@ -162,6 +174,8 @@ def main():
         #threading.Thread(target=test_node_startup, daemon=True).start()
         plotthread = threading.Thread(target=plot_helper_startup, daemon=True)
         plotthread.start()
+        print(f"plotter id: {id(Plotter)}")
+        plotter_ready.wait(timeout=2.0)
         setup_gui()
         ui.run(host='0.0.0.0', port=5000)
     except KeyboardInterrupt:
