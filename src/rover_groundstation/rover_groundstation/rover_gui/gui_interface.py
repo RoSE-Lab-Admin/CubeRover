@@ -10,6 +10,7 @@ from plot_node import MultiPlot
 import threading
 import datetime
 import numpy as np
+import time
 
 #create a lock for trials
 trial_lock = threading.Lock()
@@ -29,6 +30,7 @@ trial_lock = threading.Lock()
 def plot_helper_startup():
     global Plotter
     Plotter = MultiPlot()
+    time.sleep(5)
     rclpy.spin(Plotter)
 
 #setup gui web interface
