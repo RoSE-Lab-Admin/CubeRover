@@ -53,7 +53,6 @@ void setup(void) {
 ControlPacket * control = nullptr; // control pointer variable to keep track of what command is being done
 RingBuf<ControlPacket*, 20> packetBuff; // packet buffer to keep commands if one is currently being resolved
 elapsedMillis sendTimer = 0;
-
 void loop() { // Stuff to loop over
   if (control == nullptr) {   // checks if there is currently a control packet commanding the rover, if yes:
     if (!packetBuff.isEmpty()) {    // checks the packet buffer to see if there is a command in queue, if yes:
@@ -78,25 +77,10 @@ void loop() { // Stuff to loop over
   }
 
   if (sendTimer > 200) {
-    //SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 12);
+    SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 14);
     sendTimer = 0;
   }
-  delay(20);
-
-
-  // Serial.print("hi");
-  // int * testvals = new int[7];
-  // testvals[0] = 500;
-  // testvals[1] = 500;
-  // testvals[2] = 500;
-  // testvals[3] = 500;
-  // testvals[4] = 4000;
-  // testvals[5] = 500;
-  // testvals[6] = 500;
-
-  // ControlPacket * test = new VelPID(testvals);
-  // test->resolve(&ROBOCLAW_1, &ROBOCLAW_2);
-  // delay(16000);
+  delay(5);
 
 }
 
@@ -169,27 +153,72 @@ int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
   // Retrieve Encoder count and speed - 8 vals
   // Retrieve Motor currents - 4 vals
 
-  int * telemetryData = new int[12];
+  int * telemetryData = new int[14];
 
   // Retrieve Encoder counts
-  telemetryData[0] = RC1.ReadEncM1(0x80);
-  telemetryData[1] = RC1.ReadEncM2(0x80);
-  telemetryData[2] = RC2.ReadEncM1(0x80);
-  telemetryData[3] = RC2.ReadEncM2(0x80);
+  uint8_t status1,status2,status3,status4;
+  bool valid1=false,valid2=false,valid3=false,valid4=false;
+   uint32_t count1=0, count2=0, count3=0, count4=0;
+  for (int i = 0; i < 5; i ++) {
+      count1 = RC1.ReadEncM1(0x80, &status1, &valid1);
+      count2 = RC1.ReadEncM2(0x80, &status2, &valid2);
+      count3 = RC2.ReadEncM1(0x80, &status3, &valid3);
+      count4 = RC2.ReadEncM2(0x80, &status4, &valid4);
+      if (valid1 && valid2 && valid3 && valid4) break;
+  }
+
+  telemetryData[0] = (int)count1;
+  telemetryData[1] = (int)count2;
+  telemetryData[2] = (int)count3;
+  telemetryData[3] = (int)count4;
+
 
   // Retrieve Encoder velocities
-  telemetryData[4] = RC1.ReadSpeedM1(0x80);
-  telemetryData[5] = RC1.ReadSpeedM2(0x80);
-  telemetryData[6] = RC2.ReadSpeedM1(0x80);
-  telemetryData[7] = RC2.ReadSpeedM2(0x80);
+  uint8_t status5,status6,status7,status8;
+  bool valid5=false, valid6=false, valid7=false, valid8=false;
+  uint32_t speed1=0, speed2=0, speed3=0, speed4=0;
+  for (int i = 0; i < 5; i++) {
+      speed1 = RC1.ReadSpeedM1(0x80, &status5, &valid5);
+      speed2 = RC1.ReadSpeedM2(0x80, &status6, &valid6);
+      speed3 = RC2.ReadSpeedM1(0x80, &status7, &valid7);
+      speed4 = RC2.ReadSpeedM2(0x80, &status8, &valid8);
+      if (valid5 && valid6 && valid7 && valid8) break;
+  }
 
-  int16_t c1,c2,c3,c4; // fix? currnetly currents are not correct values
-  RC1.ReadCurrents(0x80, c1, c2);
-  RC2.ReadCurrents(0x80, c3, c4);
-  telemetryData[8] = static_cast<float>(c1);
-  telemetryData[9] = static_cast<float>(c2);
-  telemetryData[10] = static_cast<float>(c3);
-  telemetryData[11] = static_cast<float>(c4);
+  telemetryData[4] = (int)speed1;
+  telemetryData[5] = (int)speed2;
+  telemetryData[6] = (int)speed3;
+  telemetryData[7] = (int)speed4;
+
+
+  // Read Currents
+  int16_t c1, c2, c3, c4;
+  bool rc1cval = false, rc2cval=false;
+  for (size_t i = 0; i < 5; i++) {
+    rc1cval = RC1.ReadCurrents(0x80, c1, c2);
+    rc2cval = RC2.ReadCurrents(0x80, c3, c4);
+    if (rc1cval && rc2cval) break;
+  }
+  telemetryData[8] = (int)c1;
+  telemetryData[9] = (int)c2;
+  telemetryData[10] = (int)c3;
+  telemetryData[11] = (int)c4;
+
+  // Read battery voltages
+  uint16_t v1 = 0, v2 = 0;
+  bool v1val = false, v2val = false;
+  for (size_t i = 0; i < 5; i++) {
+    v1 = RC1.ReadMainBatteryVoltage(0x80, &v1val);
+    v2 = RC2.ReadMainBatteryVoltage(0x80, &v2val);
+    if (v1val && v2val) break;
+  }
+
+  telemetryData[12] = (int)v1;
+  telemetryData[13] = (int)v2;
+
+  // for (size_t i = 0; i < 14; i++) {
+  //   Serial.println(telemetryData[i]);
+  // }
 
   return telemetryData;
 }
