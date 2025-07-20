@@ -50,11 +50,13 @@ void run_command() {
     case SET_MOTOR_SPEEDS: {
       set_motor_speed(arg1, arg2, arg3);
       motor_timeout = 0;
+      Serial.println("ok");
       break;
     }
     case SET_MOTOR_SPEED: {
       set_motor_speeds(arg1, arg2, arg3);
       motor_timeout = 0;
+      Serial.println("ok");
       break;
     }
     case GET_TELEM: {
