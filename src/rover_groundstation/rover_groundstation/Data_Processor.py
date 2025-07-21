@@ -13,6 +13,7 @@ from pathlib import Path
 from dataclasses import asdict
 from typing import List, Tuple
 
+import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,8 +22,21 @@ from tqdm import tqdm
 from rosbags.highlevel import AnyReader
 
 # ==== USER PARAMETERS =======================================================
-BASE_DIR     = Path('/content/drive/MyDrive/Field Testing/Test ROS Bags/7 15 2025/'
-                    'Trial_1cm_10000000.0radius_0.0slope_Trial6_07152025_17_34_59')
+
+# parser = argparse.ArgumentParser(
+#                     prog='Data_processor',
+#                     description='processes bag data',
+#                     epilog='')
+
+# parser.add_argument('filename')
+
+# args = parser.parse_args()
+
+BASE_DIR     = Path(Path.home())
+
+# Path('/content/drive/MyDrive/Field Testing/Test ROS Bags/7 15 2025/'
+#                     'Trial_1cm_10000000.0radius_0.0slope_Trial6_07152025_17_34_59')
+
 OUTPUT_DIR   = BASE_DIR / 'results'
 RAW_DIR      = OUTPUT_DIR / 'raw_data'
 EDITED_DIR   = OUTPUT_DIR / 'edited_and_rotated'
@@ -205,7 +219,14 @@ def align_dataframe(df: pd.DataFrame, output_file: Path):
     print(f"Saved aligned data to {output_file}")
 
 # ==== MAIN ==================================================================
-def main():
+def main(base_dir: Path):
+    global BASE_DIR, OUTPUT_DIR, RAW_DIR, EDITED_DIR
+    BASE_DIR =  Path(base_dir)
+
+    OUTPUT_DIR   = BASE_DIR / 'results'
+    RAW_DIR      = OUTPUT_DIR / 'raw_data'
+    EDITED_DIR   = OUTPUT_DIR / 'edited_and_rotated'
+
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     EDITED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -289,6 +310,3 @@ def main():
              ['m1current','m2current','m3current','m4current'],
              EDITED_DIR, tag='rot_curr', title='Rotated Motor Currents',
              time_col='timestamp')
-
-if __name__ == '__main__':
-    main()
