@@ -1,7 +1,7 @@
 #ifndef CONTROL_PACKET_H
 #define CONTROL_PACKET_H
 
-#define DEBUG
+//#define DEBUG
 
 #include <RoboClaw.h>
 #include <Wire.h>
@@ -11,9 +11,6 @@
 
 elapsedMillis univTimer = 0;
 
-float angP = 5;
-float angI = 0.3;
-float angTol = 3;
 
 class ControlPacket { // Basic controlpacket parent class
   public:
@@ -60,25 +57,7 @@ class PosPID : public ControlPacket {
     uint8_t depth1,depth2,depth3,depth4; // for holding buffer states
 };
 
-class AngPID : public ControlPacket {
-  public:
-    AngPID(float * data, Adafruit_BNO055 & BNO, int acceleration, int deacceleration);
-    void resolve(RoboClaw * RC1, RoboClaw * RC2) final;
-    bool fulfilled(RingBuf<ControlPacket*, 20>& packetBuff) final;
-    void stop() final;
-  private:
-    Adafruit_BNO055 * _IMU = nullptr;
-    float _integralTerm;
-    float _wheelBase;
-    int _accel;
-    int _deaccel;
-    float _startVal;
-    float _setpoint;
-    float _ang;
-    float _rad;
-    int _vel;
-    bool _dir; // T for CW, F for CCW
-};
+
 
 // IMPLEMENTATIONS
 
@@ -108,18 +87,18 @@ VelPID::VelPID(int * data) { // initilizes the Velocity PID speed control packet
   _vR1 = data[2];
   _vR2 = data[3];
   _time = data[4];
-  Serial.println("got vals");
+  //Serial.println("got vals");
 
   // saves the acceleration and deacceleration values from initialization
   _accel = data[5];
   _deaccel = data[6];
-  Serial.println("got vals2");
+  //Serial.println("got vals2");
 
   // deletes the data array to prevent a memory leak
   delete[] data;
-  Serial.print("deleted array");
+  //Serial.print("deleted array");
   digitalWrite(13,LOW);
-  Serial.print("init");
+  //Serial.print("init");
 }
 
 void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go at speed denoted by the only number in data
@@ -135,31 +114,44 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
   int32_t speedR1 = _RC2->ReadSpeedM1(0x80, &status3, &valid3);
   int32_t speedR2 = _RC2->ReadSpeedM2(0x80, &status4, &valid4);
 
+  int counter = 0;
+
   while(!valid1 && !valid2 && !valid3 && !valid4) { // if invalid reading, read until valid encoder setpoint
-    int32_t speedL1 = _RC1->ReadSpeedM1(0x80, &status1, &valid1);
-    int32_t speedL2 = _RC1->ReadSpeedM2(0x80, &status2, &valid2);
-    int32_t speedR1 = _RC2->ReadSpeedM1(0x80, &status3, &valid3);
-    int32_t speedR2 = _RC2->ReadSpeedM2(0x80, &status4, &valid4);
-    Serial.print("oops im stuck");
+    speedL1 = _RC1->ReadSpeedM1(0x80, &status1, &valid1);
+    speedL2 = _RC1->ReadSpeedM2(0x80, &status2, &valid2);
+    speedR1 = _RC2->ReadSpeedM1(0x80, &status3, &valid3);
+    speedR2 = _RC2->ReadSpeedM2(0x80, &status4, &valid4);
+    //Serial.print("oops im stuck");
+    counter++;
+    if (counter > 6) {
+      valid1 = 1;
+      valid2 = 1;
+      valid3 = 1;
+      valid4 = 1;
+      speedL1 = _vL1;
+      speedL2 = _vL2;
+      speedR1 = _vR1;
+      speedR2 = _vR2;
+    }
   }
 
   // commanding l1
-  bool speedingUp = (_vL1 - speedL1) > 0;
+  bool speedingUp = (_vL1 - speedL1) * speedL1 > 0;
   int accelToUse = speedingUp ? _accel : _deaccel;
   _RC1->SpeedAccelM1(0x80, accelToUse, _vL1);
   
   // commanding l2
-  speedingUp = (_vL2 - speedL2) > 0;
+  speedingUp = (_vL2 - speedL2) * speedL2 > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC1->SpeedAccelM2(0x80, accelToUse, _vL2);
 
   // commanding r1
-  speedingUp = (_vR1 - speedR1) > 0;
+  speedingUp = (_vR1 - speedR1) * speedR1 > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC2->SpeedAccelM1(0x80, accelToUse, _vR1);
   
   // commanding r2
-  speedingUp = (_vR2 - speedR2) > 0;
+  speedingUp = (_vR2 - speedR2) * speedR2 > 0;
   accelToUse = speedingUp ? _accel : _deaccel;
   _RC2->SpeedAccelM2(0x80, accelToUse, _vR2);
 
@@ -282,118 +274,6 @@ void PosPID::stop() { // sets the roboclaws to stop before the packet is fulfill
 
 
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Implementation for child class Angle PID for angle control
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-AngPID::AngPID(float * data, Adafruit_BNO055 & BNO, int Acceleration, int Deacceleration) { // initilizes the AngPID Class, for radius turning control
-  _ang = data[0];
-  _rad = data[1];
-  _vel = data[2];
-  _IMU = &BNO;
-  _accel = Acceleration;
-  _deaccel = Deacceleration;
-  _wheelBase = 40;
-  _integralTerm = 0;
-  delete[] data;
-}
-
-// TODO -> convert to qpps
-void AngPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets the config settings based on given parameters, 1st is angle, 2nd is radius, 3rd is speed
-  _RC1 = RC1;
-  _RC2 = RC2;
-  sensors_event_t orientationData;
-  _IMU->getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-
-  if (_rad > 0) {
-    _dir = true;
-    _wheelBase = _wheelBase;
-    _rad = abs(_rad);
-    _ang = abs(_ang);
-  } else {
-    _dir = false;
-    _rad = abs(_rad);
-    _wheelBase = -_wheelBase;
-    _ang = -1 * abs(_ang);
-  }
-  
-  _setpoint = fmod(((orientationData.orientation.x + _ang) + 360.0) , 360.0);
-  
-  _packTimer = 0;
-  
-  #ifdef DEBUG
-    Serial.print(orientationData.orientation.x);
-    Serial.println(_setpoint);
-  #endif
-}
-
-bool AngPID::fulfilled(RingBuf<ControlPacket*, 20>& packetBuff) {    // checks if packet is complete (based on placeholder 2 second timer)
-  // determine if the current orientation is fulfilled
-  delay(50);
-  sensors_event_t orientationData;
-  _IMU->getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-  float error;
-  if (_dir) {
-    error = fmod((_setpoint - orientationData.orientation.x + 360.0), 360.0);
-  } else {
-    error = fmod((orientationData.orientation.x - _setpoint + 360.0), 360.0);
-  }
-  
-  
-
-  if (error > angTol) {
-    _integralTerm += error * univTimer;
-
-    if (abs(_integralTerm * angI) > 500) {
-      _integralTerm = 500 / angI;
-    }
-
-    univTimer = 0;
-    double Vel = angP * error + angI * _integralTerm;
-
-    if (Vel > _vel) {
-      Vel = _vel;
-    }
-
-    float vL = Vel * ((_rad + (_wheelBase / 2)) / _rad)  ;
-    float vR = Vel * ((_rad - (_wheelBase / 2)) / _rad)  ;
-
-    #ifdef DEBUG
-      Serial.print("Orientation:");
-      Serial.print(orientationData.orientation.x);
-      Serial.print(" | Setpoint: ");
-      Serial.print(_setpoint);
-      Serial.print(" | Error: ");
-      Serial.print(error);
-      Serial.print(" | Velocity: ");
-      Serial.print(Vel);
-      Serial.print(" | VelocityL: ");
-      Serial.print(vL);
-      Serial.print(" | VelocityR: ");
-      Serial.print(vR);
-      Serial.print(" | Wheel Base: ");
-      Serial.println(_wheelBase);
-    #endif
-
-    _RC1->SpeedAccelM1(0x80, _accel, vL);
-    _RC1->SpeedAccelM2(0x80, _accel, vL);
-    _RC2->SpeedAccelM1(0x80, _accel, vR);
-    _RC2->SpeedAccelM2(0x80, _accel, vR);
-    return false;
-  }
-  else {
-    this->stop();
-    return true;
-  }
-}
-
-void AngPID::stop() { // sets the roboclaws to stop before the packet is fulfilled
-  _RC1->SpeedM1(0x80, 0);
-  _RC1->SpeedM2(0x80, 0);
-  _RC2->SpeedM1(0x80, 0);
-  _RC2->SpeedM2(0x80, 0);
-}
 
 
 #endif
