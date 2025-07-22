@@ -3,11 +3,18 @@ from rclpy.node import Node
 from rclpy.serialization import serialize_message
 from rover_interfaces.srv import BagStart
 from std_srvs.srv import Trigger
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 import rosbag2_py
 import importlib
 
-class IMUBagger(Node):
+qos_profile = QoSProfile(
+    reliability = ReliabilityPolicy.RELIABLE,
+    history = HistoryPolicy.KEEP_ALL,
+    durability=DurabilityPolicy.VOLATILE,
+)
+
+class Universal_Bag(Node):
     def __init__(self):
         super().__init__("universal_bagger_node")
 
@@ -45,7 +52,8 @@ class IMUBagger(Node):
             self.msg_type,
             self.topic_name,
             self.topic_callback,
-            10)
+            qos_profile=qos_profile
+            )
         
         #initialize ros start and stop services and necessary counters / locks
         self.start_serv = self.create_service(BagStart, self.get_name() + "/start",self.start_bag_callback)
@@ -94,7 +102,7 @@ class IMUBagger(Node):
             
 def main(args=None):
     rclpy.init(args=args)
-    node = IMUBagger()
+    node = Universal_Bag()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
