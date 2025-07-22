@@ -1,3 +1,0 @@
-<launch>
-    <include file="$(find-pkg-share camera_ros)/launch/camera.launch.py"/>
-</launch>
