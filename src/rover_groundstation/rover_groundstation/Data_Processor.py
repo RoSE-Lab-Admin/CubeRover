@@ -140,7 +140,7 @@ def plot_csv(csv_path: Path,
     df = pd.read_csv(csv_path)
     if time_col not in df:
         raise KeyError(f"{time_col} missing in {csv_path.name}")
-    t = (df[time_col] - df[time_col].iloc[0]) / 1e9
+    t = (df[time_col] - df[time_col].iloc[0])
 
     fig, ax = plt.subplots(dpi=dpi)
     for col in y_cols:
