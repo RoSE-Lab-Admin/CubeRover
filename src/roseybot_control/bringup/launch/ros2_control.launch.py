@@ -26,11 +26,12 @@ def generate_launch_description():
     robot_controllers = PathJoinSubstitution(
         [
             FindPackageShare("roseybot_control"),
+            "bringup",
             "config",
             "diffbot_controllers.yaml",
         ]
     )
-    
+
     robot_state_pub_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -66,6 +67,9 @@ def generate_launch_description():
 
     nodes = [
         robot_state_pub_node,
+        control_node,
+        joint_state_broadcaster_spawner,
+        robot_controller_spawner
     ]
 
     return LaunchDescription(nodes)
