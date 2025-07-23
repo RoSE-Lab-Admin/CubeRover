@@ -48,7 +48,7 @@
             <material name="pink"/>
         </visual>
 
-        <xacro:box_intertia m ="${base_mass}" w="${base_width}" l="${base_length}" h="${base_height}"/>
+        <xacro:box_inertia m ="${base_mass}" w="${base_width}" d="${base_length}" h="${base_height}"/>
     </link>
 
     <!-- define footprint of rover-->
@@ -60,6 +60,7 @@
         <origin xyz="0 0 ${- (z_offset + wheel_radius) }"/>
     </joint>
 
+    <!-- set up macro for wheel definitions -->
     <xacro:macro name="wheel" params="prefix x_reflect y_reflect">
         <joint name="${prefix}_wheel_joint" type="continuous">
             <parent link="base_link"/>
@@ -84,11 +85,11 @@
                 <material name="black"/>
             </visual>
 
-            <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="{wheel_length}"/>
+            <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_length}"/>
         </link>
     </xacro:macro>
 
-    
+    <!-- call macros to define wheels-->
     <xacro:wheel prefix="front_left" x_reflect="1" y_reflect="1"/>
     <xacro:wheel prefix="front_right" x_reflect="1" y_reflect="-1"/>
     <xacro:wheel prefix="back_left" x_reflect="-1" y_reflect="1"/>

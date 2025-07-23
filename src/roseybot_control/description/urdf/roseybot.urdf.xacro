@@ -8,7 +8,7 @@
 
     <xacro:include filename="$(find roseybot_control)/description/robot/roseybot_description.urdf.xacro"/>
   <!-- Import diffbot ros2_control description -->
-  <!-- <xacro:include filename="$(find ros2_control_demo_example_2)/ros2_control/diffbot.ros2_control.xacro" /> -->
+  <xacro:include filename="$(find roseybot_control)/description/ros2_control/roseybot_control.urdf.xacro" />
 
   <!-- <xacro:roseybot prefix="$(arg prefix)" /> -->
 
