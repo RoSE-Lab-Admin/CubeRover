@@ -38,7 +38,7 @@ https://github.com/ros-controls/ros2_control_demos/blob/master/ros2_control_demo
   </material>
 
   <material name="pink">
-    <color rgba= "${255/192} ${192/255} ${203/255} 1.0"/>
+    <color rgba= "${255/255} ${182/255} ${193/255} 1.0"/>
   </material>
 
 </robot>
