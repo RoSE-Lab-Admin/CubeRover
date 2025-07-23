@@ -14,10 +14,15 @@
 
     <ros2_control name="roseybot_teensy" type="system">
 
-        <hardware>
+        <!-- <hardware>
           <plugin>ros2_control_demo_example_2/DiffBotSystemHardware</plugin>
           <param name="example_param_hw_start_duration_sec">0</param>
           <param name="example_param_hw_stop_duration_sec">3.0</param>
+        </hardware> -->
+
+        <hardware>
+          <plugin>mock_components/GenericSystem</plugin>
+          <param name="calculate_dynamics">true</param>
         </hardware>
       
         <xacro:connect_joint prefix="front_left"/>
