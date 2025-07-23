@@ -13,7 +13,7 @@ find_package(ament_cmake REQUIRED)
 
 
 install(DIRECTORY
-  launch description
+  bringup description hardware
   DESTINATION share/${PROJECT_NAME}/
 )
 
