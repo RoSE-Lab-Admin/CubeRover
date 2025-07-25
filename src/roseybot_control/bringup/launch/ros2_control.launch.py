@@ -32,19 +32,19 @@ def generate_launch_description():
         ]
     )
 
+    control_node = Node(
+        package="controller_manager",
+        executable="ros2_control_node",
+        parameters=[robot_controllers],
+        output="both",
+    )
+
     robot_state_pub_node = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="both",
         parameters=[robot_description],
-    )
-
-    control_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[robot_controllers],
-        output="both",
     )
 
     joint_state_broadcaster_spawner = Node(
@@ -66,8 +66,8 @@ def generate_launch_description():
     )
 
     nodes = [
-        robot_state_pub_node,
         control_node,
+        robot_state_pub_node,
         joint_state_broadcaster_spawner,
         robot_controller_spawner
     ]
