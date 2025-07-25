@@ -12,9 +12,9 @@ diffbot_base_controller:
     left_wheel_names: ["front_left_wheel_joint", "back_left_wheel_joint"]
     right_wheel_names: ["front_right_wheel_joint", "back_right_wheel_joint"]
 
-    wheel_separation: 0.3
-    wheels_per_side: 2  # actually 2, but both are controlled by 1 signal
-    wheel_radius: 0.015
+    wheel_separation: 0.422
+    wheels_per_side: 2 
+    wheel_radius: 0.1515
 
     wheel_separation_multiplier: 1.0
     left_wheel_radius_multiplier: 1.0
@@ -37,19 +37,19 @@ diffbot_base_controller:
     # Whenever a min_* is unspecified, default to -max_*
     linear.x.has_velocity_limits: true
     linear.x.has_acceleration_limits: true
-    linear.x.has_jerk_limits: false
-    linear.x.max_velocity: 1.0
-    linear.x.min_velocity: -1.0
-    linear.x.max_acceleration: 1.0
-    linear.x.max_jerk: 0.0
-    linear.x.min_jerk: 0.0
+    # linear.x.has_jerk_limits: false
+    linear.x.max_velocity: 0.3
+    linear.x.min_velocity: -0.3
+    linear.x.max_acceleration: 0.1
+    # linear.x.max_jerk: 0.0
+    # linear.x.min_jerk: 0.0
 
     angular.z.has_velocity_limits: true
     angular.z.has_acceleration_limits: true
-    angular.z.has_jerk_limits: false
-    angular.z.max_velocity: 1.0
-    angular.z.min_velocity: -1.0
-    angular.z.max_acceleration: 1.0
-    angular.z.min_acceleration: -1.0
-    angular.z.max_jerk: 0.0
-    angular.z.min_jerk: 0.0
+    # angular.z.has_jerk_limits: false
+    angular.z.max_velocity: 0.1
+    angular.z.min_velocity: -0.1
+    angular.z.max_acceleration: 0.1
+    angular.z.min_acceleration: -0.1
+    # angular.z.max_jerk: 0.0
+    # angular.z.min_jerk: 0.0
