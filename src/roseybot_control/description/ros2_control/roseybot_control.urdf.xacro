@@ -15,7 +15,7 @@
     <ros2_control name="roseybot_teensy" type="system">
 
         <hardware>
-          <plugin>ros2_control_demo_example_2/DiffBotSystemHardware</plugin>
+          <plugin>roseybot_arduino/RoseyBotSystemHardware</plugin>
           <param name="baud">57600</param>
           <param name="timeout_ms">100</param>
           <param name="device">/dev/ttyACM0</param>
@@ -23,10 +23,10 @@
           <param name="std_accel">300</param>
         </hardware>
 
-        <hardware>
+        <!-- <hardware>
           <plugin>mock_components/GenericSystem</plugin>
           <param name="calculate_dynamics">true</param>
-        </hardware>
+        </hardware> -->
       
         <xacro:connect_joint prefix="front_left"/>
         <xacro:connect_joint prefix="back_left"/>
