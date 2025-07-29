@@ -43,6 +43,7 @@ EDITED_DIR   = OUTPUT_DIR / 'edited_and_rotated'
 
 WANTED_BAGS  = {'cam_bag', 'imu_bag', 'mocap_bag', 'motor_bag'}
 IMAGE_TOPIC  = '/Rover/camera/image_raw/compressed'
+OVERHEAD_TOPIC = '/l515_center/color/image_raw/compressed'
 CODEC        = 'mp4v'
 
 STATIC_END   = 10.0
@@ -239,6 +240,9 @@ def main(base_dir: Path):
 
     # 2) Wheel‑cam video
     extract_video(BASE_DIR/'cam_bag', IMAGE_TOPIC, RAW_DIR/'wheel_cams.mp4')
+
+    # 2.5)
+    extract_video(BASE_DIR/'overhead_cam_bag', OVERHEAD_TOPIC, RAW_DIR/'overhead.mp4')
 
     # 3) Raw plots (using 'stamp_ns')
     plot_csv(RAW_DIR/'CubeRover_V1_pose.csv',
