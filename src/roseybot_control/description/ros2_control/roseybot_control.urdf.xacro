@@ -7,18 +7,21 @@
             <command_interface name="velocity"/>
             <state_interface name="position"/>
             <state_interface name="velocity"/>
-            <!-- <state_interface name="current"/>
-            <state_interface name="voltage"/> -->
-      </joint>
+            <state_interface name="current"/>
+            <state_interface name="voltage"/>
+        </joint>
     </xacro:macro>
 
     <ros2_control name="roseybot_teensy" type="system">
 
-        <!-- <hardware>
+        <hardware>
           <plugin>ros2_control_demo_example_2/DiffBotSystemHardware</plugin>
-          <param name="example_param_hw_start_duration_sec">0</param>
-          <param name="example_param_hw_stop_duration_sec">3.0</param>
-        </hardware> -->
+          <param name="baud">57600</param>
+          <param name="timeout_ms">100</param>
+          <param name="device">/dev/ttyACM0</param>
+          <param name="enc/rev">8700</param>
+          <param name="std_accel">300</param>
+        </hardware>
 
         <hardware>
           <plugin>mock_components/GenericSystem</plugin>
@@ -26,8 +29,8 @@
         </hardware>
       
         <xacro:connect_joint prefix="front_left"/>
-        <xacro:connect_joint prefix="front_right"/>
         <xacro:connect_joint prefix="back_left"/>
+        <xacro:connect_joint prefix="front_right"/>
         <xacro:connect_joint prefix="back_right"/>
 
     </ros2_control>

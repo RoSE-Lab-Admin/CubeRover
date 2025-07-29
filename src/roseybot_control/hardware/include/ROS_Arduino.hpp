@@ -1,0 +1,123 @@
+#ifndef ROS_ARDUINO
+#define ROS_ARDUINO
+
+#include <sstream>
+#include <libserial/SerialPort.h>
+#include <iostream>
+#include <vector>
+#include <sstream>
+
+LibSerial::BaudRate convert_baud_rate(int baud_rate)
+{
+  // Just handle some common baud rates
+  switch (baud_rate)
+  {
+    case 1200: return LibSerial::BaudRate::BAUD_1200;
+    case 1800: return LibSerial::BaudRate::BAUD_1800;
+    case 2400: return LibSerial::BaudRate::BAUD_2400;
+    case 4800: return LibSerial::BaudRate::BAUD_4800;
+    case 9600: return LibSerial::BaudRate::BAUD_9600;
+    case 19200: return LibSerial::BaudRate::BAUD_19200;
+    case 38400: return LibSerial::BaudRate::BAUD_38400;
+    case 57600: return LibSerial::BaudRate::BAUD_57600;
+    case 115200: return LibSerial::BaudRate::BAUD_115200;
+    case 230400: return LibSerial::BaudRate::BAUD_230400;
+    default:
+      std::cout << "Error! Baud rate " << baud_rate << " not supported! Default to 57600" << std::endl;
+      return LibSerial::BaudRate::BAUD_57600;
+  }
+}
+
+
+class ArduinoComms
+{
+
+public:
+
+  ArduinoComms() = default;
+
+  void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms)
+  {  
+    timeout_ms_ = timeout_ms;
+    serial_conn_.Open(serial_device);
+    serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
+  }
+
+  void disconnect()
+  {
+    serial_conn_.Close();
+  }
+
+  bool connected() const
+  {
+    return serial_conn_.IsOpen();
+  }
+
+
+  std::string send_msg(const std::string &msg_to_send, bool print_output = false)
+  {
+    serial_conn_.FlushIOBuffers(); // Just in case
+    serial_conn_.Write(msg_to_send);
+
+    std::string response = "";
+    try
+    {
+      // Responses end with \r\n so we will read up to (and including) the \n.
+      serial_conn_.ReadLine(response, '\n', timeout_ms_);
+    }
+    catch (const LibSerial::ReadTimeout&)
+    {
+        std::cerr << "The ReadByte() call has timed out." << std::endl ;
+    }
+
+    if (print_output)
+    {
+      std::cout << "Sent: " << msg_to_send << " Recv: " << response << std::endl;
+    }
+
+    return response;
+  }
+
+
+  void send_empty_msg()
+  {
+    std::string response = send_msg("\r");
+  }
+
+  void read_telem_values(std::vector<int> &telem)
+  {
+    std::stringstream ss(send_msg("e\r"));
+    std::string token;
+    
+    ss >> token;
+    if (token != "e") {
+        std::cerr << "Expected 'e' token but got: '" << token << "'" << std::endl;
+        return;
+    }
+
+    for (size_t i = 0; i < 12 && ss >> token; ++i) {
+        try {
+            telem.push_back(std::stoi(token));
+        } catch (const std::invalid_argument &e) {
+            std::cerr << "Invalid token: " << token << std::endl;
+            break;
+        }
+    }
+  }
+
+  void set_motor_values(int left_motors, int right_motors, int accel)
+  {
+    std::stringstream ss;
+    ss << "m " << left_motors << " " << right_motors << " " << accel << "\r";
+    send_msg(ss.str());
+  }
+
+
+private:
+    LibSerial::SerialPort serial_conn_;
+    int timeout_ms_;
+};
+
+
+
+#endif

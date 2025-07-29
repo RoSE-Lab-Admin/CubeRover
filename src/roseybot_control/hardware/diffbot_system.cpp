@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "ros2_control_demo_example_2/diffbot_system.hpp"
+#include "diffbot_system.hpp"
+#include "ROS_Arduino.hpp"
+#include "wheel.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -27,8 +29,11 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+
+
 namespace ros2_control_demo_example_2
 {
+
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
   const hardware_interface::HardwareInfo & info)
 {
@@ -39,12 +44,16 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  hw_start_sec_ =
-    hardware_interface::stod(info_.hardware_parameters["example_param_hw_start_duration_sec"]);
-  hw_stop_sec_ =
-    hardware_interface::stod(info_.hardware_parameters["example_param_hw_stop_duration_sec"]);
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
+  // BEGIN: get hardware parameters
+  BAUD_ = hardware_interface::stoi(info_.hardware_parameters["baud"]);
+  TIMEOUT_MS_ = hardware_interface::stoi(info_.hardware_parameters["timeout_ms"]);
+  DEVICE_ = info_.hardware_parameters["device"];
+  ENC_PER_REV_ = hardware_interface::stof(info_.hardware_parameters["enc/rev"]);
+  STD_ACCEL = hardware_interface::stof(info_.hardware_parameters["std_accel"]);
+  // END
+
+  // create class for handling arduino comm_
+
 
   for (const hardware_interface::ComponentInfo & joint : info_.joints)
   {
@@ -91,52 +100,86 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
         hardware_interface::HW_IF_VELOCITY);
       return hardware_interface::CallbackReturn::ERROR;
     }
+
+    // create wheel obj and push back 
+    wheel_map_[joint.name] = std::make_unique<wheel>(ENC_PER_REV_);
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+
+
+
+std::vector<hardware_interface::StateInterface> DiffBotSystemHardware::export_state_interfaces()
+{
+  std::vector<hardware_interface::StateInterface> state_interfaces;
+    auto emplace_state = [&](std::string jointName) {
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        jointName, hardware_interface::HW_IF_POSITION, &wheel_map_[jointName]->pos_));
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        jointName, hardware_interface::HW_IF_VELOCITY, &wheel_map_[jointName]->vel_));
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        jointName, hardware_interface::HW_IF_CURRENT, &wheel_map_[jointName]->current_));
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        jointName, hardware_interface::HW_IF_VOLTAGE, &wheel_map_[jointName]->voltage_));
+    }
+    
+    for (const auto & joint : info_.joints) {
+      emplace_state(joint.name);
+    }
+
+  return state_interfaces;
+}
+
+
+
+std::vector<hardware_interface::CommandInterface> DiffBotSystemHardware::export_command_interfaces()
+{
+  std::vector<hardware_interface::CommandInterface> command_interfaces;
+    auto emplace_command = [&](std::string jointName){
+      command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        jointName, hardware_interface::HW_IF_VELOCITY, &wheel_map_[jointName]->cmd_));
+    }
+  
+    for (const auto & joint : info_.joints) {
+      emplace_command(joint.name);
+    }
+  return command_interfaces;
+}
+
+
+
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
   RCLCPP_INFO(get_logger(), "Configuring ...please wait...");
+  // connect to arduino
+  if (comm_.connected()){
+    comm_.disconnect();
+  }
+  comm_.connect(DEVICE_,BAUD_,TIMEOUT_MS_);
 
-  for (int i = 0; i < hw_start_sec_; i++)
-  {
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    RCLCPP_INFO(get_logger(), "%.1f seconds left...", hw_start_sec_ - i);
-  }
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
-
-  // reset values always when configuring hardware
-  for (const auto & [name, descr] : joint_state_interfaces_)
-  {
-    set_state(name, 0.0);
-  }
-  for (const auto & [name, descr] : joint_command_interfaces_)
-  {
-    set_command(name, 0.0);
-  }
   RCLCPP_INFO(get_logger(), "Successfully configured!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+
+
+
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
+  
   RCLCPP_INFO(get_logger(), "Activating ...please wait...");
 
-  for (auto i = 0; i < hw_start_sec_; i++)
-  {
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    RCLCPP_INFO(get_logger(), "%.1f seconds left...", hw_start_sec_ - i);
+  // check if serial is activated
+  if (!comm_.connected()) {
+    return hardware_interface::CallbackReturn::ERROR;
   }
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
 
-  // command and state should be equal when starting
+  // command and state should be equal when starting -> prevent discontinuities
   for (const auto & [name, descr] : joint_command_interfaces_)
   {
     set_command(name, get_state(name));
@@ -147,71 +190,55 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+
+
+
 hardware_interface::CallbackReturn DiffBotSystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
+  
   RCLCPP_INFO(get_logger(), "Deactivating ...please wait...");
 
-  for (auto i = 0; i < hw_stop_sec_; i++)
-  {
-    rclcpp::sleep_for(std::chrono::seconds(1));
-    RCLCPP_INFO(get_logger(), "%.1f seconds left...", hw_stop_sec_ - i);
-  }
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
+  //disconnect arduino
+  comm_.disconnect();
 
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+
+
+
 hardware_interface::return_type DiffBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  std::stringstream ss;
-  ss << "Reading states:";
-  ss << std::fixed << std::setprecision(2);
-  for (const auto & [name, descr] : joint_state_interfaces_)
-  {
-    if (descr.get_interface_name() == hardware_interface::HW_IF_POSITION)
-    {
-      // Simulate DiffBot wheels's movement as a first-order system
-      // Update the joint status: this is a revolute joint without any limit.
-      // Simply integrates
-      auto velo = get_command(descr.get_prefix_name() + "/" + hardware_interface::HW_IF_VELOCITY);
-      set_state(name, get_state(name) + period.seconds() * velo);
+  std::vector<int> telemVals(12);
+  comm.read_telem_values(telemVals);
 
-      ss << std::endl
-         << "\t position " << get_state(name) << " and velocity " << velo << " for '" << name
-         << "'!";
-    }
+  for (size_t i = 0; i < info_.joints.size(); ++i) {
+    const auto & joint = info_.joints[i];
+    wheel_map_[joint.name]->updatePos(telemVals[i]);
+    wheel_map_[joint.name]->updateVel(telemVals[i + 4]);
+    wheel_map_[joint.name]->updateCur(telemVals[i + 8]);
   }
-  RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 500, "%s", ss.str().c_str());
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
 
   return hardware_interface::return_type::OK;
 }
+
+
+
 
 hardware_interface::return_type ros2_control_demo_example_2 ::DiffBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  // BEGIN: This part here is for exemplary purposes - Please do not copy to your production code
-  std::stringstream ss;
-  ss << "Writing commands:";
-  for (const auto & [name, descr] : joint_command_interfaces_)
-  {
-    // Simulate sending commands to the hardware
-    set_state(name, get_command(name));
-
-    ss << std::fixed << std::setprecision(2) << std::endl
-       << "\t" << "command " << get_command(name) << " for '" << name << "'!";
-  }
-  RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 500, "%s", ss.str().c_str());
-  // END: This part here is for exemplary purposes - Please do not copy to your production code
+  
+  comm.set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc(), STD_ACCEL);
 
   return hardware_interface::return_type::OK;
 }
+
+
 
 }  // namespace ros2_control_demo_example_2
 

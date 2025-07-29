@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -29,6 +30,9 @@
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+
+#include "wheel.hpp"
+#include "ROS_Arduino.hpp"
 
 namespace ros2_control_demo_example_2
 {
@@ -49,6 +53,10 @@ public:
   hardware_interface::CallbackReturn on_deactivate(
     const rclcpp_lifecycle::State & previous_state) override;
 
+  std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
+
+  std::vector<hardware_interface::StateInterface> export_command_interfaces() override;
+
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
@@ -57,8 +65,14 @@ public:
 
 private:
   // Parameters for the DiffBot simulation
-  double hw_start_sec_;
-  double hw_stop_sec_;
+  int BAUD_;
+  int TIMEOUT_MS_;
+  int ENC_PER_REV_;
+  int STD_ACCEL;
+  std::string DEVICE_;
+  std::vector<std::unique_ptr<wheel>> wheels_;
+  std::unordered_map<std::string, std::unique_ptr<wheel>> wheel_map_;
+  ArduinoComms comm_;
 };
 
 }  // namespace ros2_control_demo_example_2
