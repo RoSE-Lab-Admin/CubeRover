@@ -6,7 +6,7 @@
   <!-- Import Rviz colors -->
   <xacro:include filename="$(find roseybot_control)/description/robot/roseybot_colors.urdf.xacro" />
 
-    <xacro:include filename="$(find roseybot_control)/description/robot/roseybot_description.urdf.xacro"/>
+  <xacro:include filename="$(find roseybot_control)/description/robot/roseybot_description.urdf.xacro"/>
   <!-- Import diffbot ros2_control description -->
   <xacro:include filename="$(find roseybot_control)/description/ros2_control/roseybot_control.urdf.xacro" />
 
