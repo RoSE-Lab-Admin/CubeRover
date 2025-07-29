@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "diffbot_system.hpp"
-#include "ROS_Arduino.hpp"
-#include "wheel.hpp"
+#include "roseybot_arduino/roseybot_system.hpp"
+#include "roseybot_arduino/ROS_Arduino.hpp"
+#include "roseybot_arduino/wheel.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -31,10 +31,10 @@
 
 
 
-namespace ros2_control_demo_example_2
+namespace roseybot_hardware_interface
 {
 
-hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
+hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
   const hardware_interface::HardwareInfo & info)
 {
   if (
@@ -45,11 +45,11 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
   }
 
   // BEGIN: get hardware parameters
-  BAUD_ = hardware_interface::stoi(info_.hardware_parameters["baud"]);
-  TIMEOUT_MS_ = hardware_interface::stoi(info_.hardware_parameters["timeout_ms"]);
+  BAUD_ = std::stoi(info_.hardware_parameters["baud"]);
+  TIMEOUT_MS_ = std::stoi(info_.hardware_parameters["timeout_ms"]);
   DEVICE_ = info_.hardware_parameters["device"];
-  ENC_PER_REV_ = hardware_interface::stof(info_.hardware_parameters["enc/rev"]);
-  STD_ACCEL = hardware_interface::stof(info_.hardware_parameters["std_accel"]);
+  ENC_PER_REV_ = std::stof(info_.hardware_parameters["enc/rev"]);
+  STD_ACCEL = std::stof(info_.hardware_parameters["std_accel"]);
   // END
 
   // create class for handling arduino comm_
@@ -57,7 +57,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 
   for (const hardware_interface::ComponentInfo & joint : info_.joints)
   {
-    // DiffBotSystem has exactly two states and one command interface on each joint
+    // RoseyBotSystem has exactly two states and one command interface on each joint
     if (joint.command_interfaces.size() != 1)
     {
       RCLCPP_FATAL(
@@ -111,7 +111,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_init(
 
 
 
-std::vector<hardware_interface::StateInterface> DiffBotSystemHardware::export_state_interfaces()
+std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> state_interfaces;
     auto emplace_state = [&](std::string jointName) {
@@ -120,10 +120,10 @@ std::vector<hardware_interface::StateInterface> DiffBotSystemHardware::export_st
       state_interfaces.emplace_back(hardware_interface::StateInterface(
         jointName, hardware_interface::HW_IF_VELOCITY, &wheel_map_[jointName]->vel_));
       state_interfaces.emplace_back(hardware_interface::StateInterface(
-        jointName, hardware_interface::HW_IF_CURRENT, &wheel_map_[jointName]->current_));
+        jointName, "current", &wheel_map_[jointName]->current_));
       state_interfaces.emplace_back(hardware_interface::StateInterface(
-        jointName, hardware_interface::HW_IF_VOLTAGE, &wheel_map_[jointName]->voltage_));
-    }
+        jointName, "voltage", &wheel_map_[jointName]->voltage_));
+    };
     
     for (const auto & joint : info_.joints) {
       emplace_state(joint.name);
@@ -134,13 +134,13 @@ std::vector<hardware_interface::StateInterface> DiffBotSystemHardware::export_st
 
 
 
-std::vector<hardware_interface::CommandInterface> DiffBotSystemHardware::export_command_interfaces()
+std::vector<hardware_interface::CommandInterface> RoseyBotSystemHardware::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
     auto emplace_command = [&](std::string jointName){
       command_interfaces.emplace_back(hardware_interface::CommandInterface(
         jointName, hardware_interface::HW_IF_VELOCITY, &wheel_map_[jointName]->cmd_));
-    }
+    };
   
     for (const auto & joint : info_.joints) {
       emplace_command(joint.name);
@@ -150,7 +150,7 @@ std::vector<hardware_interface::CommandInterface> DiffBotSystemHardware::export_
 
 
 
-hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
+hardware_interface::CallbackReturn RoseyBotSystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   RCLCPP_INFO(get_logger(), "Configuring ...please wait...");
@@ -168,7 +168,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_configure(
 
 
 
-hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
+hardware_interface::CallbackReturn RoseyBotSystemHardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   
@@ -193,7 +193,7 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_activate(
 
 
 
-hardware_interface::CallbackReturn DiffBotSystemHardware::on_deactivate(
+hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   
@@ -210,11 +210,11 @@ hardware_interface::CallbackReturn DiffBotSystemHardware::on_deactivate(
 
 
 
-hardware_interface::return_type DiffBotSystemHardware::read(
+hardware_interface::return_type RoseyBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
   std::vector<int> telemVals(12);
-  comm.read_telem_values(telemVals);
+  comm_.read_telem_values(telemVals);
 
   for (size_t i = 0; i < info_.joints.size(); ++i) {
     const auto & joint = info_.joints[i];
@@ -229,19 +229,19 @@ hardware_interface::return_type DiffBotSystemHardware::read(
 
 
 
-hardware_interface::return_type ros2_control_demo_example_2 ::DiffBotSystemHardware::write(
+hardware_interface::return_type roseybot_hardware_interface ::RoseyBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   
-  comm.set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc(), STD_ACCEL);
+  comm_.set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc(), STD_ACCEL);
 
   return hardware_interface::return_type::OK;
 }
 
 
 
-}  // namespace ros2_control_demo_example_2
+}  // namespace roseybot_hardware_interface
 
 #include "pluginlib/class_list_macros.hpp"
 PLUGINLIB_EXPORT_CLASS(
-  ros2_control_demo_example_2::DiffBotSystemHardware, hardware_interface::SystemInterface)
+  roseybot_hardware_interface::RoseyBotSystemHardware, hardware_interface::SystemInterface)

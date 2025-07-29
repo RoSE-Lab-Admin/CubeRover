@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ROS2_CONTROL_DEMO_EXAMPLE_2__DIFFBOT_SYSTEM_HPP_
-#define ROS2_CONTROL_DEMO_EXAMPLE_2__DIFFBOT_SYSTEM_HPP_
+#ifndef ROSEYBOT_SYSTEM_HPP_
+#define ROSEYBOT_SYSTEM_HPP_
 
 #include <memory>
 #include <string>
@@ -34,12 +34,12 @@
 #include "wheel.hpp"
 #include "ROS_Arduino.hpp"
 
-namespace ros2_control_demo_example_2
+namespace roseybot_hardware_interface
 {
-class DiffBotSystemHardware : public hardware_interface::SystemInterface
+class RoseyBotSystemHardware : public hardware_interface::SystemInterface
 {
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(DiffBotSystemHardware)
+  RCLCPP_SHARED_PTR_DEFINITIONS(RoseyBotSystemHardware)
 
   hardware_interface::CallbackReturn on_init(
     const hardware_interface::HardwareInfo & info) override;
@@ -55,7 +55,7 @@ public:
 
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
-  std::vector<hardware_interface::StateInterface> export_command_interfaces() override;
+  std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
@@ -64,7 +64,7 @@ public:
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
-  // Parameters for the DiffBot simulation
+  // Parameters for the RoseyBot simulation
   int BAUD_;
   int TIMEOUT_MS_;
   int ENC_PER_REV_;
@@ -75,6 +75,6 @@ private:
   ArduinoComms comm_;
 };
 
-}  // namespace ros2_control_demo_example_2
+}  // namespace roseybot_hardware_interface
 
-#endif  // ROS2_CONTROL_DEMO_EXAMPLE_2__DIFFBOT_SYSTEM_HPP_
+#endif  // ROSEYBOT_SYSTEM_HPP_
