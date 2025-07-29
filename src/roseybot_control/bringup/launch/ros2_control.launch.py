@@ -28,7 +28,7 @@ def generate_launch_description():
             FindPackageShare("roseybot_control"),
             "bringup",
             "config",
-            "diffbot_controllers.yaml",
+            "roseybot_controllers.yaml",
         ]
     )
 
@@ -57,11 +57,11 @@ def generate_launch_description():
         package="controller_manager",
         executable="spawner",
         arguments=[
-            "diffbot_base_controller",
+            "roseybot_base_controller",
             "--param-file",
             robot_controllers,
             "--controller-ros-args",
-            "-r /diffbot_base_controller/cmd_vel:=/cmd_vel",
+            "-r /roseybot_base_controller/cmd_vel:=/cmd_vel",
         ],
     )
 
