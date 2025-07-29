@@ -90,7 +90,7 @@ String get_telemetry() {
   telemetryData[13] = (int)v2;
 
   String telemetry = 'e';
-  for (size_t i = 0; i < 14; i++) telemetry = telemetry + ' ' + String(telemetryData[i]);
+  for (size_t i = 0; i < 14; i++) telemetry += ' ' + String(telemetryData[i]);
   telemetry = telemetry + '\r';
   return telemetry;
 }
