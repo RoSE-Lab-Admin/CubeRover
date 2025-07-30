@@ -38,9 +38,23 @@ ament_target_dependencies(
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
+## add library link for libserial-dev
 target_link_libraries(roseybot_arduino PUBLIC serial)
 
 pluginlib_export_plugin_description_file(hardware_interface roseybot_arduino.xml)
+
+#install compiled library
+install(
+  DIRECTORY hardware/include
+  DESTINATION include/roseybot_arduino
+)
+
+install(TARGETS roseybot_arduino
+  EXPORT export_roseybot_arduino
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
 
 install(DIRECTORY
   bringup description hardware
