@@ -21,7 +21,7 @@ from geometry_msgs.msg import PoseStamped
 from rover_groundstation.Data_Processor import main as data_process
 
 PAD = 1.0
-DURATION = 10.0
+DURATION = 20.0
 
 
 
@@ -72,13 +72,13 @@ class TestConsole(Node):
         self.goal.run_duration = 40000            # ms
 
     def discover_baggers(self):
-        for name in ["imu_bag", "cam_bag", "motor_bag", "mocap_bag"]:
+        for name in ["imu_bag", "cam_bag", "motor_bag", "mocap_bag", "overhead_cam_bag"]:
             start_cli = self.create_client(BagStart, f"{name}/start")
             stop_cli  = self.create_client(Trigger,  f"{name}/stop")
-            if not start_cli.wait_for_service(timeout_sec=2.0):
+            if not start_cli.wait_for_service(timeout_sec=3.0):
                 self.get_logger().error(f"{name}/start unavailable")
                 continue
-            if not stop_cli.wait_for_service(timeout_sec=2.0):
+            if not stop_cli.wait_for_service(timeout_sec=3.0):
                 self.get_logger().error(f"{name}/stop unavailable")
                 continue
             self.start_bag_serv.append(start_cli)
@@ -192,16 +192,16 @@ def main(args=None):
             t0 = time.time()
             node.get_logger().info("=== Stage 5: Final Padding & Second LiDAR Scan ===")
             lidf2 = node.start_lidar()
-            time.sleep(DURATION)
-            node.stop_bags()
+            time.sleep(2)
             rclpy.spin_until_future_complete(node, lidf2)
+            node.stop_bags()
+            data_process(node.path)
             node.download_lidar(lidf2.result())
             t1 = time.time()
             node.get_logger().info(f"--- Stage 5 duration: {t1 - t0:.2f}s ---")
             time.sleep(10)
             node.delete_lidar()
 
-            data_process(node.path)
 
 
 

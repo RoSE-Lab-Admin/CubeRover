@@ -9,7 +9,7 @@ import rosbag2_py
 import importlib
 
 qos_profile = QoSProfile(
-    reliability = ReliabilityPolicy.RELIABLE,
+    reliability = ReliabilityPolicy.BEST_EFFORT,
     history = HistoryPolicy.KEEP_ALL,
     durability=DurabilityPolicy.VOLATILE,
 )
