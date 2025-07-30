@@ -31,7 +31,7 @@
 
 
 
-namespace roseybot_hardware_interface
+namespace roseybot_arduino_interface
 {
 
 hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
@@ -53,11 +53,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
   // END
 
   // create class for handling arduino comm_
-
+  comm_ = new ArduinoComms(get_logger());
 
   for (const hardware_interface::ComponentInfo & joint : info_.joints)
   {
-    // RoseyBotSystem has exactly two states and one command interface on each joint
+    
+    // make sure each wheel only has 1 command interface
     if (joint.command_interfaces.size() != 1)
     {
       RCLCPP_FATAL(
@@ -75,10 +76,10 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
 
-    if (joint.state_interfaces.size() != 2)
+    if (joint.state_interfaces.size() != 4)
     {
       RCLCPP_FATAL(
-        get_logger(), "Joint '%s' has %zu state interface. 2 expected.", joint.name.c_str(),
+        get_logger(), "Joint '%s' has %zu state interface. 4 expected.", joint.name.c_str(),
         joint.state_interfaces.size());
       return hardware_interface::CallbackReturn::ERROR;
     }
@@ -155,10 +156,14 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_configure(
 {
   RCLCPP_INFO(get_logger(), "Configuring ...please wait...");
   // connect to arduino
-  if (comm_.connected()){
-    comm_.disconnect();
+  if (comm_->connected()){
+    comm_->disconnect();
   }
-  comm_.connect(DEVICE_,BAUD_,TIMEOUT_MS_);
+  try{
+    comm_->connect(DEVICE_, BAUD_, TIMEOUT_MS_);
+  } catch (const std::runtime_error& e) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
 
   RCLCPP_INFO(get_logger(), "Successfully configured!");
 
@@ -175,7 +180,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_activate(
   RCLCPP_INFO(get_logger(), "Activating ...please wait...");
 
   // check if serial is activated
-  if (!comm_.connected()) {
+  if (!comm_->connected()) {
     return hardware_interface::CallbackReturn::ERROR;
   }
 
@@ -200,7 +205,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
   RCLCPP_INFO(get_logger(), "Deactivating ...please wait...");
 
   //disconnect arduino
-  comm_.disconnect();
+  comm_->disconnect();
 
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
@@ -214,7 +219,7 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
   std::vector<int> telemVals(12);
-  comm_.read_telem_values(telemVals);
+  comm_->read_telem_values(telemVals);
 
   for (size_t i = 0; i < info_.joints.size(); ++i) {
     const auto & joint = info_.joints[i];
@@ -229,19 +234,19 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
 
 
 
-hardware_interface::return_type roseybot_hardware_interface ::RoseyBotSystemHardware::write(
+hardware_interface::return_type roseybot_arduino_interface ::RoseyBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   
-  comm_.set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc(), STD_ACCEL);
+  comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc(), STD_ACCEL);
 
   return hardware_interface::return_type::OK;
 }
 
 
 
-}  // namespace roseybot_hardware_interface
+}  // namespace roseybot_arduino_interface
 
 #include "pluginlib/class_list_macros.hpp"
 PLUGINLIB_EXPORT_CLASS(
-  roseybot_hardware_interface::RoseyBotSystemHardware, hardware_interface::SystemInterface)
+  roseybot_arduino_interface::RoseyBotSystemHardware, hardware_interface::SystemInterface)

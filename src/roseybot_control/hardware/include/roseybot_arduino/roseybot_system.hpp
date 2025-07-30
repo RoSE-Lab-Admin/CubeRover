@@ -34,7 +34,7 @@
 #include "wheel.hpp"
 #include "ROS_Arduino.hpp"
 
-namespace roseybot_hardware_interface
+namespace roseybot_arduino_interface
 {
 class RoseyBotSystemHardware : public hardware_interface::SystemInterface
 {
@@ -72,9 +72,9 @@ private:
   std::string DEVICE_;
   std::vector<std::unique_ptr<wheel>> wheels_;
   std::unordered_map<std::string, std::unique_ptr<wheel>> wheel_map_;
-  ArduinoComms comm_;
+  ArduinoComms* comm_;
 };
 
-}  // namespace roseybot_hardware_interface
+}  // namespace roseybot_arduino_interface
 
 #endif  // ROSEYBOT_SYSTEM_HPP_

@@ -5,7 +5,12 @@
 #include <libserial/SerialPort.h>
 #include <iostream>
 #include <vector>
-#include <sstream>
+#include <stdio.h>
+#include <chrono>
+
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp/logger.hpp"
+
 
 LibSerial::BaudRate convert_baud_rate(int baud_rate)
 {
@@ -33,14 +38,27 @@ class ArduinoComms
 {
 
 public:
-
-  ArduinoComms() = default;
+  ArduinoComms(const rclcpp::Logger& logger) : logger_(logger) {}
 
   void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms)
   {  
     timeout_ms_ = timeout_ms;
-    serial_conn_.Open(serial_device);
-    serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
+    for (size_t i = 0; i < 5; i++){
+      try {
+        serial_conn_.Open(serial_device);
+        serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
+        return;
+      } catch (const LibSerial::OpenFailed& e) {
+        RCLCPP_ERROR(logger_, "error opening serial port: %s - %s", serial_device.c_str(), e.what());
+        // std::cerr << "error opening serial port " << serial_device << ": " << e.what() <<std::endl;
+      } catch (const std::exception& e) {
+        RCLCPP_ERROR(logger_, "error opening serial port: %s - %s", serial_device.c_str(), e.what());
+        std::cerr << "exception thrown! " << e.what();
+      }
+      rclcpp::sleep_for(std::chrono::seconds(5));
+    }
+    RCLCPP_FATAL(logger_, "cannot open serial port: %s", serial_device.c_str());
+    throw std::runtime_error("no device found");
   }
 
   void disconnect()
@@ -116,6 +134,7 @@ public:
 private:
     LibSerial::SerialPort serial_conn_;
     int timeout_ms_;
+    rclcpp::Logger logger_;
 };
 
 
