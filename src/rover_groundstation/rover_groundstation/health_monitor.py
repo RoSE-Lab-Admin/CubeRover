@@ -9,6 +9,9 @@ import numpy as np
 
 # N = 5  # number of most recent trials to consider
 
+# This should be a constant loaded from roselab-common
+BAG_NAMES = ["cam_bag", "mocap_bag", "imu_bag", "motor_bag", "overhead_cam_bag", "lidar_pre_scan", "lidar_post_scan"]
+
 class BagSummary:
     def __init__(self):
         self.topics = defaultdict(list)
@@ -25,16 +28,17 @@ class BagSummary:
 
 def get_latest_trial_dirs(parent_dir, pattern="Trial_", n=5):
     """Return the latest n subdirectories by modification time that start with 'pattern'."""
+    print(f"Searching for trial folders in {parent_dir}")
     subdirs = [d for d in Path(parent_dir).iterdir() if d.is_dir() and str(d.name).startswith(pattern)]
     sorted_dirs = sorted(subdirs, key=lambda x: x.stat().st_mtime, reverse=True)
     return sorted_dirs[:n+1]
 
-def get_all_bags(parent_dir, bagtype="mcap"):
-    """Get all directories which contain mcap files"""
-#    subdirs = [d for d in Path(parent_dir).iterdir() if d.is_dir()]
-    bagfiles = Path(parent_dir).rglob(f'*.{bagtype}')
-    bagdirs = sorted([f.parent for f in bagfiles], key=lambda x: x.stat().st_mtime)
-    return bagdirs
+#def get_all_bags(parent_dir, bagtype="mcap"):
+#    """Get all directories which contain mcap files"""
+##    subdirs = [d for d in Path(parent_dir).iterdir() if d.is_dir()]
+#    bagfiles = Path(parent_dir).rglob(f'*.{bagtype}')
+#    bagdirs = sorted([f.parent for f in bagfiles], key=lambda x: x.stat().st_mtime)
+#    return bagdirs
 
 def get_directory_size(directory):
     """Get total size of directory in bytes."""
@@ -58,21 +62,20 @@ def parse_metadata_yaml(bag_dir):
 
 def analyze_trials(parent_dir, pattern, N):
     latest_dirs = get_latest_trial_dirs(parent_dir, pattern, n=N)
-    if len(latest_dirs[1:]) < N:
-        print("[INFO] Not enough trial directories to compute history yet! Skipping threshold alerting...")
-        return
+    print(latest_dirs)
 
-    # Bags always written in same order!!!
-    BAG_NAMES = None # TODO
-
-#    total_sizes = defaultdict(list)
-#    topic_history = defaultdict(list)
+#    if len(latest_dirs[1:]) < N:
+#        print("[INFO] Not enough trial directories to compute history yet! Skipping threshold alerting...")
+#        return
 
     HISTORY = defaultdict(BagSummary)
 
     print("\n=== New Trial Stats ===")
     NEWDIR = defaultdict(BagSummary)
-    for i,bag in enumerate(get_all_bags(latest_dirs[0])):
+    trial_dir = latest_dirs[0]
+    for i in range(len(BAG_NAMES)):
+
+        bag = trial_dir / BAG_NAMES[i]
 
         bag_size = get_directory_size(bag)
         NEWDIR[i].sizes.append(bag_size)
@@ -83,12 +86,14 @@ def analyze_trials(parent_dir, pattern, N):
 
     statistics = {k:v.stats(ignore_latest=False) for k,v in NEWDIR.items()}
     for i,b in statistics.items():
-        print(f"[INFO] BAG {i} : BAG SIZE = {b[0] / 1e6:.2f} MB, MESSAGE COUNTS = {b[1]} topics")
+        print(f"[INFO] BAG {BAG_NAMES[i]:20} : BAG SIZE = {b[0] / 1e6:.2f} MB, MESSAGE COUNTS = {b[1]} topics")
 
     print("\n=== Trial Stats ===")
     for trial_dir in latest_dirs[1:]:
 
-        for i,bag in enumerate(get_all_bags(trial_dir)):
+        for i in range(len(BAG_NAMES)):
+
+            bag = trial_dir / BAG_NAMES[i]
 
             bag_size = get_directory_size(bag)
             HISTORY[i].sizes.append(bag_size)
@@ -99,7 +104,7 @@ def analyze_trials(parent_dir, pattern, N):
 
     statistics = {k:v.stats(ignore_latest=False) for k,v in HISTORY.items()}
     for i,b in statistics.items():
-        print(f"[INFO] BAG {i} : {b[0] / 1e6:.2f} MB, {b[1]} topics")
+        print(f"[INFO] BAG {BAG_NAMES[i]:20} : {b[0] / 1e6:.2f} MB, {b[1]} topics")
 
     print("\n=== Threshold Testing ===")
     # Perform a diff for every single stat via percent difference
@@ -118,7 +123,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze ROS 2 bags over recent trials.")
     parser.add_argument("parent_dir", help="Path to parent directory containing trial subdirectories.")
     parser.add_argument("num_dir", type=int, help="Number of directories to include in running statistics and threshold alerting.", default=5)
-    parser.add_argument("pattern", help="Trial name filter prefix")
+    parser.add_argument("pattern", help="Trial name filter prefix", default="Trial_")
     args = parser.parse_args()
 
     analyze_trials(args.parent_dir, args.pattern, args.num_dir)
