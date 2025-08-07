@@ -11,5 +11,6 @@ void set_motor_speeds(int lSpeed, int rSpeed, int accel);
 String get_telemetry();
 void encoder_reset();
 void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2);
+void pid_set(int arg1, int arg2, int arg3);
 
 #endif

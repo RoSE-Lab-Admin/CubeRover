@@ -48,13 +48,13 @@ void run_command() {
 
   switch (cmd) {
     case SET_MOTOR_SPEEDS: {
-      set_motor_speed(arg1, arg2, arg3);
+      set_motor_speeds(arg1, arg2, arg3);
       motor_timeout = 0;
       Serial.println("ok");
       break;
     }
     case SET_MOTOR_SPEED: {
-      set_motor_speeds(arg1, arg2, arg3);
+      set_motor_speed(arg1, arg2, arg3);
       motor_timeout = 0;
       Serial.println("ok");
       break;
@@ -66,7 +66,13 @@ void run_command() {
     }
     case RESET_ENCODERS: {
       encoder_reset();
-      Serial.println("Encoders reset");
+      Serial.println("encoders reset");
+      break;
+    }
+    case PID: {
+      pid_set(arg1, arg2, arg3);
+      init_motor_controllers(ROBOCLAW_1, ROBOCLAW_2);
+      Serial.println("PID values set and motor controllers reinitialized");
       break;
     }
   }

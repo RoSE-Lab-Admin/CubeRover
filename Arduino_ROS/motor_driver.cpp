@@ -91,7 +91,7 @@ String get_telemetry() {
 
   String telemetry = 'e';
   for (size_t i = 0; i < 14; i++) telemetry += ' ' + String(telemetryData[i]);
-  telemetry = telemetry + '\r';
+  telemetry += '\r';
   return telemetry;
 }
 
@@ -101,12 +101,20 @@ void encoder_reset() {
   ROBOCLAW_2->ResetEncoders(0x80);
 }
 
+void pid_set(int arg1, int arg2, int arg3) {
+  float p = static_cast<float>(arg1) / 10;
+  float i = static_cast<float>(arg2) / 10;
+  float d = static_cast<float>(arg3) / 10;
+  EEPROM.put(0, p);
+  EEPROM.put(4, i);
+  EEPROM.put(8, d);
+}
 
 void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   ROBOCLAW_1 = RC1;
   ROBOCLAW_2 = RC2;
-  float fsettings[10] = {0}; // stores float settings in an array. [vP,vI,vD,pP,pI,pD,pMI,Deadzone]
-  for (size_t i = 0; i < 3*4; i = i + 4) {
+  float fsettings[3] = {0}; // stores float settings in an array. [vP,vI,vD]
+  for (size_t i = 0; i < 3*4; i += 4) {
     EEPROM.get((i), fsettings[i/4]);
   }
   ROBOCLAW_1->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
