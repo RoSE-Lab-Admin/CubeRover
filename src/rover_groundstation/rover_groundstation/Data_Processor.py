@@ -13,6 +13,7 @@ from pathlib import Path
 from dataclasses import asdict
 from typing import List, Tuple
 
+import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,14 +22,28 @@ from tqdm import tqdm
 from rosbags.highlevel import AnyReader
 
 # ==== USER PARAMETERS =======================================================
-BASE_DIR     = Path('/content/drive/MyDrive/Field Testing/Test ROS Bags/7 15 2025/'
-                    'Trial_1cm_10000000.0radius_0.0slope_Trial6_07152025_17_34_59')
+
+# parser = argparse.ArgumentParser(
+#                     prog='Data_processor',
+#                     description='processes bag data',
+#                     epilog='')
+
+# parser.add_argument('filename')
+
+# args = parser.parse_args()
+
+BASE_DIR     = Path(Path.home())
+
+# Path('/content/drive/MyDrive/Field Testing/Test ROS Bags/7 15 2025/'
+#                     'Trial_1cm_10000000.0radius_0.0slope_Trial6_07152025_17_34_59')
+
 OUTPUT_DIR   = BASE_DIR / 'results'
 RAW_DIR      = OUTPUT_DIR / 'raw_data'
 EDITED_DIR   = OUTPUT_DIR / 'edited_and_rotated'
 
 WANTED_BAGS  = {'cam_bag', 'imu_bag', 'mocap_bag', 'motor_bag'}
 IMAGE_TOPIC  = '/Rover/camera/image_raw/compressed'
+OVERHEAD_TOPIC = '/l515_center/color/image_raw/compressed'
 CODEC        = 'mp4v'
 
 STATIC_END   = 10.0
@@ -126,7 +141,7 @@ def plot_csv(csv_path: Path,
     df = pd.read_csv(csv_path)
     if time_col not in df:
         raise KeyError(f"{time_col} missing in {csv_path.name}")
-    t = (df[time_col] - df[time_col].iloc[0]) / 1e9
+    t = (df[time_col] - df[time_col].iloc[0])
 
     fig, ax = plt.subplots(dpi=dpi)
     for col in y_cols:
@@ -205,7 +220,14 @@ def align_dataframe(df: pd.DataFrame, output_file: Path):
     print(f"Saved aligned data to {output_file}")
 
 # ==== MAIN ==================================================================
-def main():
+def main(base_dir: Path):
+    global BASE_DIR, OUTPUT_DIR, RAW_DIR, EDITED_DIR
+    BASE_DIR =  Path(base_dir)
+
+    OUTPUT_DIR   = BASE_DIR / 'results'
+    RAW_DIR      = OUTPUT_DIR / 'raw_data'
+    EDITED_DIR   = OUTPUT_DIR / 'edited_and_rotated'
+
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     EDITED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -218,6 +240,9 @@ def main():
 
     # 2) Wheel‑cam video
     extract_video(BASE_DIR/'cam_bag', IMAGE_TOPIC, RAW_DIR/'wheel_cams.mp4')
+
+    # 2.5)
+    extract_video(BASE_DIR/'overhead_cam_bag', OVERHEAD_TOPIC, RAW_DIR/'overhead.mp4')
 
     # 3) Raw plots (using 'stamp_ns')
     plot_csv(RAW_DIR/'CubeRover_V1_pose.csv',
@@ -253,42 +278,39 @@ def main():
     ], EDITED_DIR/'output_filled.csv')
 
     # 5) Align & rotate
-    align_dataframe(merged, EDITED_DIR/'output_rotated.csv')
+    # align_dataframe(merged, EDITED_DIR/'output_rotated.csv')
 
-    # 6) Rotated plots (using 'timestamp')
-    pr = EDITED_DIR/'output_rotated.csv'
-    plot_csv(pr,
-             ['pose.position.x','pose.position.y','pose.position.z'],
-             EDITED_DIR, tag='rot_pos', title='Rotated Position',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['pose.orientation.w','pose.orientation.x','pose.orientation.y','pose.orientation.z'],
-             EDITED_DIR, tag='rot_mocap_quat', title='Rotated Mocap Orientation',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['orientation.w','orientation.x','orientation.y','orientation.z'],
-             EDITED_DIR, tag='rot_imu_quat', title='Rotated IMU Orientation',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['angular_velocity.x','angular_velocity.y','angular_velocity.z'],
-             EDITED_DIR, tag='rot_imu_angvel', title='Rotated IMU Angular Velocity',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['linear_acceleration.x','linear_acceleration.y','linear_acceleration.z'],
-             EDITED_DIR, tag='rot_imu_linacc', title='Rotated IMU Linear Acceleration',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['enc1','enc2','enc3','enc4'],
-             EDITED_DIR, tag='rot_enc', title='Rotated Encoder Counts',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['vel1','vel2','vel3','vel4'],
-             EDITED_DIR, tag='rot_vel', title='Rotated Wheel Velocities',
-             time_col='timestamp')
-    plot_csv(pr,
-             ['m1current','m2current','m3current','m4current'],
-             EDITED_DIR, tag='rot_curr', title='Rotated Motor Currents',
-             time_col='timestamp')
-
-if __name__ == '__main__':
-    main()
+    # # 6) Rotated plots (using 'timestamp')
+    # pr = EDITED_DIR/'output_rotated.csv'
+    # plot_csv(pr,
+    #          ['pose.position.x','pose.position.y','pose.position.z'],
+    #          EDITED_DIR, tag='rot_pos', title='Rotated Position',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['pose.orientation.w','pose.orientation.x','pose.orientation.y','pose.orientation.z'],
+    #          EDITED_DIR, tag='rot_mocap_quat', title='Rotated Mocap Orientation',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['orientation.w','orientation.x','orientation.y','orientation.z'],
+    #          EDITED_DIR, tag='rot_imu_quat', title='Rotated IMU Orientation',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['angular_velocity.x','angular_velocity.y','angular_velocity.z'],
+    #          EDITED_DIR, tag='rot_imu_angvel', title='Rotated IMU Angular Velocity',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['linear_acceleration.x','linear_acceleration.y','linear_acceleration.z'],
+    #          EDITED_DIR, tag='rot_imu_linacc', title='Rotated IMU Linear Acceleration',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['enc1','enc2','enc3','enc4'],
+    #          EDITED_DIR, tag='rot_enc', title='Rotated Encoder Counts',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['vel1','vel2','vel3','vel4'],
+    #          EDITED_DIR, tag='rot_vel', title='Rotated Wheel Velocities',
+    #          time_col='timestamp')
+    # plot_csv(pr,
+    #          ['m1current','m2current','m3current','m4current'],
+    #          EDITED_DIR, tag='rot_curr', title='Rotated Motor Currents',
+    #          time_col='timestamp')

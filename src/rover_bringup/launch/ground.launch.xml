@@ -15,5 +15,9 @@
         <param name= "topic_name" value="/Rover/camera/image_raw/compressed" />
         <param name= "msg_type" value="sensor_msgs.msg.CompressedImage" />
     </node>
+    <node pkg="rover_groundstation" exec="univbag" name="overhead_cam_bag">
+        <param name= "topic_name" value="/l515_center/color/image_raw/compressed" />
+        <param name= "msg_type" value="sensor_msgs.msg.CompressedImage" />
+    </node>
     <!--<node pkg="rover_groundstation" exec="cameraviewer"/>-->
 </launch>
