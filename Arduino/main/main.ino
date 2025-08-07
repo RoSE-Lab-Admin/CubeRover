@@ -33,18 +33,20 @@ void setup(void) {
   //Serial.println("Booting...");
 
   // Init serial ports for roboclaws
-  ROBOCLAW_1.begin(38400);
-  ROBOCLAW_2.begin(38400);
 
   // turn status LED on
   pinMode(13,OUTPUT);
   digitalWrite(13,HIGH);
   
   // Init roboclaw values from memory
-  MemSetup(ROBOCLAW_1, ROBOCLAW_2);
+  ROBOCLAW_1.begin(38400);
+  ROBOCLAW_2.begin(38400);
 
-  delay(10000);
+  delay(3000);
   rx.begin(Serial);
+  WaitForRoboclaw(ROBOCLAW_1);
+  WaitForRoboclaw(ROBOCLAW_2);
+  MemSetup(ROBOCLAW_1, ROBOCLAW_2);
   Serial.println("Complete!");
   
 }
@@ -76,16 +78,17 @@ void loop() { // Stuff to loop over
     }
   }
 
-  if (sendTimer > 200) {
+  if (sendTimer > 60) {
     SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 14);
     sendTimer = 0;
+    
   }
-  delay(5);
-
+  //delay(5);
 }
 
 
 ControlPacket* SerialDecode () {
+  
   uint16_t recievePOS = 0; // stores position of iterator in recieving buffer
   char ID; // stores ID of current packet decoder
   ControlPacket * controlTemp = nullptr; // temp pointer to decoded packet
@@ -110,6 +113,7 @@ ControlPacket* SerialDecode () {
   } else { // Base case
     controlTemp = nullptr;
   }
+  
   return controlTemp; // returns pointer to decoded packet
 
 }
@@ -150,6 +154,7 @@ T * RetrieveSerial(size_t len, uint16_t & recievePOS) {
 }
 
 int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
+  //elapsedMillis telemMeasure = 0;
   // Retrieve Encoder count and speed - 8 vals
   // Retrieve Motor currents - 4 vals
 
@@ -158,13 +163,14 @@ int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
   // Retrieve Encoder counts
   uint8_t status1,status2,status3,status4;
   bool valid1=false,valid2=false,valid3=false,valid4=false;
-   uint32_t count1=0, count2=0, count3=0, count4=0;
+  uint32_t count1=0, count2=0, count3=0, count4=0;
   for (int i = 0; i < 5; i ++) {
       count1 = RC1.ReadEncM1(0x80, &status1, &valid1);
       count2 = RC1.ReadEncM2(0x80, &status2, &valid2);
       count3 = RC2.ReadEncM1(0x80, &status3, &valid3);
       count4 = RC2.ReadEncM2(0x80, &status4, &valid4);
       if (valid1 && valid2 && valid3 && valid4) break;
+      else Serial.println("invalid encoder readouts");
   }
 
   telemetryData[0] = (int)count1;
@@ -199,7 +205,7 @@ int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
     rc2cval = RC2.ReadCurrents(0x80, c3, c4);
     if (rc1cval && rc2cval) break;
   }
-  telemetryData[8] = (int)c1;
+  telemetryData[8] = (int) c1;
   telemetryData[9] = (int)c2;
   telemetryData[10] = (int)c3;
   telemetryData[11] = (int)c4;
@@ -219,7 +225,7 @@ int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
   // for (size_t i = 0; i < 14; i++) {
   //   Serial.println(telemetryData[i]);
   // }
-
+  //Serial.println(telemMeasure);
   return telemetryData;
 }
 
@@ -230,6 +236,21 @@ void SendTelem(int * data, size_t len) {
   }
   rx.sendData(sendSize);
   delete[] data;
+  return;
+}
+
+void WaitForRoboclaw(RoboClaw& RC) {
+  uint8_t status;
+  bool valid = false;
+  int32_t dummy;
+  for (int i = 0; i < 50; i++) {  // Try for ~2.5 seconds
+    dummy = RC.ReadEncM1(0x80, &status, &valid);
+    if (valid) {
+      Serial.println("RoboClaw ready");
+      return;
+    }
+    delay(50);
+  } Serial.println("Roboclaw not ready");
   return;
 }
 

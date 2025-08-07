@@ -34,8 +34,8 @@ class VelPID : public ControlPacket {
     bool fulfilled(RingBuf<ControlPacket*, 20>& packetBuff) final;
     void stop() final;
   private:
-    int _accel;
-    int _deaccel;
+    int _accelL;
+    int _accelR;
     int _vL1;
     int _vL2;
     int _vR1;
@@ -90,8 +90,8 @@ VelPID::VelPID(int * data) { // initilizes the Velocity PID speed control packet
   //Serial.println("got vals");
 
   // saves the acceleration and deacceleration values from initialization
-  _accel = data[5];
-  _deaccel = data[6];
+  _accelL = data[5];
+  _accelR = data[6];
   //Serial.println("got vals2");
 
   // deletes the data array to prevent a memory leak
@@ -136,24 +136,16 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
   }
 
   // commanding l1
-  bool speedingUp = (_vL1 - speedL1) * speedL1 > 0;
-  int accelToUse = speedingUp ? _accel : _deaccel;
-  _RC1->SpeedAccelM1(0x80, accelToUse, _vL1);
+  _RC1->SpeedAccelM1(0x80, _accelL, _vL1);
   
   // commanding l2
-  speedingUp = (_vL2 - speedL2) * speedL2 > 0;
-  accelToUse = speedingUp ? _accel : _deaccel;
-  _RC1->SpeedAccelM2(0x80, accelToUse, _vL2);
+  _RC1->SpeedAccelM2(0x80, _accelL, _vL2);
 
   // commanding r1
-  speedingUp = (_vR1 - speedR1) * speedR1 > 0;
-  accelToUse = speedingUp ? _accel : _deaccel;
-  _RC2->SpeedAccelM1(0x80, accelToUse, _vR1);
+  _RC2->SpeedAccelM1(0x80, _accelR, _vR1);
   
   // commanding r2
-  speedingUp = (_vR2 - speedR2) * speedR2 > 0;
-  accelToUse = speedingUp ? _accel : _deaccel;
-  _RC2->SpeedAccelM2(0x80, accelToUse, _vR2);
+  _RC2->SpeedAccelM2(0x80, _accelR, _vR2);
 
   // set run timer to 0
   _packTimer = 0;
@@ -206,8 +198,8 @@ void VelPID::stop() { // sets the roboclaws to stop
   // _RC1->SpeedAccelM2(0x80, 1000, 0);
   // _RC2->SpeedAccelM1(0x80, 1000, 0);
   // _RC2->SpeedAccelM2(0x80, 1000, 0);
-  _RC1->SpeedAccelM1M2(0x80, _deaccel, 0, 0);
-  _RC2->SpeedAccelM1M2(0x80, _deaccel, 0, 0);
+  _RC1->SpeedAccelM1M2(0x80, _accelL, 0, 0);
+  _RC2->SpeedAccelM1M2(0x80, _accelR, 0, 0);
 }
 
 
