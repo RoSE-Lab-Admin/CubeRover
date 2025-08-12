@@ -12,7 +12,7 @@ roseybot_base_controller:
     left_wheel_names: ["front_left_wheel_joint", "back_left_wheel_joint"]
     right_wheel_names: ["front_right_wheel_joint", "back_right_wheel_joint"]
 
-    wheel_separation: 0.422
+    wheel_separation: 0.315
     wheels_per_side: 2 
     wheel_radius: 0.1515
 
@@ -26,12 +26,13 @@ roseybot_base_controller:
     pose_covariance_diagonal : [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
     twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
 
-    open_loop: true
+    open_loop: false
     enable_odom_tf: true
+    position_feedback: true
 
     cmd_vel_timeout: 0.5
-    #publish_limited_velocity: true
-    #velocity_rolling_window_size: 10
+    publish_limited_velocity: true
+    velocity_rolling_window_size: 10
 
     # Velocity and acceleration limits
     # Whenever a min_* is unspecified, default to -max_*
@@ -47,9 +48,9 @@ roseybot_base_controller:
     angular.z.has_velocity_limits: true
     angular.z.has_acceleration_limits: true
     # angular.z.has_jerk_limits: false
-    angular.z.max_velocity: 0.1
-    angular.z.min_velocity: -0.1
-    angular.z.max_acceleration: 0.1
-    angular.z.min_acceleration: -0.1
+    angular.z.max_velocity: 0.635
+    angular.z.min_velocity: -0.635
+    angular.z.max_acceleration: 0.211666666667
+    angular.z.min_acceleration: -0.211666666667
     # angular.z.max_jerk: 0.0
     # angular.z.min_jerk: 0.0
