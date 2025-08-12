@@ -109,6 +109,7 @@ public:
   {
     std::stringstream ss(send_msg("t\r\n"));
     std::string token;
+    std::cout << ss.str();
     ss >> token;
     if (token != "e") {
         std::cerr << "Expected 'e' token but got: '" << token << "'" << std::endl;
