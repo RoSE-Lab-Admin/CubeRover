@@ -11,6 +11,8 @@
 
   <depend>xacro</depend>
   <depend>robot_state_publisher</depend>
+  <depend>diffdrive_controller</depend>
+  <depend>joint_state_broadcaster</depend>
   <depend>controller_manager</depend>
   <depend>libserial-dev</depend>
   
