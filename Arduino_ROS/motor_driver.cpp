@@ -9,7 +9,7 @@ extern RoboClaw *ROBOCLAW_1;
 extern RoboClaw *ROBOCLAW_2;
 
 
-void set_motor_speed(int motorIndex, int speed, int accel) {
+void set_motor_speed(int motorIndex, int speed) {
   if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(0x80, accel, speed);
   else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(0x80, accel, speed);
   else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(0x80, accel, speed);
@@ -17,7 +17,7 @@ void set_motor_speed(int motorIndex, int speed, int accel) {
 }
 
 
-void set_motor_speeds(int lSpeed, int rSpeed, int accel) {
+void set_motor_speeds(int lSpeed, int rSpeed) {
   ROBOCLAW_1->SpeedAccelM1(0x80, accel, lSpeed);
   ROBOCLAW_1->SpeedAccelM2(0x80, accel, lSpeed);
   ROBOCLAW_2->SpeedAccelM1(0x80, accel, rSpeed);
@@ -121,4 +121,15 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   ROBOCLAW_1->SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
   ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
   ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
+}
+
+void Wheel::Wheel() {
+  _vel = 0;
+  _dt = 0;
+  return;
+}
+int Wheel::calcAccel(int newVel){
+  double target_acl = (newVel - _vel) / _dt;
+  _vel = newVel;
+  return static_cast<int>(target_acl);
 }
