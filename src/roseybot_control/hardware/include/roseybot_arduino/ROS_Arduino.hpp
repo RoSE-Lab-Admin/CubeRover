@@ -61,10 +61,12 @@ public:
     throw std::runtime_error("no device found");
   }
 
+
   void disconnect()
   {
     serial_conn_.Close();
   }
+
 
   bool connected() const
   {
@@ -123,10 +125,11 @@ public:
     }
   }
 
-  void set_motor_values(int left_motors, int right_motors, int accel)
+
+  void set_motor_values(int left_motors, int right_motors)
   {
     std::stringstream ss;
-    ss << "m " << left_motors << " " << right_motors << " " << accel << "\r";
+    ss << "m " << left_motors << " " << right_motors << "\r";
     send_msg(ss.str());
   }
 
