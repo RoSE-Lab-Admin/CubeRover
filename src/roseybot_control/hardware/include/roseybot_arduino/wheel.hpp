@@ -28,7 +28,7 @@ wheel::wheel(float enc_count_per_rev) {
 }
 
 void wheel::updatePos(int encPos){
-    pos_ = std::fmod(encPos * rads_per_ct_, 2*M_PI);
+    pos_ = encPos * rads_per_ct_;
 }
 
 void wheel::updateVel(int encVel){

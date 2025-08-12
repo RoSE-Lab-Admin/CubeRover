@@ -49,15 +49,26 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
   TIMEOUT_MS_ = std::stoi(info_.hardware_parameters["timeout_ms"]);
   DEVICE_ = info_.hardware_parameters["device"];
   ENC_PER_REV_ = std::stof(info_.hardware_parameters["enc/rev"]);
-  STD_ACCEL = std::stof(info_.hardware_parameters["std_accel"]);
   // END
 
   // create class for handling arduino comm_
   comm_ = new ArduinoComms(get_logger());
 
+
   for (const hardware_interface::ComponentInfo & joint : info_.joints)
   {
-    
+    RCLCPP_INFO(get_logger(), "Joint %s: state interfaces:", joint.name.c_str());
+    for (auto &si : joint.state_interfaces) {
+      RCLCPP_INFO(get_logger(), "  - %s", si.name.c_str());
+    }
+
+    RCLCPP_INFO(get_logger(), "Joint %s: command interfaces:", joint.name.c_str());
+    for (auto &ci : joint.command_interfaces) {
+        RCLCPP_INFO(get_logger(), "  - %s", ci.name.c_str());
+    }
+
+
+
     // make sure each wheel only has 1 command interface
     if (joint.command_interfaces.size() != 1)
     {
@@ -104,6 +115,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
 
     // create wheel obj and push back 
     wheel_map_[joint.name] = std::make_unique<wheel>(ENC_PER_REV_);
+    RCLCPP_INFO(get_logger(), "Joint %s: added to map:", joint.name.c_str());
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -115,19 +127,20 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
 std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> state_interfaces;
-    auto emplace_state = [&](std::string jointName) {
-      state_interfaces.emplace_back(hardware_interface::StateInterface(
-        jointName, hardware_interface::HW_IF_POSITION, &wheel_map_[jointName]->pos_));
-      state_interfaces.emplace_back(hardware_interface::StateInterface(
-        jointName, hardware_interface::HW_IF_VELOCITY, &wheel_map_[jointName]->vel_));
-      state_interfaces.emplace_back(hardware_interface::StateInterface(
-        jointName, "current", &wheel_map_[jointName]->current_));
-      state_interfaces.emplace_back(hardware_interface::StateInterface(
-        jointName, "voltage", &wheel_map_[jointName]->voltage_));
-    };
     
     for (const auto & joint : info_.joints) {
-      emplace_state(joint.name);
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, hardware_interface::HW_IF_POSITION, &wheel_map_[joint.name]->pos_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added pos state", joint.name.c_str());
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, hardware_interface::HW_IF_VELOCITY, &wheel_map_[joint.name]->vel_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added vel state", joint.name.c_str());
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, "current", &wheel_map_[joint.name]->current_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added current state", joint.name.c_str());
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, "voltage", &wheel_map_[joint.name]->voltage_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added volt state", joint.name.c_str());
     }
 
   return state_interfaces;
@@ -138,14 +151,13 @@ std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_s
 std::vector<hardware_interface::CommandInterface> RoseyBotSystemHardware::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
-    auto emplace_command = [&](std::string jointName){
-      command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        jointName, hardware_interface::HW_IF_VELOCITY, &wheel_map_[jointName]->cmd_));
-    };
   
     for (const auto & joint : info_.joints) {
-      emplace_command(joint.name);
+      command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        joint.name, hardware_interface::HW_IF_VELOCITY, &wheel_map_[joint.name]->cmd_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added vel command", joint.name.c_str());
     }
+    
   return command_interfaces;
 }
 
@@ -185,10 +197,9 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_activate(
   }
 
   // command and state should be equal when starting -> prevent discontinuities
-  for (const auto & [name, descr] : joint_command_interfaces_)
-  {
-    set_command(name, get_state(name));
-  }
+  // for (const auto & [name, descr] : joint_command_interfaces_) {
+  //   set_command(name, get_state(name));
+  // }
 
   RCLCPP_INFO(get_logger(), "Successfully activated!");
 

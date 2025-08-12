@@ -104,11 +104,11 @@ public:
     std::string response = send_msg("\r");
   }
 
+
   void read_telem_values(std::vector<int> &telem)
   {
-    std::stringstream ss(send_msg("e\r"));
+    std::stringstream ss(send_msg("t\r\n"));
     std::string token;
-    
     ss >> token;
     if (token != "e") {
         std::cerr << "Expected 'e' token but got: '" << token << "'" << std::endl;
@@ -117,7 +117,7 @@ public:
 
     for (size_t i = 0; i < 12 && ss >> token; ++i) {
         try {
-            telem.push_back(std::stoi(token));
+            telem[i] = std::stoi(token);
         } catch (const std::invalid_argument &e) {
             std::cerr << "Invalid token: " << token << std::endl;
             break;
