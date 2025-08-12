@@ -12,6 +12,7 @@
   <depend>xacro</depend>
   <depend>robot_state_publisher</depend>
   <depend>controller_manager</depend>
+  <depend>libserial-dev</depend>
   
 
   <test_depend>ament_lint_auto</test_depend>
