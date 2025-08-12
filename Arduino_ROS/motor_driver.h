@@ -4,22 +4,20 @@
 #include <RoboClaw.h>
 #include <elapsedMillis.h>
 
-extern RoboClaw* ROBOCLAW_1;
-extern RoboClaw* ROBOCLAW_2;
-
-void set_motor_speed(int motorIndex, int speed);
-void set_motor_speeds(int lSpeed, int rSpeed);
+void set_motor_speed(int motorIndex, uint32_t speed);
+void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed);
 String get_telemetry();
 void encoder_reset();
 void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2);
 void pid_set(int arg1, int arg2, int arg3);
 
-class Wheel{
+class Wheel {
   public:
-    int calcAccel(int newVel);
+    Wheel();
+    uint16_t calcAccel(int16_t newVel);
   private:
-    elapsedMillis _dt;
-    int _vel;
+    uint64_t _last;
+    int16_t _prevVel;
 };
 
 #endif

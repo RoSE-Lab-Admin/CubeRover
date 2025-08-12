@@ -128,7 +128,7 @@ void loop() {
     }
   }
   if (motor_timeout > MOTOR_TIMEOUT) { //sets motor speeds to 0 if more than 2 seconds has ellapsed
-    set_motor_speeds(0,0, 500);
+    set_motor_speeds(0,0);
   }
 
 }

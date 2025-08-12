@@ -1,5 +1,6 @@
 #include <RoboClaw.h>
 #include <EEPROM.h>
+#include "motor_driver.h"
 
 #define qpps 3400     // quadrature pulses per second at max rpm
 #define ADDRESS 0x80  // default roboclaw address - 128
@@ -8,20 +9,27 @@
 extern RoboClaw *ROBOCLAW_1;
 extern RoboClaw *ROBOCLAW_2;
 
+// define wheel classes to store relevant wheel info
+Wheel FL;
+Wheel BL;
+Wheel FR;
+Wheel BR;
 
-void set_motor_speed(int motorIndex, int speed) {
-  if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(0x80, accel, speed);
-  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(0x80, accel, speed);
-  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(0x80, accel, speed);
-  else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(0x80, accel, speed);
+
+// start custom function implementations
+void set_motor_speed(int motorIndex, uint32_t speed) {
+  if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(speed), speed);
+  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(speed), speed);
+  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(speed), speed);
+  else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(speed), speed);
 }
 
 
-void set_motor_speeds(int lSpeed, int rSpeed) {
-  ROBOCLAW_1->SpeedAccelM1(0x80, accel, lSpeed);
-  ROBOCLAW_1->SpeedAccelM2(0x80, accel, lSpeed);
-  ROBOCLAW_2->SpeedAccelM1(0x80, accel, rSpeed);
-  ROBOCLAW_2->SpeedAccelM2(0x80, accel, rSpeed);
+void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
+  ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(lSpeed), lSpeed);
+  ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(lSpeed), lSpeed);
+  ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(rSpeed), rSpeed);
+  ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(rSpeed), rSpeed);
 }
 
 
@@ -29,15 +37,16 @@ String get_telemetry() {
   int * telemetryData = new int[14];
 
   // Retrieve Encoder counts
-  uint8_t status1,status2,status3,status4;
   bool valid1=false,valid2=false,valid3=false,valid4=false;
   uint32_t count1=0, count2=0, count3=0, count4=0;
   for (int i = 0; i < 5; i ++) {
-      count1 = ROBOCLAW_1->ReadEncM1(0x80, &status1, &valid1);
-      count2 = ROBOCLAW_1->ReadEncM2(0x80, &status2, &valid2);
-      count3 = ROBOCLAW_2->ReadEncM1(0x80, &status3, &valid3);
-      count4 = ROBOCLAW_2->ReadEncM2(0x80, &status4, &valid4);
-      if (valid1 && valid2 && valid3 && valid4) break;
+      // count1 = ROBOCLAW_1->ReadEncM1(0x80, &status1, &valid1);
+      // count2 = ROBOCLAW_1->ReadEncM2(0x80, &status2, &valid2);
+      // count3 = ROBOCLAW_2->ReadEncM1(0x80, &status3, &valid3);
+      // count4 = ROBOCLAW_2->ReadEncM2(0x80, &status4, &valid4);
+      valid1 = ROBOCLAW_1->ReadEncoders(0x80, count1, count2);
+      valid2 = ROBOCLAW_2->ReadEncoders(0x80, count3, count4);
+      if (valid1 && valid2) break;
   }
 
   telemetryData[0] = (int)count1;
@@ -47,7 +56,7 @@ String get_telemetry() {
 
 
   // Retrieve Encoder velocities
-  uint8_t status5,status6,status7,status8;
+  // uint8_t status5,status6,status7,status8;
   bool valid5=false, valid6=false, valid7=false, valid8=false;
   uint32_t speed1=0, speed2=0, speed3=0, speed4=0;
   for (int i = 0; i < 5; i++) {
@@ -123,13 +132,18 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
 }
 
-void Wheel::Wheel() {
-  _vel = 0;
-  _dt = 0;
+// start wheel class implementations
+Wheel::Wheel() {
+  _prevVel = 0;
+  _last = micros();
   return;
 }
-int Wheel::calcAccel(int newVel){
-  double target_acl = (newVel - _vel) / _dt;
-  _vel = newVel;
-  return static_cast<int>(target_acl);
+
+uint16_t Wheel::calcAccel(int16_t newVel){
+  uint64_t now = micros();
+  double dt = (now - _last) / 1e6f;
+  uint16_t target_acl = abs(newVel - _prevVel) / dt;
+  _prevVel = newVel;
+  _last = now;
+  return target_acl;
 }
