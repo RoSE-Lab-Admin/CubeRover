@@ -56,7 +56,7 @@ String get_telemetry() {
 
 
   // Retrieve Encoder velocities
-  // uint8_t status5,status6,status7,status8;
+  uint8_t status5,status6,status7,status8;
   bool valid5=false, valid6=false, valid7=false, valid8=false;
   uint32_t speed1=0, speed2=0, speed3=0, speed4=0;
   for (int i = 0; i < 5; i++) {
@@ -143,6 +143,7 @@ uint16_t Wheel::calcAccel(int16_t newVel){
   uint64_t now = micros();
   double dt = (now - _last) / 1e6f;
   uint16_t target_acl = abs(newVel - _prevVel) / dt;
+  Serial.println(target_acl);
   _prevVel = newVel;
   _last = now;
   return target_acl;

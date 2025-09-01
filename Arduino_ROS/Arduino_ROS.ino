@@ -9,7 +9,7 @@
 #include <RoboClaw.h>
 
 // global definitions
-#define BAUDRATE 57600
+#define BAUDRATE 115200
 #define RC1_SERIAL Serial1
 #define RC2_SERIAL Serial3
 #define MOTOR_TIMEOUT 2000
@@ -22,6 +22,7 @@ char argv1[32];           // char array to temporarily store argument 1
 char argv2[32];           // ~~~ argument 2
 char argv3[32];
 size_t i = 0;             // index in argv variable
+bool timeout = false;     // flag to hold timeout status
 
 // Roboclaw definitions
 RoboClaw* ROBOCLAW_1 = new RoboClaw(&RC1_SERIAL, 10000);
@@ -50,12 +51,14 @@ void run_command() {
     case SET_MOTOR_SPEEDS: {
       set_motor_speeds(arg1, arg2);
       motor_timeout = 0;
+      timeout = false;
       Serial.println("ok");
       break;
     }
     case SET_MOTOR_SPEED: {
       set_motor_speed(arg1, arg2);
       motor_timeout = 0;
+      timeout = false;
       Serial.println("ok");
       break;
     }
@@ -127,8 +130,10 @@ void loop() {
       else if (arg == 3) argv3[i++] = chr;  // ~~~ third arg
     }
   }
-  if (motor_timeout > MOTOR_TIMEOUT) { //sets motor speeds to 0 if more than 2 seconds has ellapsed
+  if (motor_timeout > MOTOR_TIMEOUT && !timeout) { //sets motor speeds to 0 if more than 2 seconds has ellapsed
     set_motor_speeds(0,0);
+    timeout = true;
+    motor_timeout = 0;
   }
 
 }
