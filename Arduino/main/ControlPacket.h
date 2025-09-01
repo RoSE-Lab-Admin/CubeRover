@@ -11,7 +11,6 @@
 
 elapsedMillis univTimer = 0;
 
-
 class ControlPacket { // Basic controlpacket parent class
   public:
     ControlPacket() {}; // initializer -> does nothing
@@ -140,7 +139,7 @@ void VelPID::resolve(RoboClaw * RC1, RoboClaw * RC2) { // sets all motors to go 
   
   // commanding l2
   _RC1->SpeedAccelM2(0x80, _accelL, _vL2);
-
+  
   // commanding r1
   _RC2->SpeedAccelM1(0x80, _accelR, _vR1);
   

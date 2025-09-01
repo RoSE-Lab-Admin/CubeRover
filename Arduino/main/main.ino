@@ -81,7 +81,6 @@ void loop() { // Stuff to loop over
   if (sendTimer > 60) {
     SendTelem(RetrieveTelemetry(ROBOCLAW_1, ROBOCLAW_2), 14);
     sendTimer = 0;
-    
   }
   //delay(5);
 }
@@ -205,7 +204,7 @@ int * RetrieveTelemetry(RoboClaw &RC1, RoboClaw &RC2){
     rc2cval = RC2.ReadCurrents(0x80, c3, c4);
     if (rc1cval && rc2cval) break;
   }
-  telemetryData[8] = (int) c1;
+  telemetryData[8] = (int)c1;
   telemetryData[9] = (int)c2;
   telemetryData[10] = (int)c3;
   telemetryData[11] = (int)c4;
