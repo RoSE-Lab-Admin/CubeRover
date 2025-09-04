@@ -12,9 +12,9 @@
 
 
 // Robot Parameters
-// float Kp = 11.37910;    // proportional constant for velocity PID
-// float Ki = 0.345;   // integral constant for velocity PID
-// float Kd = 0;   // derivative constant for velocity PID
+float Kp = 11.37910;    // proportional constant for velocity PID
+float Ki = 0.345;   // integral constant for velocity PID
+float Kd = 0;   // derivative constant for velocity PID
 float qpps = 3400; // countable quadrature pulses per second -> found using roboclaw's basicMicro tool
 
 
@@ -122,11 +122,12 @@ void MemSetup(RoboClaw & RC1, RoboClaw & RC2) {
   float fsettings[10] = {0}; // stores float settings in an array. [vP,vI,vD,pP,pI,pD,pMI,Deadzone]
   for (size_t i = 0; i < 8*4; i = i + 4) {
     EEPROM.get((i), fsettings[i/4]);
+    Serial.println(fsettings[i/4]);
   }
-  RC1.SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
-  RC1.SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
-  RC2.SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
-  RC2.SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
+  RC1.SetM1VelocityPID(0x80, Kp, Ki, Kd, qpps); // change the velocity settings
+  RC1.SetM2VelocityPID(0x80, Kp, Ki, Kd, qpps);
+  RC2.SetM1VelocityPID(0x80, Kp, Ki, Kd, qpps);
+  RC2.SetM2VelocityPID(0x80, Kp, Ki, Kd, qpps);
   RC1.SetM1PositionPID(0x80, fsettings[3], fsettings[4], fsettings[5], static_cast<int>(fsettings[6]), fsettings[7], -10000, 10000); // change the position settings
   RC1.SetM2PositionPID(0x80, fsettings[3], fsettings[4], fsettings[5], static_cast<int>(fsettings[6]), fsettings[7], -10000, 10000);
   RC2.SetM1PositionPID(0x80, fsettings[3], fsettings[4], fsettings[5], static_cast<int>(fsettings[6]), fsettings[7], -10000, 10000);
