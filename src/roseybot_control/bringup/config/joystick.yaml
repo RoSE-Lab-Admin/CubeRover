@@ -1,11 +1,11 @@
 joy_node:
-  ros_parameters:
+  ros__parameters:
     device_id: 0
     deadzone: 0.05
     autorepeat_rate: 20.0
 
 teleop_node:
-  ros_parameters:
+  ros__parameters:
     axis_linear:
       x: 1
     scale_linear:

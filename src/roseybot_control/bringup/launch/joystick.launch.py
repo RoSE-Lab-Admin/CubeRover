@@ -9,15 +9,15 @@ def generate_launch_description():
     joy_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'joystick.yaml')
 
     joy_node = Node(
-        package='joy'
-        executable='joy_node'
+        package='joy',
+        executable='joy_node',
         parameters = [joy_params],
     )
 
     teleop_node = Node(
-        package='teleop_twist_joy'
-        executable='teleop_node'
-        name='teleop_node'
+        package='teleop_twist_joy',
+        executable='teleop_node',
+        name='teleop_node',
         parameters = [joy_params],
     )
 
