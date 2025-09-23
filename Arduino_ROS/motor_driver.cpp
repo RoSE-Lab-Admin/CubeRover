@@ -39,13 +39,14 @@ String get_telemetry() {
   // Retrieve Encoder counts
   bool valid1=false,valid2=false,valid3=false,valid4=false;
   uint32_t count1=0, count2=0, count3=0, count4=0;
-  for (int i = 0; i < 5; i ++) {
-      // count1 = ROBOCLAW_1->ReadEncM1(0x80, &status1, &valid1);
-      // count2 = ROBOCLAW_1->ReadEncM2(0x80, &status2, &valid2);
-      // count3 = ROBOCLAW_2->ReadEncM1(0x80, &status3, &valid3);
-      // count4 = ROBOCLAW_2->ReadEncM2(0x80, &status4, &valid4);
-      valid1 = ROBOCLAW_1->ReadEncoders(0x80, count1, count2);
-      valid2 = ROBOCLAW_2->ReadEncoders(0x80, count3, count4);
+  uint8_t status1=0, status2=0, status3=0, status4=0;
+  for (int i = 0; i < 3; i ++) {
+      count1 = ROBOCLAW_1->ReadEncM1(0x80, &status1, &valid1);
+      count2 = ROBOCLAW_1->ReadEncM2(0x80, &status2, &valid2);
+      count3 = ROBOCLAW_2->ReadEncM1(0x80, &status3, &valid3);
+      count4 = ROBOCLAW_2->ReadEncM2(0x80, &status4, &valid4);
+      // valid1 = ROBOCLAW_1->ReadEncoders(0x80, count1, count2);
+      // valid2 = ROBOCLAW_2->ReadEncoders(0x80, count3, count4);
       if (valid1 && valid2) break;
   }
 
@@ -59,7 +60,7 @@ String get_telemetry() {
   uint8_t status5,status6,status7,status8;
   bool valid5=false, valid6=false, valid7=false, valid8=false;
   uint32_t speed1=0, speed2=0, speed3=0, speed4=0;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 3; i++) {
       speed1 = ROBOCLAW_1->ReadSpeedM1(0x80, &status5, &valid5);
       speed2 = ROBOCLAW_1->ReadSpeedM2(0x80, &status6, &valid6);
       speed3 = ROBOCLAW_2->ReadSpeedM1(0x80, &status7, &valid7);
@@ -76,7 +77,7 @@ String get_telemetry() {
   // Read Currents
   int16_t c1, c2, c3, c4;
   bool rc1cval = false, rc2cval=false;
-  for (size_t i = 0; i < 5; i++) {
+  for (size_t i = 0; i < 3; i++) {
     rc1cval = ROBOCLAW_1->ReadCurrents(0x80, c1, c2);
     rc2cval = ROBOCLAW_2->ReadCurrents(0x80, c3, c4);
     if (rc1cval && rc2cval) break;
@@ -89,7 +90,7 @@ String get_telemetry() {
   // Read battery voltages
   uint16_t v1 = 0, v2 = 0;
   bool v1val = false, v2val = false;
-  for (size_t i = 0; i < 5; i++) {
+  for (size_t i = 0; i < 3; i++) {
     v1 = ROBOCLAW_1->ReadMainBatteryVoltage(0x80, &v1val);
     v2 = ROBOCLAW_2->ReadMainBatteryVoltage(0x80, &v2val);
     if (v1val && v2val) break;
@@ -111,9 +112,9 @@ void encoder_reset() {
 }
 
 void pid_set(int arg1, int arg2, int arg3) {
-  float p = static_cast<float>(arg1) / 10;
-  float i = static_cast<float>(arg2) / 10;
-  float d = static_cast<float>(arg3) / 10;
+  float p = static_cast<float>(arg1) / 100;
+  float i = static_cast<float>(arg2) / 100;
+  float d = static_cast<float>(arg3) / 100;
   EEPROM.put(0, p);
   EEPROM.put(4, i);
   EEPROM.put(8, d);
@@ -125,11 +126,13 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   float fsettings[3] = {0}; // stores float settings in an array. [vP,vI,vD]
   for (size_t i = 0; i < 3*4; i += 4) {
     EEPROM.get((i), fsettings[i/4]);
+    Serial.println(fsettings[i/4]);
   }
   ROBOCLAW_1->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
   ROBOCLAW_1->SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
   ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
   ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
+  Serial.println("Motor PID set");
 }
 
 // start wheel class implementations
