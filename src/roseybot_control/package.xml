@@ -10,13 +10,15 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>xacro</depend>
-  <depend>robot_state_publisher</depend>
-  <depend>diffdrive_controller</depend>
-  <depend>joint_state_broadcaster</depend>
-  <depend>controller_manager</depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>diffdrive_controller</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>controller_manager</exec_depend>
   <depend>libserial-dev</depend>
-  <depend>joy</depend>
-  <depend>teleop_twist_joy</depend>
+  <exec_depend>joy</exec_depend>
+  <exec_depend>teleop_twist_joy</exec_depend>
+  <exec_depend>bno055</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
   
 
   <test_depend>ament_lint_auto</test_depend>
