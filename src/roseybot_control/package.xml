@@ -15,6 +15,7 @@
   <exec_depend>joint_state_broadcaster</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <depend>ros2_control</depend>
+  <depend>hardware_interface</depend>
   <depend>libserial-dev</depend>
   <exec_depend>joy</exec_depend>
   <exec_depend>teleop_twist_joy</exec_depend>
