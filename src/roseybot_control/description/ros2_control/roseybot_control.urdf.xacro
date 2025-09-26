@@ -17,7 +17,7 @@
         <hardware>
           <plugin>roseybot_arduino/RoseyBotSystemHardware</plugin>
           <param name="baud">57600</param>
-          <param name="timeout_ms">100</param>
+          <param name="timeout_ms">150</param>
           <param name="device">/dev/ttyACM0</param>
           <param name="enc/rev">5281.1</param>
         </hardware>
