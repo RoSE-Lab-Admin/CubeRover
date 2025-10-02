@@ -13,17 +13,18 @@ def generate_launch_description():
         package="bno055",
         executable="bno055",
         parameters=[imu_params],
+        output='log'
     )
 
-    robot_localization_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_node',
-        output='screen',
-        parameters=[ekf_params],
-    )
+    # robot_localization_node = Node(
+    #     package='robot_localization',
+    #     executable='ekf_node',
+    #     name='ekf_node',
+    #     output='screen',
+    #     parameters=[ekf_params],
+    # )
 
     return LaunchDescription([
         imu_node,
-        robot_localization_node,
+        # robot_localization_node,
     ])
