@@ -239,7 +239,7 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
     wheel_map_[joint.name]->updateCur(telemVals[i + 8]);
 
     // RH: Adding roboclaw 1 voltage (wheels m1 and m2) and roboclaw 2 voltage (wheels m3 and m4)
-    wheel_map_[joint.name]->updateVol(telemVals[ ((i < 2) ? 12 : 13) ])
+    wheel_map_[joint.name]->updateVolt(telemVals[ ((i < 2) ? 12 : 13) ]);
   }
 
   return hardware_interface::return_type::OK;
