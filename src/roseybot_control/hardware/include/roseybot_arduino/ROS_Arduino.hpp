@@ -133,7 +133,8 @@ public:
         return;
     }
 
-    for (size_t i = 0; i < 12 && ss >> token; ++i) {
+    // RH: Changing to 14 elements to account for voltages
+    for (size_t i = 0; i < 14 && ss >> token; ++i) {
         try {
             telem[i] = std::stoi(token);
         } catch (const std::invalid_argument &e) {

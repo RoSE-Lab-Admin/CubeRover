@@ -140,7 +140,7 @@ std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_s
       RCLCPP_INFO(get_logger(), "Joint %s: added current state", joint.name.c_str());
       state_interfaces.emplace_back(hardware_interface::StateInterface(
         joint.name, "voltage", &wheel_map_[joint.name]->voltage_));
-      RCLCPP_INFO(get_logger(), "Joint %s: added volt state", joint.name.c_str());
+      RCLCPP_INFO(get_logger(), "Joint %s: added voltage state", joint.name.c_str());
     }
 
   return state_interfaces;
@@ -229,7 +229,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
 hardware_interface::return_type RoseyBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  std::vector<int> telemVals(12);
+  std::vector<int> telemVals(14); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
   comm_->read_telem_values(telemVals);
 
   for (size_t i = 0; i < info_.joints.size(); ++i) {
@@ -237,6 +237,9 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
     wheel_map_[joint.name]->updatePos(telemVals[i]);
     wheel_map_[joint.name]->updateVel(telemVals[i + 4]);
     wheel_map_[joint.name]->updateCur(telemVals[i + 8]);
+
+    // RH: Adding roboclaw 1 voltage (wheels m1 and m2) and roboclaw 2 voltage (wheels m3 and m4)
+    wheel_map_[joint.name]->updateVol(telemVals[ ((i < 2) ? 12 : 13) ])
   }
 
   return hardware_interface::return_type::OK;

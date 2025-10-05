@@ -36,10 +36,12 @@ void wheel::updateVel(int encVel){
 }
 
 void wheel::updateCur(int mCur){
-    current_ = mCur / 10.0;
+    // RH: recorded in increments of 10mA (100th of amp)
+    current_ = mCur / 100.0;
 }
 
 void wheel::updateVolt(int mVolt){
+    // RH: recorded in increments of 100mV (10th of volt)
     voltage_ = mVolt / 10.0;
 }
 
