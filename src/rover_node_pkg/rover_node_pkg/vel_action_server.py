@@ -3,6 +3,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from rover_interfaces.action import TestCommand
 from rover_interfaces.msg import RoverCommand
+from sensor_msgs.msg import Imu
 import numpy as np
 import time
 
@@ -25,12 +26,23 @@ class VelActionServer(Node):
 
         #create publisher for motor command stream
         self.motorStream = self.create_publisher(RoverCommand, 'motor_stream', 20)
+        self.imu_sub = self.create_subscription(Imu, 'Rover/bno055/imu', self.imu_callback, 5)
+
+        self.pitch_speed = 0
 
     def action_callback(self, goal_handle):
         #create velocity service command
         velRequest = RoverCommand()
         velRequest.type = 'V'
         velRequest.data = np.zeros(7, dtype=np.int32)
+
+        zeroRequest = RoverCommand()
+        zeroRequest.type = 'V'
+        zeroRequest.data = np.zeros(7, dtype=np.int32)
+        zeroRequest.data[4] = DELAY
+        zeroRequest.data[5] = 1000
+        zeroRequest.data[6] = 1000
+
         v_L = goal_handle.request.linear_speed
         v_R = goal_handle.request.linear_speed
         if (goal_handle.request.turning_radius < 1E6):
@@ -53,6 +65,13 @@ class VelActionServer(Node):
         
         
         while ((time.time() - start) < (driveTime / 1000)):
+            rclpy.spin_once(self)
+            self.get_logger().info(f"pitch speed: {self.pitch_speed}")
+            if (abs(self.pitch_speed) >= 2):
+                self.motorStream.publish(zeroRequest)
+                self.get_logger().error("flipped!")
+                goal_handle.failure()
+                return TestCommand.Result()
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
             time.sleep(1)
@@ -67,12 +86,22 @@ class VelActionServer(Node):
         velRequest.data[6] = a_to_e((v_R / (goal_handle.request.accel_deaccel_duration / 1000)))
 
         while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
+            rclpy.spin_once(self)
+            self.get_logger().info(f"pitch speed: {self.pitch_speed}")
+            if (abs(self.pitch_speed) >= 2):
+                self.motorStream.publish(zeroRequest)
+                self.get_logger().error("flipped!")
+                goal_handle.failure()
+                return TestCommand.Result()
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
             time.sleep(1)
 
         goal_handle.succeed()
         return TestCommand.Result()
+    
+    def imu_callback(self, data):
+        self.pitch_speed = data.angular_velocity.y
         
 
 
