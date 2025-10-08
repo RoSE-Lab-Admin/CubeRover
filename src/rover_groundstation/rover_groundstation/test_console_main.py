@@ -69,7 +69,11 @@ class TestConsole(Node):
         self.goal.linear_speed = lin_vel
         self.goal.turning_radius = turn_rad
         self.goal.accel_deaccel_duration = 5000   # ms
-        self.goal.run_duration = 40000            # ms
+
+        if (slope != 0):
+            self.goal.run_duration = 25000            # ms
+        else:
+            self.goal.run_duration = 40000            # ms
 
     def discover_baggers(self):
         for name in ["imu_bag", "cam_bag", "motor_bag", "mocap_bag", "overhead_cam_bag"]:
@@ -122,7 +126,7 @@ class TestConsole(Node):
         req.outname = self.test_name + "_lidar"
         req.sensors = ["l515_center"] #, "l515_east", "l515_west"]
         req.duration = DURATION
-        self.get_logger().info("Starting LiDAR capture (10s)!")
+        self.get_logger().info(f"Starting LiDAR capture ({DURATION})!")
         return self.gant_capture.call_async(req)
 
     def download_lidar(self, resp):
