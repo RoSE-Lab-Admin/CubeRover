@@ -6,7 +6,6 @@ from rover_interfaces.msg import RoverCommand
 from pySerialTransfer import pySerialTransfer as tx
 import time
 import threading
-import numpy as np
 
 
 class Serial(Node):
@@ -22,7 +21,7 @@ class Serial(Node):
             parameters=[
                 ('COMPORT', "/dev/ttyACM0"),
                 ('BAUD', 115200),
-                ('PREFIX', "RoverTelem/roboclaw/"),
+                ('PREFIX', "Rover/roboclaw/"),
             ]
         )
 
@@ -44,38 +43,36 @@ class Serial(Node):
         #create publisher, and timer to publish data
         self.encPub = self.create_publisher(MotorData, PREFIX + 'enc_telem', 20)
         self.timer = self.create_timer(0.025, self.read_serial)
-        self.motorStream = self.create_subscription(RoverCommand, 'motor_stream', self.motor_stream_callback, 10)
+        self.motorStream = self.create_subscription(RoverCommand, 'motor_stream', self.motor_stream_callback, 1)
 
     def read_serial(self):
         with self.serial_lock:
             if self.link.available():
                 try:
-                    telemOutput = []
-                    # for i in range(12): #get each value from telemetry serial
-                    telemOutput = self.link.rx_obj(obj_type="i",
-                                                   start_pos=0,
-                                                   obj_byte_size=4)
-                    motorData = MotorData()
-                    motorData.enc1 = telemOutput[0]
-                    motorData.enc2 = telemOutput[1]
-                    motorData.enc3 = telemOutput[2]
-                    motorData.enc4 = telemOutput[3]
-
-                    motorData.vel1 = telemOutput[4]
-                    motorData.vel2 = telemOutput[5]
-                    motorData.vel3 = telemOutput[6]
-                    motorData.vel4 = telemOutput[7]
-
-                    motorData.m1current = telemOutput[8]
-                    motorData.m2current = telemOutput[9]
-                    motorData.m3current = telemOutput[10]
-                    motorData.m4current = telemOutput[11]
-                    self.encPub.publish(motorData)
-                    
+                    telemOutput = [0] * 12
+                    for i in range(12): #get each value from telemetry serial
+                            val = self.link.rx_obj(obj_type='i', start_pos=i*4)
+                            telemOutput[i] = val
                 except Exception as e:
                     self.get_logger().error(f"Error with serial read: {e}")
                     return
 
+                motorData = MotorData()
+                motorData.enc1 = telemOutput[0]
+                motorData.enc2 = telemOutput[1]
+                motorData.enc3 = telemOutput[2]
+                motorData.enc4 = telemOutput[3]
+
+                motorData.vel1 = telemOutput[4]
+                motorData.vel2 = telemOutput[5]
+                motorData.vel3 = telemOutput[6]
+                motorData.vel4 = telemOutput[7]
+
+                motorData.m1current = telemOutput[8]
+                motorData.m2current = telemOutput[9]
+                motorData.m3current = telemOutput[10]
+                motorData.m4current = telemOutput[11] 
+                self.encPub.publish(motorData)
                 return
             else:
                 # self.get_logger().error("nothing in serial / serial not available")
@@ -91,7 +88,7 @@ class Serial(Node):
                 for data in request.data:
                     try:
                         datasize = self.link.tx_obj(data, start_pos=datasize, val_type_override='i')
-                        #self.get_logger().info(f"sent {data}")
+                        self.get_logger().info(f"sent {data}")
                     except Exception as e:
                         self.get_logger().error(f"Error adding data: {e}")
                 #self.get_logger().info("sent command to teensy")

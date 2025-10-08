@@ -6,10 +6,10 @@ from rover_interfaces.msg import RoverCommand
 import numpy as np
 import time
 
-TRACKWIDTH = 40.96 / 2
+TRACKWIDTH = 31.5 / 2
 ENCODER = 5281.7
 RADIUS = 15
-DELAY = 200
+DELAY = 1200
 
 class VelActionServer(Node):
     def __init__(self):
@@ -48,14 +48,14 @@ class VelActionServer(Node):
         velRequest.data[2] = v_to_e(v_R)
         velRequest.data[3] = v_to_e(v_R)
         velRequest.data[4] = DELAY
-        velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deaccel_duration / 1000)))
-        velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deaccel_duration / 1000)))
+        velRequest.data[5] = a_to_e((v_L / (goal_handle.request.accel_deaccel_duration / 1000)))
+        velRequest.data[6] = a_to_e((v_R / (goal_handle.request.accel_deaccel_duration / 1000)))
         
         
         while ((time.time() - start) < (driveTime / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(0.025)
+            time.sleep(1)
         
         
         velRequest.data[0] = v_to_e(0)
@@ -63,13 +63,13 @@ class VelActionServer(Node):
         velRequest.data[2] = v_to_e(0)
         velRequest.data[3] = v_to_e(0)
         velRequest.data[4] = DELAY
-        velRequest.data[5] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deaccel_duration / 1000)))
-        velRequest.data[6] = a_to_e((goal_handle.request.linear_speed / (goal_handle.request.accel_deaccel_duration / 1000)))
+        velRequest.data[5] = a_to_e((v_L / (goal_handle.request.accel_deaccel_duration / 1000)))
+        velRequest.data[6] = a_to_e((v_R / (goal_handle.request.accel_deaccel_duration / 1000)))
 
         while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
             self.motorStream.publish(velRequest)
             self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(0.025)
+            time.sleep(1)
 
         goal_handle.succeed()
         return TestCommand.Result()
