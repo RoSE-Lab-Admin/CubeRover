@@ -153,6 +153,15 @@ class TestConsole(Node):
         return self.action_cli.send_goal_async(self.goal)
 
 
+    def cancel_goal(self, goal_handle):
+        cancel_future = goal_handle.cancel_goal_async()
+        rclpy.spin_until_future_complete(self, cancel_future)
+        self.get_logger().info(f"Goal result after cancel: {result_future.result().status}")
+        return
+
+        
+
+
 def main(args=None):
 
     test_num = int(input("Test number to start on: "))
@@ -168,7 +177,6 @@ def main(args=None):
         input("Press ENTER to begin initial padding and first LiDAR scan...")
         try:
             # â”€â”€â”€ Stage 1: Initial LiDAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            t0 = time.time()
             node.get_logger().info("=== Stage 1: Initial Padding & First LiDAR Scan ===")
             node.start_bags()
             node.start_time = time.time()
@@ -176,25 +184,24 @@ def main(args=None):
             time.sleep(DURATION)
             rclpy.spin_until_future_complete(node, lidf1)
             node.download_lidar(lidf1.result())
-            t1 = time.time()
-            node.get_logger().info(f"--- Stage 1 duration: {(t1 - t0):.2f}s ---")
 
             # â”€â”€â”€ Stage 3: Drive action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             t0 = time.time()
-            node.get_logger().info("=== Stage 3: Wind-Up & Steady Driving ===")
+            node.get_logger().info("=== Stage 2: Wind-Up & Steady Driving ===")
             drive_fut = node.start_rover()
             rclpy.spin_until_future_complete(node, drive_fut)
             goal_handle = drive_fut.result()
-            res_fut = goal_handle.get_result_async()
-            rclpy.spin_until_future_complete(node, res_fut)
+
+            input("Press ENTER to cancel rover driving")
+            node.cancel_goal(goal_handle)
+
             node.get_logger().info("Rover action complete.")
             t1 = time.time()
-            node.get_logger().info(f"--- Stage 3 duration: {(t1 - t0):.2f}s ---")
+            node.get_logger().info(f"--- Rover Movement duration: {(t1 - t0):.2f}s ---")
             node.delete_lidar()
 
             # â”€â”€â”€ Stage 5: Final LiDAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            t0 = time.time()
-            node.get_logger().info("=== Stage 5: Final Padding & Second LiDAR Scan ===")
+            node.get_logger().info("=== Stage 3: Final Padding & Second LiDAR Scan ===")
             lidf2 = node.start_lidar()
             time.sleep(2)
             rclpy.spin_until_future_complete(node, lidf2)
@@ -202,9 +209,14 @@ def main(args=None):
             data_process(node.path)
             node.download_lidar(lidf2.result())
             t1 = time.time()
-            node.get_logger().info(f"--- Stage 5 duration: {t1 - t0:.2f}s ---")
             time.sleep(10)
             node.delete_lidar()
+
+            node.get_logger().info(f"ROVER MOVEMENT DURATION: {(t1 - t0):.2f}s")
+            node.get_logger().info(f"ROVER MOVEMENT DURATION: {(t1 - t0):.2f}s")
+            node.get_logger().info(f"ROVER MOVEMENT DURATION: {(t1 - t0):.2f}s")
+            node.get_logger().info(f"ROVER MOVEMENT DURATION: {(t1 - t0):.2f}s")
+            node.get_logger().info(f"ROVER MOVEMENT DURATION: {(t1 - t0):.2f}s")
 
 
 
