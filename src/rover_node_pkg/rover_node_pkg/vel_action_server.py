@@ -1,9 +1,10 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, GoalResponse, CancelResponse
 from rover_interfaces.action import TestCommand
 from rover_interfaces.msg import RoverCommand
-from sensor_msgs.msg import Imu
+
+import asyncio
 import numpy as np
 import time
 
@@ -21,87 +22,66 @@ class VelActionServer(Node):
             self,
             TestCommand,
             'TestingActionServer',
-            self.action_callback
+            execute_callback=self.execute_callback,
+            goal_callback=self.goal_callback,
+            cancel_callback=self.cancel_callback,
+            
         )
+
+        self.velRequest = RoverCommand()
+        self.velRequest.type = 'V'
+        self.velRequest.data = np.zeros(7, dtype=np.int32)
 
         #create publisher for motor command stream
         self.motorStream = self.create_publisher(RoverCommand, 'motor_stream', 20)
-        self.imu_sub = self.create_subscription(Imu, 'Rover/bno055/imu', self.imu_callback, 5)
 
-        self.pitch_speed = 0
 
-    def action_callback(self, goal_handle):
-        #create velocity service command
-        velRequest = RoverCommand()
-        velRequest.type = 'V'
-        velRequest.data = np.zeros(7, dtype=np.int32)
+    async def execute_callback(self, goal_handle):
+        while not goal_handle.is_cancel_requested:
+            self.get_logger().info("sent motor velocity")
+            self.motorStream.publish(self.velRequest)
+            await asyncio.sleep(1)
+        self.get_logger().info("Goal Cancelled!")
+        goal_handle.canceled()
+        self.stop_motors()
+        self.motorStream.publish(self.velRequest)
+        
+        return TestCommand.Result()
 
-        zeroRequest = RoverCommand()
-        zeroRequest.type = 'V'
-        zeroRequest.data = np.zeros(7, dtype=np.int32)
-        zeroRequest.data[4] = DELAY
-        zeroRequest.data[5] = 1000
-        zeroRequest.data[6] = 1000
 
-        v_L = goal_handle.request.linear_speed
-        v_R = goal_handle.request.linear_speed
-        if (goal_handle.request.turning_radius < 1E6):
-            if np.isclose(goal_handle.request.turning_radius, 0):   # turn in place
+    def goal_callback(self, goal_request):
+        v_L = goal_request.request.linear_speed
+        v_R = goal_request.request.linear_speed
+        if (goal_request.request.turning_radius < 1E6):
+            if np.isclose(goal_request.request.turning_radius, 0):   # turn in place
                 v_R = -v_L
             else:   #radius turn
-                v_L = (goal_handle.request.linear_speed * (goal_handle.request.turning_radius - TRACKWIDTH)) / goal_handle.request.turning_radius
-                v_R = (goal_handle.request.linear_speed * (goal_handle.request.turning_radius + TRACKWIDTH)) / goal_handle.request.turning_radius
+                v_L = (goal_request.request.linear_speed * (goal_request.request.turning_radius - TRACKWIDTH)) / goal_request.request.turning_radius
+                v_R = (goal_request.request.linear_speed * (goal_request.request.turning_radius + TRACKWIDTH)) / goal_request.request.turning_radius
 
-        start = time.time()
-        driveTime = goal_handle.request.run_duration - goal_handle.request.accel_deaccel_duration
-        
-        velRequest.data[0] = v_to_e(v_L)
-        velRequest.data[1] = v_to_e(v_L)
-        velRequest.data[2] = v_to_e(v_R)
-        velRequest.data[3] = v_to_e(v_R)
-        velRequest.data[4] = DELAY
-        velRequest.data[5] = a_to_e((v_L / (goal_handle.request.accel_deaccel_duration / 1000)))
-        velRequest.data[6] = a_to_e((v_R / (goal_handle.request.accel_deaccel_duration / 1000)))
-        
-        
-        while ((time.time() - start) < (driveTime / 1000)):
-            rclpy.spin_once(self)
-            self.get_logger().info(f"pitch speed: {self.pitch_speed}")
-            if (abs(self.pitch_speed) >= 2):
-                self.motorStream.publish(zeroRequest)
-                self.get_logger().error("flipped!")
-                goal_handle.failure()
-                return TestCommand.Result()
-            self.motorStream.publish(velRequest)
-            self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(1)
-        
-        
-        velRequest.data[0] = v_to_e(0)
-        velRequest.data[1] = v_to_e(0)
-        velRequest.data[2] = v_to_e(0)
-        velRequest.data[3] = v_to_e(0)
-        velRequest.data[4] = DELAY
-        velRequest.data[5] = a_to_e((v_L / (goal_handle.request.accel_deaccel_duration / 1000)))
-        velRequest.data[6] = a_to_e((v_R / (goal_handle.request.accel_deaccel_duration / 1000)))
+        self.velRequest.data[0] = v_to_e(v_L)
+        self.velRequest.data[1] = v_to_e(v_L)
+        self.velRequest.data[2] = v_to_e(v_R)
+        self.velRequest.data[3] = v_to_e(v_R)
+        self.velRequest.data[4] = DELAY
+        self.velRequest.data[5] = a_to_e((v_L / (goal_request.request.accel_deaccel_duration / 1000)))
+        self.velRequest.data[6] = a_to_e((v_R / (goal_request.request.accel_deaccel_duration / 1000)))
+        self.get_logger().info("Goal Request sent")
+        return rclpy.action.server.GoalResponse.ACCEPT
 
-        while ((time.time() - start) < (goal_handle.request.run_duration / 1000)):
-            rclpy.spin_once(self)
-            self.get_logger().info(f"pitch speed: {self.pitch_speed}")
-            if (abs(self.pitch_speed) >= 2):
-                self.motorStream.publish(zeroRequest)
-                self.get_logger().error("flipped!")
-                goal_handle.failure()
-                return TestCommand.Result()
-            self.motorStream.publish(velRequest)
-            self.get_logger().info(f"time: {(time.time() - start)}")
-            time.sleep(1)
 
-        goal_handle.succeed()
-        return TestCommand.Result()
-    
-    def imu_callback(self, data):
-        self.pitch_speed = data.angular_velocity.y
+    def cancel_callback(self, goal_handle):
+        return CancelResponse.ACCEPT
+
+    def stop_motors(self):
+        self.velRequest.data[0] = 0
+        self.velRequest.data[1] = 0
+        self.velRequest.data[2] = 0
+        self.velRequest.data[3] = 0
+        self.velRequest.data[4] = DELAY
+        self.velRequest.data[5] = 500
+        self.velRequest.data[6] = 500
+
         
 
 
