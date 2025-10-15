@@ -153,10 +153,10 @@ class TestConsole(Node):
         return self.action_cli.send_goal_async(self.goal)
 
 
-    def cancel_goal(self, goal_handle):
-        cancel_future = goal_handle.cancel_goal_async()
+    def cancel_goal(self, goal):
+        cancel_future = goal.result().cancel_goal_async()
         rclpy.spin_until_future_complete(self, cancel_future)
-        self.get_logger().info(f"Goal result after cancel: {result_future.result().status}")
+        # self.get_logger().info(f"Goal result after cancel: {cancel_future.result()}")
         return
 
         
@@ -189,11 +189,9 @@ def main(args=None):
             t0 = time.time()
             node.get_logger().info("=== Stage 2: Wind-Up & Steady Driving ===")
             drive_fut = node.start_rover()
-            rclpy.spin_until_future_complete(node, drive_fut)
-            goal_handle = drive_fut.result()
 
-            input("Press ENTER to cancel rover driving")
-            node.cancel_goal(goal_handle)
+            input("======================================\n\n\n\n\n\n\n Press ENTER to cancel rover driving \n\n\n\n\n\n\n========================================")
+            #node.cancel_goal(drive_fut)
 
             node.get_logger().info("Rover action complete.")
             t1 = time.time()
