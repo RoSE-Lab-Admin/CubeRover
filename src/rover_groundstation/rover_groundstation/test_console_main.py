@@ -33,7 +33,7 @@ class TestConsole(Node):
         self.bags_running = False
 
         # clients
-        self.action_cli = ActionClient(self, TestCommand, 'TestingActionServer')
+        self.action_cli = ActionClient(self, TestCommand, 'vel_action_server')
         self.gant_capture = self.create_client(Capture, "gantry_capture_service/capture")
         self.gant_download = self.create_client(DownloadName, "gantry_capture_service/download/name")
         self.gant_delete = self.create_client(DeleteName, "gantry_capture_service/delete/name")
@@ -150,13 +150,25 @@ class TestConsole(Node):
 
     def start_rover(self):
         self.get_logger().info("Sending rover drive command!")
-        return self.action_cli.send_goal_async(self.goal)
+        fut = self.action_cli.send_goal_async(self.goal)
+
+        rclpy.spin_until_future_complete(self,fut)
+        goal_handle = fut.result()
+        self.get_logger().info("Rover goal accepted by server." if goal_handle.accepted else "Rover goal rejected by server.")
+        return goal_handle
 
 
     def cancel_goal(self, goal):
-        cancel_future = goal.result().cancel_goal_async()
-        rclpy.spin_until_future_complete(self, cancel_future)
-        # self.get_logger().info(f"Goal result after cancel: {cancel_future.result()}")
+        self.get_logger().info("Cancelling rover drive command!")
+        cancel_fut = goal.cancel_goal_async()
+        rclpy.spin_until_future_complete(self, cancel_fut)
+        try:
+            cancel_result = cancel_fut.result()
+        except Exception as e:
+            self.get_logger().error(f"Cancel failed: {e}")
+            return
+
+        self.get_logger().info(f"Cancel request finished: {cancel_result}")
         return
 
         
@@ -191,7 +203,7 @@ def main(args=None):
             drive_fut = node.start_rover()
 
             input("======================================\n\n\n\n\n\n\n Press ENTER to cancel rover driving \n\n\n\n\n\n\n========================================")
-            #node.cancel_goal(drive_fut)
+            node.cancel_goal(drive_fut)
 
             node.get_logger().info("Rover action complete.")
             t1 = time.time()
