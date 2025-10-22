@@ -11,7 +11,7 @@ import datetime
 from rover_interfaces.action import TestCommand
 from rover_interfaces.srv import BagStart
 from gantry_lidar_interfaces.srv import Capture, DownloadName, DeleteName
-from std_srvs.srv import Trigger
+
 
 # message types for your debug subscriptions
 from rover_interfaces.msg import MotorData
@@ -202,7 +202,7 @@ def main(args=None):
             node.get_logger().info("=== Stage 2: Wind-Up & Steady Driving ===")
             drive_fut = node.start_rover()
 
-            input("======================================\n\n\n\n\n\n\n Press ENTER to cancel rover driving \n\n\n\n\n\n\n========================================")
+            input("======================================\n\n\n\n\n\n\n Press ENTER to cancel rover driving \n\n\n\n\n\n\n========================================\n")
             node.cancel_goal(drive_fut)
 
             node.get_logger().info("Rover action complete.")
