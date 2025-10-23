@@ -41,29 +41,29 @@ For input interfaces, the primary method of movement is:
 Topic:
 /cmd_vel
 Type: geometry_msgs/msg/TwistStamped
-'''
+```
 
 For output, odometry pose from the hardware controllers is outputted to:
-'''
+```
 /roseybot_base_controller/odom
 Type: nav_msgs/msg/Odometry
-'''
+```
 
 Joint states are outputted to:
-'''
+```
 /dynamic_joint_states
 Type: control_msgs/msg/DynamicJointState
 
 /joint_states
 Type: sensor_msgs/msg/JointState
-'''
+```
 
 Transforms and robot description info can be found in:
-'''
+```
 /tf
 /tf_static
 /robot_description
-'''
+```
 
 
 
