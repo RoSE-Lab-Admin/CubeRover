@@ -36,9 +36,8 @@ ros2 launch roseybot_control ros2_control.launch.py
 ## Interfaces:
 Rosey uses typical twist messages to be controlled, and state interfaces are published over a few topics
 
-For input interfaces, the primary method of movement is:
+For input interfaces, the primary method of movement is the ros topic:
 ```
-Topic:
 /cmd_vel
 Type: geometry_msgs/msg/TwistStamped
 ```
