@@ -37,7 +37,7 @@ void reset_command() { // reset global variables
   arg = 0;
   memset(argv1, 0, sizeof(argv1));
   memset(argv2, 0, sizeof(argv2));
-  memset(argv3, 0, sizeof(argv2));
+  memset(argv3, 0, sizeof(argv3));
   i = 0;
 }
 
@@ -52,30 +52,31 @@ void run_command() {
       set_motor_speeds(arg1, arg2);
       motor_timeout = 0;
       timeout = false;
-      Serial.println("OK");
+      //Serial.println("motors OK");
       break;
     }
     case SET_MOTOR_SPEED: {
       set_motor_speed(arg1, arg2);
       motor_timeout = 0;
       timeout = false;
-      Serial.println("OK");
+      //Serial.println("motor OK");
       break;
     }
     case GET_TELEM: {
       String telem = get_telemetry();
-      Serial.println(telem);
+      Serial.print(telem);
+      Serial.flush();
       break;
     }
     case RESET_ENCODERS: {
       encoder_reset();
-      Serial.println("OK");
+      //Serial.println("reset OK");
       break;
     }
     case PID: {
       pid_set(arg1, arg2, arg3);
       init_motor_controllers(ROBOCLAW_1, ROBOCLAW_2);
-      Serial.println("OK");
+      //Serial.println("pid OK");
       break;
     }
   }
@@ -93,11 +94,13 @@ void setup() {
   // turn on LED status light
   pinMode(13,OUTPUT);
   digitalWrite(13,HIGH);
-
-  Serial.print("setup complete");
+ 
+  //Serial.print("setup complete");
 
   encoder_reset();
-  Serial.print("Encoders reset");
+  //Serial.print("Encoders reset");
+
+  digitalWrite(13,HIGH);
 }
 
 
