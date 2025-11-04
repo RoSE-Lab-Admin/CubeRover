@@ -156,13 +156,24 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
 
 void safety_check(int setpoint, int v) {
   if (!(setpoint * v >= 0)) {
-    Serial.println("ENCODDER ERROR! CHECK WIRE");
+    Serial.println("ENCODDER ERROR! CHECK WIRE!");
     set_motor_speeds(0, 0);
     while (true) {
       digitalWrite(13,HIGH);
-      delay(100);
+      delay(500);
       digitalWrite(13,LOW);
-      delay(100);
+      delay(500);
+    }
+  }
+
+  if (v > setpoint*1.5) {
+    Serial.println("VELOCITY SETPOINT ERROR!");
+    set_motor_speeds(0, 0);
+    while (true) {
+      digitalWrite(13,HIGH);
+      delay(1000);
+      digitalWrite(13,LOW);
+      delay(1000);
     }
   }
 }
