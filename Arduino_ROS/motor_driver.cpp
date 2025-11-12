@@ -29,10 +29,23 @@ void set_motor_speed(int motorIndex, uint32_t speed) {
 
 
 void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
-  ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(lSpeed), lSpeed);
-  ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(lSpeed), lSpeed);
-  ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(rSpeed), rSpeed);
-  ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(rSpeed), rSpeed);
+
+  ROBOCLAW_1->SpeedM1M2(0x80, lSpeed, lSpeed);
+  ROBOCLAW_2->SpeedM1M2(0x80, rSpeed, rSpeed);
+
+  // ROBOCLAW_1->SpeedAccelM1M2(0x80, FL.calcAccel(lSpeed), lSpeed, lSpeed);
+  // ROBOCLAW_1->SpeedAccelM1M2(0x80, FR.calcAccel(rSpeed), rSpeed, rSpeed);
+  //Serial.println(BL.calcAccel(lSpeed)); // print out accel
+  FL.calcAccel(lSpeed);
+  FR.calcAccel(rSpeed);
+  BL.calcAccel(lSpeed);
+  BR.calcAccel(rSpeed);
+  // ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(lSpeed), lSpeed);
+  // ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(lSpeed), lSpeed);
+  // ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(rSpeed), rSpeed); 
+  // ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(rSpeed), rSpeed);
+
+  return;
 }
 
 
@@ -98,12 +111,12 @@ String get_telemetry() {
 
   // Read battery voltages
   uint16_t v1 = 0, v2 = 0;
-  // for (size_t i = 0; i < 3; i++) {
-  //   bool v1val, v2val;
-  //   v1 = ROBOCLAW_1->ReadMainBatteryVoltage(0x80, &v1val);
-  //   v2 = ROBOCLAW_2->ReadMainBatteryVoltage(0x80, &v2val);
-  //   if (v1val && v2val) break;
-  // }
+  for (size_t i = 0; i < 3; i++) {
+    bool v1val, v2val;
+    v1 = ROBOCLAW_1->ReadMainBatteryVoltage(0x80, &v1val);
+    v2 = ROBOCLAW_2->ReadMainBatteryVoltage(0x80, &v2val);
+    if (v1val && v2val) break;
+  }
 
   telemetryData[12] = (int32_t)v1;
   telemetryData[13] = (int32_t)v2;
@@ -155,7 +168,7 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
 
 
 void safety_check(int setpoint, int v) {
-  if (!(setpoint * v >= 0)) {
+  if (!(setpoint * v >= 0) && setpoint != 0) {
     Serial.println("ENCODDER ERROR! CHECK WIRE!");
     set_motor_speeds(0, 0);
     while (true) {
@@ -163,10 +176,11 @@ void safety_check(int setpoint, int v) {
       delay(500);
       digitalWrite(13,LOW);
       delay(500);
+      Serial.println("ENCODDER ERROR! CHECK WIRE!");
     }
   }
 
-  if (v > setpoint*1.5) {
+  if (abs(v) > qpps * 0.75) {
     Serial.println("VELOCITY SETPOINT ERROR!");
     set_motor_speeds(0, 0);
     while (true) {
@@ -174,6 +188,7 @@ void safety_check(int setpoint, int v) {
       delay(1000);
       digitalWrite(13,LOW);
       delay(1000);
+      Serial.println("VELOCITY SETPOINT ERROR!");
     }
   }
 }
@@ -197,7 +212,7 @@ uint16_t Wheel::calcAccel(int16_t newVel){
   _prevVel = newVel;
   _last = now;
   return target_acl;
-}
+ }  
 
 int16_t Wheel::velocity(){
   return _prevVel;
