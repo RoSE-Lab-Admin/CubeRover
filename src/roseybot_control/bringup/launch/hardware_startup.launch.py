@@ -3,20 +3,21 @@ from launch_ros.actions import Node
 
 import os
 from ament_index_python.packages import get_package_share_directory
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
 
-    imu_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'bno055.yaml')
-    ekf_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'ekf.yaml')
+    #launch file for imu
+    imu_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'imu_boot.launch.py')
 
-    robot_localization_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_node',
-        output='screen',
-        parameters=[ekf_params],
-    )
+    #launch file for control
+    control_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'ros2_control.launch.py')
 
     return LaunchDescription([
-        robot_localization_node,
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(imu_launch)
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(control_launch)
+        )
     ])
