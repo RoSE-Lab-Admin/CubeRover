@@ -4,3 +4,5 @@ log/
 .vscode
 venv/
 src/.vscode
+src/nav2_stack/test/
+src/nav2_stack/resource/
