@@ -1,13 +1,30 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
+
+    rviz_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('roseybot_control'),
+                'bringup',
+                'launch',
+                'rviz.launch.py'
+            ])
+        ),
+        launch_arguments={
+            'use_sim_time': 'true',
+            'robot_name': 'roseybot'
+        }.items()
+    )
+
     path_to_urdf = PathJoinSubstitution([
             FindPackageShare('roseybot_control'),
             'description',
@@ -72,4 +89,4 @@ def generate_launch_description():
         robot_controller_spawner
     ]
 
-    return LaunchDescription(nodes)
+    return LaunchDescription(nodes + [rviz_launch])
