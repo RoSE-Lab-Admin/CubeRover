@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler, IncludeLaunchDescription, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
@@ -32,6 +32,18 @@ def generate_launch_description():
             'roseybot.urdf.xacro'
     ])
 
+    gen_urdf_path = "/tmp/roseybot.urdf"
+
+    gen_urdf = ExecuteProcess(
+        cmd=[
+            FindExecutable(name="xacro"),
+            path_to_urdf,
+            "-o",
+            gen_urdf_path
+        ],
+        output="screen",
+    )
+
     robot_description_content = Command([
         FindExecutable(name='xacro'),
         ' ',
@@ -52,7 +64,7 @@ def generate_launch_description():
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[robot_controllers],
+        parameters=[robot_description, robot_controllers],
         output="both",
     )
 
@@ -89,4 +101,4 @@ def generate_launch_description():
         robot_controller_spawner
     ]
 
-    return LaunchDescription(nodes + [rviz_launch])
+    return LaunchDescription(nodes + [gen_urdf, rviz_launch])

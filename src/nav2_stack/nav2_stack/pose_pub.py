@@ -96,17 +96,30 @@ class PosePub(Node):
 
     # publish odom -> map transform
     def map_transform(self, pose):
+        # map -> odom
+        map_odom = TransformStamped()
+        map_odom.header.stamp = self.get_clock().now().to_msg()
+        map_odom.header.frame_id = 'map'
+        map_odom.child_frame_id = 'odom'
+        map_odom.transform.translation.x = 0.0
+        map_odom.transform.translation.y = 0.0
+        map_odom.transform.translation.z = 0.0
+        map_odom.transform.rotation.x = 0.0
+        map_odom.transform.rotation.y = 0.0
+        map_odom.transform.rotation.z = 0.0
+        map_odom.transform.rotation.w = 1.0
+
+        # odom -> base_link
         trans = TransformStamped()
         trans.header.stamp = self.get_clock().now().to_msg()
-        trans.header.frame_id = 'map'
-        trans.child_frame_id = 'odom'
-
+        trans.header.frame_id = 'odom'
+        trans.child_frame_id = 'base_link'
         trans.transform.translation.x = pose.pose.position.x
         trans.transform.translation.y = pose.pose.position.y
         trans.transform.translation.z = pose.pose.position.z
         trans.transform.rotation = pose.pose.orientation
 
-        self.tf_pub.sendTransform(trans)
+        self.tf_pub.sendTransform([trans, map_odom])
 
 
 def main(args=None):
