@@ -15,15 +15,13 @@ class PosePub(Node):
 
         # parameters
         self.declare_parameter('csv_file', 'sim_data/extracted_data/11172025/11-21-10/pose_data/pose.csv')
-        self.declare_parameter('rate', 10.0)
+        self.declare_parameter('num_waypoints', 10.0)
 
         self.csv_file =self.get_parameter('csv_file').value
-        self.rate = self.get_parameter('rate').value
+        self.rate = self.get_parameter('num_waypoints').value
 
         # publisher
-        self.pose_publisher = self.create_publisher(PoseStamped, 'opti_pose', 10)
-        self.tf_pub = TransformBroadcaster(self)
-        self.waypoint_pub = self.create_publisher(Path, 'sim_waypoints', 10)
+        self.waypoint_pub = self.create_publisher(Path, '/sim_waypoints', 10)
 
         # read in poses, find waypoints
         self.poses = self.read_pose()
@@ -58,21 +56,9 @@ class PosePub(Node):
                     poses.append(pose)
 
         except Exception as e:
-            print(e)
-
+            self.get_logger().info(e)
 
         return poses
-    
-    def publish_pose(self):
-        if self.pose_idx < len(self.poses):
-            pose = self.poses[self.pose_idx]
-            self.pose_idx += 1
-
-            # update timestamp
-            pose.header.stamp = self.get_clock().now().to_msg()
-            # publish pose and pose transform
-            self.pose_publisher.publish(pose)
-            self.map_transform(pose)
 
     def publish_waypoints(self):
         # create 10 waypoints
@@ -93,33 +79,6 @@ class PosePub(Node):
 
         # publish waypoints as a path message
         self.waypoint_pub.publish(waypoints)
-
-    # publish odom -> map transform
-    def map_transform(self, pose):
-        # map -> odom
-        map_odom = TransformStamped()
-        map_odom.header.stamp = self.get_clock().now().to_msg()
-        map_odom.header.frame_id = 'map'
-        map_odom.child_frame_id = 'odom'
-        map_odom.transform.translation.x = 0.0
-        map_odom.transform.translation.y = 0.0
-        map_odom.transform.translation.z = 0.0
-        map_odom.transform.rotation.x = 0.0
-        map_odom.transform.rotation.y = 0.0
-        map_odom.transform.rotation.z = 0.0
-        map_odom.transform.rotation.w = 1.0
-
-        # odom -> base_link
-        trans = TransformStamped()
-        trans.header.stamp = self.get_clock().now().to_msg()
-        trans.header.frame_id = 'odom'
-        trans.child_frame_id = 'base_link'
-        trans.transform.translation.x = pose.pose.position.x
-        trans.transform.translation.y = pose.pose.position.y
-        trans.transform.translation.z = pose.pose.position.z
-        trans.transform.rotation = pose.pose.orientation
-
-        self.tf_pub.sendTransform([trans, map_odom])
 
 
 def main(args=None):

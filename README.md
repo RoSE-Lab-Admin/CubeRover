@@ -29,7 +29,9 @@ source install/setup.bash
 To launch the waypoint follower run the following
 
 ```
+ros2 launch roseybot_control imu_boot.launch.py
 ros2 launch roseybot_control ros2_control.launch.py
+ros2 launch roseybot_control hardware_startup.launch.py
 ros2 launch nav2_stack waypoint.launch.py
 ```
 
