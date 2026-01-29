@@ -1,8 +1,8 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, TransformStamped
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
-from tf2_ros import TransformBroadcaster
+from rclpy.qos import QoSProfile, DurabilityPolicy
 
 
 import os
@@ -18,18 +18,17 @@ class PosePub(Node):
         self.declare_parameter('num_waypoints', 10.0)
 
         self.csv_file =self.get_parameter('csv_file').value
-        self.rate = self.get_parameter('num_waypoints').value
+        self.num_waypoints = self.get_parameter('num_waypoints').value
 
-        # publisher
-        self.waypoint_pub = self.create_publisher(Path, '/sim_waypoints', 10)
+        # publisher, sends when a subscriber becomes available
+        qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.waypoint_pub = self.create_publisher(Path, '/sim_waypoints', qos)
 
         # read in poses, find waypoints
         self.poses = self.read_pose()
-        self.publish_waypoints()
 
-        # publish poses
-        self.timer = self.create_timer(1.0 / self.rate, self.publish_pose)
-        self.pose_idx = 0
+        # publish the trajectory
+        self.publish_waypoints()
 
 
     def read_pose(self):
@@ -62,8 +61,7 @@ class PosePub(Node):
 
     def publish_waypoints(self):
         # create 10 waypoints
-        waypoint_num = 10
-        idx_skip = int(len(self.poses) / waypoint_num)
+        idx_skip = int(len(self.poses) / self.num_waypoints)
 
         # create path message
         waypoints = Path()

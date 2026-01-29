@@ -54,7 +54,8 @@ def generate_launch_description():
         executable='controller_server',
         name='controller_server',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config],
+        remappings=[('cmd_vel', 'cmd_vel_nav')]
     )
 
     smoother = Node(
@@ -94,7 +95,11 @@ def generate_launch_description():
         executable='velocity_smoother',
         name='velocity_smoother',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config],
+        remappings=[
+            ('cmd_vel', 'cmd_vel_nav'),
+            ('cmd_vel_smoothed', 'cmd_vel')
+        ]
     )
     
     return LaunchDescription([

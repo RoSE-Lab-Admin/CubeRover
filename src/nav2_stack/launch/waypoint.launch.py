@@ -12,15 +12,6 @@ def generate_launch_description():
 
     csv_file = os.path.expanduser('~/CubeRover/sim_data/extracted_data/11172025/11-21-10/pose_data/pose.csv')
 
-    # static transform for simple open loop implementation, change later for closed loop
-    map_odom_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        arguments=['--x', '0', '--y', '0', '--z', '0', 
-                   '--roll', '0', '--pitch', '0', '--yaw', '0', 
-                   '--frame-id', 'map', '--child-frame-id', 'odom']
-    )
-
     pose_pub_node = Node(
         package='nav2_stack',
         executable='pose_pub',
@@ -48,7 +39,6 @@ def generate_launch_description():
     nodes = [
         pose_pub_node,
         path_follower_node, 
-        map_odom_tf
     ]
 
     return LaunchDescription(nodes + [nav2_launch])

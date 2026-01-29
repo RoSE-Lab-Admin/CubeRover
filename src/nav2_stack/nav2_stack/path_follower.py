@@ -1,9 +1,8 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, TwistStamped
-from std_msgs.msg import Bool
 from nav_msgs.msg import Path
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+from rclpy.qos import QoSProfile, DurabilityPolicy
 
 class PathFollower(Node):
     def __init__(self):
@@ -11,7 +10,8 @@ class PathFollower(Node):
         super().__init__('path_follower')
 
         # create subscription
-        self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, 10)
+        qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, qos)
 
         # initialize nav2
         self.nav = BasicNavigator() 
@@ -33,7 +33,7 @@ class PathFollower(Node):
         self.started = True
         
         # wait for nav2 to initialize
-        self.nav.waitUntilNav2Active()
+        self.nav._waitForNodeToActivate('bt_navigator')
         self.get_logger().info('Nav2 is ready')
 
         self.nav.followWaypoints(self.waypoints)

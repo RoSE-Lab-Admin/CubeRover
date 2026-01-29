@@ -10,6 +10,16 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
 
+    # static transform for simple open loop implementation, change later for closed loop
+    map_odom_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=['--x', '0', '--y', '0', '--z', '0', 
+                   '--roll', '0', '--pitch', '0', '--yaw', '0', 
+                   '--frame-id', 'map', '--child-frame-id', 'odom'],
+        parameters=[{'use_sim_time': False}]
+    )
+
     rviz_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
@@ -98,7 +108,8 @@ def generate_launch_description():
         control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
-        robot_controller_spawner
+        robot_controller_spawner,
+        map_odom_tf
     ]
 
     return LaunchDescription(nodes + [gen_urdf, rviz_launch])
