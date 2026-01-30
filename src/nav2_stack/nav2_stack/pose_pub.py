@@ -1,8 +1,9 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import Path
 from rclpy.qos import QoSProfile, DurabilityPolicy
+from tf2_ros import TransformBroadcaster
 
 
 import os
@@ -19,6 +20,10 @@ class PosePub(Node):
 
         self.csv_file =self.get_parameter('csv_file').value
         self.num_waypoints = self.get_parameter('num_waypoints').value
+
+        # transform broadcaster
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.current_odom = None
 
         # publisher, sends when a subscriber becomes available
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)

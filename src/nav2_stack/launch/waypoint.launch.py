@@ -17,7 +17,7 @@ def generate_launch_description():
         executable='pose_pub',
         parameters=[{
             'csv_file': csv_file,
-            'num_waypoints': 10.0
+            'num_waypoints': 100.0
         }]
     )
 
