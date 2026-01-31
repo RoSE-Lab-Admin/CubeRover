@@ -1,14 +1,14 @@
 @pytest.mark.skip(reason="This is an example test")
 def test_hello():
     print("Hello, World!")
-    assert True # Do nothing here
+    assert True # Some assertion here
     
 @pytest.mark.skip(reason="This is an example hardware test")
-@pytest.mark.hardware
+@pytest.mark.hardware # Will use this to mark hardware tests
 def test_example_hardware():
     assert True # Some assertion here
 
 @pytest.mark.skip(reason="This is an example software test")
-@pytest.mark.software
-def test_example_hardware():
+@pytest.mark.software # Will use this to mark software tests
+def test_example_software():
     assert True # Some assertion here
