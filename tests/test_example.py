@@ -1,3 +1,5 @@
+import pytest
+
 @pytest.mark.skip(reason="This is an example test")
 def test_hello():
     print("Hello, World! I'm a software test!")
