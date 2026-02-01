@@ -18,47 +18,91 @@ This repository is configured as a **Dev Container**, providing a fully integrat
 - **Visual Studio Code**: [Download and Install](https://code.visualstudio.com/)
 - **Dev Containers Extension**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 
-### 2. Launch the Environment
+### 2. Choose Your OS & Launch the Environment
+
+> [!WARNING]
+> Ensure the Docker daemon is active before proceeding!
 
 > [!NOTE]
 > The first container startup may take several minutes as dependencies are downloaded.
 
-#### 🪟 Windows Users (WSL 2)
+<details>
+<summary><strong>🪟 Windows Users (WSL 2)</strong></summary>
 
 > [!IMPORTANT]
-> Cloning the repo into the WSL filesystem is strongly recommended.
-> Cloning onto your Windows (C:) drive will significantly slow overall performance.
+> **Performance Warning:** Clone this repo into your **WSL filesystem** (e.g., `\\wsl$\Ubuntu\home\user`).
+> Cloning onto the Windows (C:) drive will kill build performance and cause permission errors.
 
-1. Open your **WSL Terminal** (e.g., Ubuntu).
-2. Clone the repo into the WSL filesystem:
+1. Open a **WSL Terminal** (Ubuntu).
+2. Clone and open:
     ```bash
     git clone https://github.com/RoSE-Lab-Admin/CubeRover.git
     cd CubeRover
     code .
     ```
-3. When VS Code opens, click **Reopen in Container** in the pop-up or via the Command Palette (`Ctrl+Shift+P`).
-    - Ensure you see 'WSL: Ubuntu' in the bottom left corner of VS Code before clicking **Reopen in Container**.
+3. When VS Code opens, check the bottom-left green corner.
+    * If it says **WSL: Ubuntu**, you are good.
+    * Press `Ctrl+Shift+P` and select **Dev Containers: Reopen in Container**.
+</details>
 
-#### 🍎 macOS Users
-1. Install XQuartz: `brew install --cask xquartz`
-2. Open XQuartz, go to **Settings > Security**, and check **"Allow connections from network clients"**.
-3. Restart XQuartz after changing the "Allow connections" setting for the changes to take effect.
-    - XQuartz must be running *before* launching GUI tools.
-4. In your **Mac host terminal**, run: `xhost +localhost`
-    - This command is run on *your Mac host terminal* — not inside the container.
-5. Clone the repo, open in VS Code, and select **Reopen in Container**.
+<details>
+<summary><strong>🍎 macOS Users (M1/M2/Intel)</strong></summary>
 
-#### 🐧 Linux Users
-- No special setup is required. Just clone the repository and open it in VS Code:
+> [!NOTE]
+> **Apple Silicon Note:** Dev Containers automatically handle architecture translation on M1/M2 Macs.  
+> You do *not* need to manually set `--platform linux/amd64`.
+
+**(Optional) One-Time Setup (X11 Forwarding):**
+X11 is required only if the container launches GUI applications (e.g., RViz, Gazebo).
+
+1. Install XQuartz:
+    ```bash
+    brew install --cask xquartz
+    ```
+2. Open XQuartz > **Settings > Security** > Check **"Allow connections from network clients"**.
+3. **Restart XQuartz** (Quit and reopen) for this to take effect.
+
+**Running the Repo:**
+1. Open a **Mac terminal**.
+2. Clone and open:
     ```bash
     git clone https://github.com/RoSE-Lab-Admin/CubeRover.git
     cd CubeRover
     code .
     ```
-- When prompted, select **Reopen in Container**.
-    - Ensure Docker is installed and running on your system, and add your user to the `docker` group:
-    - `sudo usermod -aG docker $USER`.
-    - Log out and back in (or restart your WSL/Linux session) for the change to take effect.
+3. (Optional) Run the command (allows the container to show GUI windows):
+    ```bash
+    xhost +localhost
+    ```
+4. Press `Cmd+Shift+P` and select **Dev Containers: Reopen in Container**.
+</details>
+
+<details>
+<summary><strong>🐧 Linux Users</strong></summary>
+
+1. Open a terminal.
+2. Ensure your user is in the `docker` group (avoids using `sudo`):
+    ```bash
+    sudo usermod -aG docker $USER
+    # Log out and back in for this to take effect!
+    ```
+
+> [!NOTE]
+> If you see an error like “Cannot connect to the Docker daemon” when running `docker ps`,
+> your system may require enabling the Docker service:
+>
+> ```bash
+> sudo systemctl enable --now docker
+> ```
+
+3. Clone and open:
+    ```bash
+    git clone https://github.com/RoSE-Lab-Admin/CubeRover.git
+    cd CubeRover
+    code .
+    ```
+4. Press `Ctrl+Shift+P` and select **Dev Containers: Reopen in Container**.
+</details>
 
 ### 3. First-Time Setup
 Once inside the container, you must build the workspace to generate the setup files.
@@ -73,7 +117,7 @@ Once inside the container, you must build the workspace to generate the setup fi
     ```
 
 > [!NOTE]
-> **Quality of Life:** For all future terminals, the workspace will be **automatically sourced** for you if the build exists!
+> Future terminals inside the container will **automatically** source the workspace if a build exists.
 
 
 ## 📡 Network & Robot Connection
@@ -140,7 +184,7 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
 
 
 ## 🛠️ Troubleshooting
-- **Slow Builds (Windows):** Verify you cloned into `\\wsl$\Ubuntu\home\<user>\...` and NOT `/mnt/c/...`
+- **Slow Builds (Windows):** Verify you cloned into `/home/<user>/...` and NOT `/mnt/c/...`
 - **GUI not appearing (Mac):** Ensure you ran `xhost +localhost` on the Mac host.
 - **Permissions:** The devuser is pre-added to the `dialout` group for serial access. If denied, run `ls -l /dev/ttyUSB*` to check ownership.
 - **Linux Permissions:** Ensure your user is in the `docker` group: `sudo usermod -aG docker $USER`.
