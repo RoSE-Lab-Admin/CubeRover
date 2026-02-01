@@ -1,0 +1,82 @@
+{
+  "name": "CubeRover Dev Container",
+  "initializeCommand": "xhost +localhost || true", // For Mac users
+  // Build options
+  // "build": { "dockerfile": "Dockerfile" }, // Build image locally
+  "image": "docker.io/connorgro/cuberover-dev-jazzy:latest", // Use pre-built image
+  "runArgs": [
+    "--privileged",
+    "--security-opt", "seccomp=unconfined", // Added for DDS/Hardware reliability
+    "--net=host" // Use host network only on Linux/WSL (macOS ignores this)
+  ],
+
+  // ROS Settings
+  "containerEnv": {
+    "ROS_LOCALHOST_ONLY": "0", // Allow talking to nodes on the same network
+    "ROS_DOMAIN_ID": "42", // Change this to assigned ROS_DOMAIN_ID
+    // WSLg: Uses the local DISPLAY. Mac: Fallback to host.docker.internal
+    "DISPLAY": "${localEnv:DISPLAY:-host.docker.internal:0}",
+    "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
+    "XDG_RUNTIME_DIR": "${localEnv:XDG_RUNTIME_DIR}",
+    "QT_X11_NO_MITSHM": "1" // Improves GUI compatibility
+  },
+  
+  // Maintain bash command history between sessions
+  "mounts": [
+    "source=ros2-bash-history,target=/home/devuser/.bash_history,type=volume",
+    // These mounts only work on WSL; Docker on Mac will ignore non-existent paths
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=/mnt/wslg,target=/mnt/wslg,type=bind",
+    // Allows the container to see the /dev folder where hardware lives
+    "source=/dev,target=/dev,type=bind" 
+  ],
+
+  // VS Code customization settings
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "Ranch-Hand-Robotics.rde-pack",
+        "redhat.vscode-xml"
+      ],
+      "settings": {
+        // Performance optimizations to avoid hogging the CPU for parsing files
+        "C_Cpp.workspaceParsingPriority": "low",
+        "C_Cpp.indexing.maxConcurrentThreads": 1,
+        "C_Cpp.exclusionPolicy": "checkFilesAndFolders",
+        "C_Cpp.intelliSenseCacheSize": 512,
+        "C_Cpp.default.browse.path": [ "${workspaceFolder}" ],
+        "C_Cpp.default.browse.limitSymbolsToIncludedHeaders": true,
+
+        // Prevent parsers from analysing ROS 2 build artifacts
+        "files.watcherExclude": {
+          "**/build/**": true, 
+          "**/install/**": true, 
+          "**/log/**": true, 
+          "**/.git/**": true, 
+          "**/.ros/**": true
+        },
+        "C_Cpp.files.exclude": {
+          "**/build/**": true, 
+          "**/install/**": true, 
+          "**/log/**": true, 
+          "**/.git/**": true, 
+          "**/.ros/**": true
+        },
+        "python.analysis.exclude": [
+          "**/build/**", 
+          "**/install/**", 
+          "**/log/**", 
+          "**/.git/**", 
+          "**/.ros/**"
+        ],
+
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "cmake.configureOnOpen": false,
+        "search.followSymlinks": false
+      }
+    }
+  },
+  "remoteUser": "devuser",
+  "postCreateCommand": "sudo apt-get update && rosdep install --from-paths src -y --ignore-src || true" // true to ensure no error if src empty
+}

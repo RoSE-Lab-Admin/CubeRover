@@ -59,5 +59,27 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
+if(BUILD_TESTING)
+  # --- AUTOMATED C++ TEST DISCOVERY ---
+  find_package(ament_cmake_gtest REQUIRED)
+  file(GLOB TEST_SOURCES "test/*.cpp")
+  foreach(TEST_FILE ${TEST_SOURCES})
+    get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
+    
+    # Create the executable
+    ament_add_gtest(${TEST_NAME} ${TEST_FILE})
+    
+    # Link to the robot library and ROS 2 core
+    target_link_libraries(${TEST_NAME} roseybot_arduino)
+  endforeach()
+
+  # --- AUTOMATED PYTHON TEST DISCOVERY ---
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(all_python_tests test/)
+
+  # --- LINTER (DISABLE FOR NOW) ---
+  # find_package(ament_lint_auto REQUIRED)
+  # ament_lint_auto_find_test_dependencies()
+endif()
 
 ament_package()
