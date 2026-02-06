@@ -1,6 +1,6 @@
 {
   "name": "CubeRover Dev Container",
-  "initializeCommand": "xhost +localhost || true", // For Mac users
+  "initializeCommand": "xhost +localhost || true", // For Mac users. It is expected that this command will not be found on Windows / Linux systems.
   // Build options
   // "build": { "dockerfile": "Dockerfile" }, // Build image locally
   "image": "docker.io/connorgro/cuberover-dev-jazzy:latest", // Use pre-built image
