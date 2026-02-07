@@ -4,6 +4,7 @@ log/
 .vscode
 venv/
 src/.vscode
+ros_bags/
 
 
 devel/
