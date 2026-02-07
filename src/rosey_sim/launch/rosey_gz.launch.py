@@ -37,11 +37,17 @@ def generate_launch_description():
     ])
 
     gz = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
             FindPackageShare('ros_gz_sim'),
-            '/launch/gz_sim.launch.py'
-        ]),
-        launch_arguments={'gz_args':['-r',world_path]}.items(),
+            'launch',
+            'gz_sim.launch.py'
+            ])
+        ),
+        #launch_arguments={'gz_args':['-r',world_path]}.items(),
+        launch_arguments={
+            'gz_args': ['-r ', world_path]
+        }.items(),
     )
 
     # spawn robot
@@ -65,7 +71,7 @@ def generate_launch_description():
 
     ros_gz_bridge = Node(
         package='ros_gz_bridge',
-        executable='parameter',
+        executable='parameter_bridge',
         parameters=[{'config_file': bridge_config, 'use_sim_time':True}],
         output='screen',
     )

@@ -12,7 +12,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/rosey_gz.launch.py']),
         ('share/' + package_name + '/worlds', ['worlds/world.world']),
-        ('share/' + package_name + '/config', ['config/rosey_gz_bridge.yaml']),
+        ('share/' + package_name + '/config', ['config/ros_gz_bridge.yaml']),
 
     ],
     install_requires=['setuptools'],
