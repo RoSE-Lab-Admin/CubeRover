@@ -6,7 +6,7 @@ import pytest
 @pytest.mark.hardware
 def test_bag():
     # set paths
-    bag_dir = Path("/mnt/d/ros-bags")
+    bag_dir = Path("/mnt/d/ros_bags")
     script_path = Path(__file__).resolve().parent/"bag_topics.py"
 
     # set bash script variables
