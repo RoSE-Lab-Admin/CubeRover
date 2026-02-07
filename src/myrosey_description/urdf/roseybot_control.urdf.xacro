@@ -36,7 +36,7 @@
 
     <gazebo>
         <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-            <parameters>$(find myrosey_description)/config/controllers.yaml</parameters>
+            <parameters>$(find myrosey_description)/urdf/controllers.yaml</parameters>
             <ros>
                 <remapping>/roseybot_teensy/cmd_vel_unstamped:=/cmd_vel</remapping>
             </ros>
