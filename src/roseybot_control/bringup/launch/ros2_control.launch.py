@@ -10,30 +10,30 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
 
-    # static transform for simple open loop implementation, change later for closed loop
+    # static transform for map -> odom because ACML not being used
     map_odom_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         arguments=['--x', '0', '--y', '0', '--z', '0', 
                    '--roll', '0', '--pitch', '0', '--yaw', '0', 
                    '--frame-id', 'map', '--child-frame-id', 'odom'],
-        parameters=[{'use_sim_time': False}]
+        parameters=[{'use_sim_time': True}]
     )
 
-    rviz_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([
-                FindPackageShare('roseybot_control'),
-                'bringup',
-                'launch',
-                'rviz.launch.py'
-            ])
-        ),
-        launch_arguments={
-            'use_sim_time': 'true',
-            'robot_name': 'roseybot'
-        }.items()
-    )
+    # rviz_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         PathJoinSubstitution([
+    #             FindPackageShare('roseybot_control'),
+    #             'bringup',
+    #             'launch',
+    #             'rviz.launch.py'
+    #         ])
+    #     ),
+    #     launch_arguments={
+    #         'use_sim_time': 'true',
+    #         'robot_name': 'roseybot'
+    #     }.items()
+    # )
 
     path_to_urdf = PathJoinSubstitution([
             FindPackageShare('roseybot_control'),
@@ -113,4 +113,4 @@ def generate_launch_description():
         map_odom_tf
     ]
 
-    return LaunchDescription(nodes + [gen_urdf, rviz_launch])
+    return LaunchDescription(nodes + [gen_urdf])

@@ -2,7 +2,7 @@ bt_navigator:
   ros__parameters:
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /roseybot_base_controller/odom
+    odom_topic: /odometry/filtered
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -23,7 +23,7 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
     failure_tolerance: 0.3
-    odom_topic: /roseybot_base_controller/odom
+    odom_topic: /odometry/filtered
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
@@ -287,7 +287,7 @@ velocity_smoother:
     min_velocity: [-0.5, 0.0, -2.5]
     max_accel: [0.3, 0.3, 3.2]
     max_decel: [-0.5, -0.5, -3.2]
-    odom_topic: /roseybot_base_controller/odom
+    odom_topic: /odometry/filtered
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
@@ -295,7 +295,7 @@ velocity_smoother:
 
 lifecycle_manager_navigation:
   ros__parameters:
-    use_sim_time: False
+    use_sim_time: True
     autostart: true
     node_names: ['map_server', 'planner_server', 'controller_server', 'smoother_server', 
                  'behavior_server', 'bt_navigator', 'waypoint_follower', 'velocity_smoother']

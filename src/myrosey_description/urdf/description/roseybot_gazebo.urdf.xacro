@@ -8,9 +8,9 @@
             <right_joint>back_right_wheel_joint</right_joint>
             <wheel_seperation>0.315</wheel_seperation>
             <wheel_radius>0.1515</wheel_radius>
-            <odom_publish_frequency>50</odom_publish_frequency>
+            <publish_odom_tf>false</publish_odom_tf>
             <topic>cmd_vel</topic> <!-- check it will work with twiststamped! -->
-            <odom_topic>odom</odom_topic> <!--not correct, figure out where to get odometry data-->
+            <odom_topic>/roseybot_base_controller/odom</odom_topic> 
             <frame_id>odom</frame_id>
             <child_frame_id>base_link</child_frame_id> <!-- make sure nothing else conflicts with this!-->
         </plugin>

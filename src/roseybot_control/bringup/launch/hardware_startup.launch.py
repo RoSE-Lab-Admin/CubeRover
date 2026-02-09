@@ -6,7 +6,6 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
 
-    imu_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'bno055.yaml')
     ekf_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'ekf.yaml')
 
     robot_localization_node = Node(
