@@ -16,4 +16,7 @@
     name="roseybot" prefix="$(arg prefix)" use_mock_hardware="$(arg use_mock_hardware)"/> -->
   <xacro:include filename="$(find myrosey_description)/urdf/description/roseybot_gazebo.urdf.xacro" />
 
+  <!-- Import Sensors-->
+  <xacro:include filename="$(find myrosey_description)/urdf/description/roseybot_sensors.urdf.xacro" />
+  
 </robot>
