@@ -78,13 +78,15 @@ def generate_launch_description():
         output="both",
     )
 
-    robot_state_pub_node = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
-        name="robot_state_publisher",
-        output="both",
-        parameters=[robot_description],
-    )
+    # commented out to avoid conflicts with gazebo sim
+
+    # robot_state_pub_node = Node(
+    #     package="robot_state_publisher",
+    #     executable="robot_state_publisher",
+    #     name="robot_state_publisher",
+    #     output="both",
+    #     parameters=[robot_description],
+    # )
 
     joint_state_broadcaster_spawner = Node(
         package="controller_manager",
@@ -106,7 +108,6 @@ def generate_launch_description():
 
     nodes = [
         control_node,
-        robot_state_pub_node,
         joint_state_broadcaster_spawner,
         robot_controller_spawner,
         map_odom_tf
