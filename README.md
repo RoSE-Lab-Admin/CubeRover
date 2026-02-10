@@ -13,8 +13,9 @@ ROS Source Build files for the RoSE Lab CubeRover
 This repository is configured as a **Dev Container**, providing a fully integrated environment for ROS 2 Jazzy.
 
 ### 1. Prerequisites
-- **Docker Desktop**: [Download and Install](https://www.docker.com)
+- **Docker**: [Download and Install](https://www.docker.com)
   - *Windows Users:* Ensure **"Use the WSL 2 based engine"** is enabled in Settings.
+  - *Linux Users:* Using the **Native Docker Engine** (server version) instead of Docker Desktop is recommended. See Step 2 Linux instructions for details.
 - **Visual Studio Code**: [Download and Install](https://code.visualstudio.com/)
 - **Dev Containers Extension**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 
@@ -80,12 +81,24 @@ X11 is required only if the container launches GUI applications (e.g., RViz, Gaz
 <details>
 <summary><strong>🐧 Linux Users</strong></summary>
 
-1. Open a terminal.
-2. Ensure your user is in the `docker` group (avoids using `sudo`):
-    ```bash
-    sudo usermod -aG docker $USER
-    # Log out and back in for this to take effect!
-    ```
+#### **Option A: Native Docker Engine (Highly Recommended)**
+Using the **Native Docker Engine** (server version) is **strongly recommended** instead of Docker Desktop. 
+* **Why:** It connects directly to the Linux kernel, allowing immediate access to USB hardware (`/dev`) and GUI displays without complex configuration.
+* **Setup:**
+    1. Install Docker Engine: [Official Guide](https://docs.docker.com/engine/install/ubuntu/)
+    2. Add your user to the docker group (avoids `sudo`):
+       ```bash
+       sudo usermod -aG docker $USER
+       # Log out and log back in for this to take effect!
+       ```
+
+#### **Option B: Docker Desktop for Linux**
+If you use Docker Desktop, you **must** configure file sharing because it runs inside a virtual machine.
+* **Configuration:**
+    1. Open **Docker Desktop Dashboard > Settings > Resources > File Sharing**.
+    2. Add the path: `/tmp` (This allows X11 GUI apps to work).
+    3. Click **Apply & Restart**.
+* **Warning:** Hardware access (USB/Serial) is often restricted in Docker Desktop. If you cannot access the robot, switch to Option A.
 
 > [!NOTE]
 > If you see an error like “Cannot connect to the Docker daemon” when running `docker ps`,
@@ -95,13 +108,17 @@ X11 is required only if the container launches GUI applications (e.g., RViz, Gaz
 > sudo systemctl enable --now docker
 > ```
 
-3. Clone and open:
+#### **Launch the Environment**
+1. Clone and open:
     ```bash
     git clone https://github.com/RoSE-Lab-Admin/CubeRover.git
     cd CubeRover
     code .
     ```
-4. Press `Ctrl+Shift+P` and select **Dev Containers: Reopen in Container**.
+2. Press `Ctrl+Shift+P` and select **Dev Containers: Reopen in Container**.
+
+> [!TIP]
+> **Hardware Support:** If you are using Option A (Native Docker), USB devices (`/dev/ttyUSB*`) are automatically visible inside the container. You do not need extra configuration.
 </details>
 
 ### 3. First-Time Setup
@@ -181,6 +198,9 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
 #### 🍎 macOS
 - Ensure your Mac host has the necessary drivers (CH340/CP210x).
 - **Docker Desktop 4.35+** includes experimental USB passthrough, but many serial microcontrollers are not yet supported. If unsupported, use `socat` to bridge the serial port.
+
+#### 🐧 Linux (Native Docker)
+- **Plug and Play:** Native Docker passes `/dev` devices automatically. No setup required.
 
 
 ## 🛠️ Troubleshooting
