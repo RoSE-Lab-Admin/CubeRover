@@ -6,7 +6,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
 
 
-import os
+import time
 import csv
 from datetime import datetime
 
@@ -17,6 +17,7 @@ class PosePub(Node):
         # parameters
         self.declare_parameter('csv_file', 'sim_data/extracted_data/11172025/11-21-10/pose_data/pose.csv')
         self.declare_parameter('num_waypoints', 10.0)
+        self.declare_parameter('use_sim_time', True)
 
         self.csv_file =self.get_parameter('csv_file').value
         self.num_waypoints = self.get_parameter('num_waypoints').value
