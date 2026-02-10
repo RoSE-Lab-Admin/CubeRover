@@ -37,7 +37,7 @@ RUN rosdep init || true
 
 # Switch to devuser
 USER $USERNAME
-ENV SHELL /bin/bash
+ENV SHELL=/bin/bash
 
 # Update rosdep as devuser
 RUN rosdep update

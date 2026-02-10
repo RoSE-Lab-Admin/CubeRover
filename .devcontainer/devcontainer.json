@@ -16,17 +16,15 @@
     "ROS_DOMAIN_ID": "42", // Change this to assigned ROS_DOMAIN_ID
     // WSLg: Uses the local DISPLAY. Mac: Fallback to host.docker.internal
     "DISPLAY": "${localEnv:DISPLAY:-host.docker.internal:0}",
-    "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
-    "XDG_RUNTIME_DIR": "${localEnv:XDG_RUNTIME_DIR}",
-    "QT_X11_NO_MITSHM": "1" // Improves GUI compatibility
+    "QT_X11_NO_MITSHM": "1", // Critical for GUI apps to not crash
+    "HISTFILE": "/commandhistory/.bash_history" // Tells bash where to look
   },
   
   // Maintain bash command history between sessions
   "mounts": [
-    "source=ros2-bash-history,target=/home/devuser/.bash_history,type=volume",
+    "source=ros2-bash-history,target=/commandhistory,type=volume",
     // These mounts only work on WSL; Docker on Mac will ignore non-existent paths
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
-    "source=/mnt/wslg,target=/mnt/wslg,type=bind",
     // Allows the container to see the /dev folder where hardware lives
     "source=/dev,target=/dev,type=bind" 
   ],
