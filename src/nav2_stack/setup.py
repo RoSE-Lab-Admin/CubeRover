@@ -30,7 +30,8 @@ setup(
     entry_points={
         'console_scripts': [
             'path_follower = nav2_stack.path_follower:main',
-            'pose_pub = nav2_stack.pose_pub:main'
+            'pose_pub = nav2_stack.pose_pub:main',
+            'test_end_to_end = nav2_stack.test_end_to_end:main'
         ],
     },
 )
