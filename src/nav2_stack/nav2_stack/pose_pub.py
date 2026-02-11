@@ -33,8 +33,8 @@ class PosePub(Node):
         # read in poses, find waypoints
         self.poses = self.read_pose()
 
-        # publish the trajectory
-        self.publish_waypoints()
+        # publish after a delay to allow DDS discovery to complete
+        self.pub_timer = self.create_timer(2.0, self.publish_waypoints)
 
 
     def read_pose(self):
@@ -66,6 +66,8 @@ class PosePub(Node):
         return poses
 
     def publish_waypoints(self):
+        self.pub_timer.cancel()
+
         # create 10 waypoints
         idx_skip = int(len(self.poses) / self.num_waypoints)
 

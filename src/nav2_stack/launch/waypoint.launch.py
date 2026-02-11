@@ -17,13 +17,17 @@ def generate_launch_description():
         executable='pose_pub',
         parameters=[{
             'csv_file': csv_file,
-            'num_waypoints': 100.0
+            'num_waypoints': 100.0,
+            'use_sim_time': True
         }]
     )
 
     path_follower_node = Node(
         package='nav2_stack',
         executable='path_follower',
+        parameters=[{
+            'use_sim_time': True
+        }]
     )
 
     nav2_launch = IncludeLaunchDescription(

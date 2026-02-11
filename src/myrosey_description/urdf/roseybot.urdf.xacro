@@ -7,8 +7,6 @@
   <xacro:include filename="$(find myrosey_description)/urdf/description/roseybot_colors.urdf.xacro" />
 
   <xacro:include filename="$(find myrosey_description)/urdf/description/roseybot_description.urdf.xacro"/>
-  <!-- Import diffbot ros2_control description -->
-  <xacro:include filename="$(find myrosey_description)/urdf/roseybot_control.urdf.xacro" />
 
   <!-- <xacro:roseybot prefix="$(arg prefix)" /> -->
 
