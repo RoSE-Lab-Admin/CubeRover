@@ -6,21 +6,13 @@ from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
 
 
-import time
+import math
 import csv
 from datetime import datetime
 
 class PosePub(Node):
     def __init__(self):
         super().__init__('pose_pub')
-
-        # parameters
-        self.declare_parameter('csv_file', 'sim_data/extracted_data/11172025/11-21-10/pose_data/pose.csv')
-        self.declare_parameter('num_waypoints', 10.0)
-        self.declare_parameter('use_sim_time', True)
-
-        self.csv_file =self.get_parameter('csv_file').value
-        self.num_waypoints = self.get_parameter('num_waypoints').value
 
         # transform broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -30,58 +22,50 @@ class PosePub(Node):
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.waypoint_pub = self.create_publisher(Path, '/sim_waypoints', qos)
 
-        # read in poses, find waypoints
-        self.poses = self.read_pose()
+        # create list of waypoints
+        self.poses = self.gen_poses()
 
         # publish after a delay to allow DDS discovery to complete
         self.pub_timer = self.create_timer(2.0, self.publish_waypoints)
 
-
-    def read_pose(self):
+    def gen_poses(self):
+        # initialize list of poses
         poses = []
-        try:
-            with open(self.csv_file, 'r') as f:
-                reader = csv.reader(f)
-                next(reader)
 
-                for row in reader:
+        # generate a few different pose messages
+        x = 0.0
+        y = 0.0
+        yaw = 0.0
+        for i in range(5):
+            # step forward BEFORE creating the pose (skip the origin)
+            x += 2.0 * math.cos(yaw)
+            y += 2.0 * math.sin(yaw)
 
-                    pose = PoseStamped()
+            pose = PoseStamped()
+            pose.header.stamp = self.get_clock().now().to_msg()
+            pose.header.frame_id = 'map'
+            pose.pose.position.x = x
+            pose.pose.position.y = y
+            pose.pose.orientation.z = math.sin(yaw/2.0)
+            pose.pose.orientation.w = math.cos(yaw/2.0)
+            poses.append(pose)
 
-                    pose.header.stamp = self.get_clock().now().to_msg()
-                    pose.header.frame_id = 'map'
-                    pose.pose.position.x = float(row[2])
-                    pose.pose.position.y = float(row[3])
-                    pose.pose.position.z = float(row[4])
-                    pose.pose.orientation.x = float(row[5])
-                    pose.pose.orientation.y = float(row[6])
-                    pose.pose.orientation.z = float(row[7])
-                    pose.pose.orientation.w = float(row[8])
-
-                    poses.append(pose)
-
-        except Exception as e:
-            self.get_logger().info(e)
+            # update yaw for the next segment
+            yaw -= math.pi/2.0
 
         return poses
 
+
     def publish_waypoints(self):
         self.pub_timer.cancel()
-
-        # create 10 waypoints
-        idx_skip = int(len(self.poses) / self.num_waypoints)
 
         # create path message
         waypoints = Path()
         waypoints.header.stamp = self.get_clock().now().to_msg()
         waypoints.header.frame_id = 'map'
 
-        waypoints.poses.append(self.poses[0])
-        prev_idx = 0
         for idx in range(len(self.poses)):
-            if idx - prev_idx == idx_skip:
-                waypoints.poses.append(self.poses[idx])
-                prev_idx = idx
+            waypoints.poses.append(self.poses[idx])
 
         # publish waypoints as a path message
         self.waypoint_pub.publish(waypoints)
