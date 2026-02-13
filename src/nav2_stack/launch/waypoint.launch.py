@@ -25,9 +25,8 @@ def generate_launch_description():
     path_follower_node = Node(
         package='nav2_stack',
         executable='path_follower',
-        parameters=[{
-            'use_sim_time': True
-        }]
+        parameters=[{'use_sim_time': True},
+                    {'use_opti': True}]
     )
 
     nav2_launch = IncludeLaunchDescription(

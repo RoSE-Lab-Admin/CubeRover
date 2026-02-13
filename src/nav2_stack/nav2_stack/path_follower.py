@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Path
+from geometry_msgs.msg import Pose
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 
@@ -9,39 +10,60 @@ class PathFollower(Node):
 
         super().__init__('path_follower')
 
-        # create subscription
+        # parameters
+        self.declare_parameter('use_opti', True)
+        use_opti = self.get_parameter('use_opti')
+
+        # create subscriptionas
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, qos)
+        # subscribe to ground truth
+        if use_opti:
+            self.opti_sub = self.create_subscription(Pose, '/opti_pose', self.opti_callback, 10)
 
         # initialize nav2
         self.nav = BasicNavigator() 
 
         self.waypoints = []
 
+        # state trackers
+        self.nav2_ready = False
         self.started = False
+
         self.timer = self.create_timer(0.5, self.follow_waypoints)
 
     def waypoint_callback(self, trajectory):
         # path message with list of posestamped waypoints
         self.waypoints = trajectory.poses
 
+    def opti_callback(self, msg):
+        pass
+
 
     def follow_waypoints(self):
-        if self.started or len(self.waypoints) == 0:
+        # if no path received yet
+        if len(self.waypoints) == 0:
             return
         
-        self.started = True
-        
         # wait for nav2 to initialize
-        self.nav._waitForNodeToActivate('bt_navigator')
-        self.get_logger().info('Nav2 is ready')
+        if not self.nav2_ready:
+            self.nav._waitForNodeToActivate('bt_navigator')
+            self.nav2_ready = True
 
-        self.nav.followWaypoints(self.waypoints)
+        # start navigating
+        if not self.started:
+            self.nav.followWaypoints(self.waypoints)
+            self.started = True
+            return
 
-        while not self.nav.isTaskComplete():
-            rclpy.spin_once(self, timeout_sec=0.1)
+        # check to see if task has completed
+        if not self.nav.isTaskComplete():
+            return
 
         result = self.nav.getResult()
+
+        # reset 
+        self.started = False
 
         if result == TaskResult.SUCCEEDED:
             self.get_logger().info("trajectory completed")
