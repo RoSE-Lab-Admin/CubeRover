@@ -41,9 +41,10 @@ target_link_libraries(roseybot_arduino PUBLIC serial)
 
 pluginlib_export_plugin_description_file(hardware_interface roseybot_arduino.xml)
 
-#install compiled library
+# install compiled library
 install(
-  DIRECTORY hardware/include
+  # note: backslash after "include" ensures contents of the folder are copied (rather than the folder itself)
+  DIRECTORY hardware/include/
   DESTINATION include/roseybot_arduino
 )
 
@@ -59,6 +60,7 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
+# check whether to build tests
 if(BUILD_TESTING)
   # --- AUTOMATED C++ TEST DISCOVERY ---
   find_package(ament_cmake_gtest REQUIRED)
@@ -81,5 +83,9 @@ if(BUILD_TESTING)
   # find_package(ament_lint_auto REQUIRED)
   # ament_lint_auto_find_test_dependencies()
 endif()
+
+# export dependencies so that donwstream packages know that they are needed
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
+ament_export_targets(export_roseybot_arduino HAS_LIBRARY_TARGET)
 
 ament_package()
