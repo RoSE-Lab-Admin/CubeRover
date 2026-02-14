@@ -1,6 +1,7 @@
 #ifndef WHEEL_HPP
 #define WHEEL_HPP
 
+#include <stdexcept>
 #include <string>
 #include <cmath>
 
@@ -24,6 +25,11 @@ class wheel {
 
 
 wheel::wheel(float enc_count_per_rev) {
+    // Prevent bad data from entering
+    if (enc_count_per_rev <= 0.0) {
+        throw std::invalid_argument("Encoder counts per rev must be positive and non-zero.");
+    }
+
     rads_per_ct_ = (2 * M_PI) / enc_count_per_rev;
 }
 
@@ -46,7 +52,8 @@ void wheel::updateVolt(int mVolt){
 }
 
 int wheel::cmd_to_enc() {
-    return static_cast<int>(cmd_ / rads_per_ct_);
+    // round to nearest encoder count rather than truncating
+    return std::lround(cmd_ / rads_per_ct_);
 }
 
 
