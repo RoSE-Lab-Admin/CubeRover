@@ -28,8 +28,8 @@ add_library(
 
 target_compile_features(roseybot_arduino PUBLIC cxx_std_17)
 target_include_directories(roseybot_arduino PUBLIC
-$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/hardware/include>
-$<INSTALL_INTERFACE:include/roseybot_arduino>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/hardware/include>
+  $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(
   roseybot_arduino PUBLIC
@@ -45,7 +45,7 @@ pluginlib_export_plugin_description_file(hardware_interface roseybot_arduino.xml
 install(
   # note: backslash after "include" ensures contents of the folder are copied (rather than the folder itself)
   DIRECTORY hardware/include/
-  DESTINATION include/roseybot_arduino
+  DESTINATION include
 )
 
 install(TARGETS roseybot_arduino
