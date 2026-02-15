@@ -1,6 +1,5 @@
 import os
 
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -17,16 +16,6 @@ def generate_launch_description():
                    '--roll', '0', '--pitch', '0', '--yaw', '0', 
                    '--frame-id', 'map', '--child-frame-id', 'odom'],
         parameters=[{'use_sim_time': True}]
-    )
-
-    ekf_params = os.path.join(get_package_share_directory('rosey_sim'), 'config', 'ekf.yaml')
-
-    robot_localization_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
-        output='screen',
-        parameters=[ekf_params, {'use_sim_time': True}],
     )
 
     relay_node = Node(
@@ -106,7 +95,7 @@ def generate_launch_description():
     return LaunchDescription([
         map_odom_tf,
         relay_node,
-        robot_localization_node,
+
         robot_state_pub,
         gz,
         spawn_robot,

@@ -1,7 +1,9 @@
 import rclpy
 from rclpy.node import Node
-from nav_msgs.msg import Path
-from geometry_msgs.msg import Pose, TransformStamped
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
@@ -13,15 +15,19 @@ class PathFollower(Node):
 
         # parameters
         self.declare_parameter('use_opti', True)
-        use_opti = self.get_parameter('use_opti')
+        use_opti = self.get_parameter('use_opti').value
 
-        # create subscriptionas
+        # create callback group so it can execute while nav2 blocks
+        self.opti_group = ReentrantCallbackGroup()
+
+        # create subscriptions
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, qos)
         # subscribe to ground truth
         if use_opti:
-            self.opti_sub = self.create_subscription(Pose, '/opti_pose', self.opti_callback, 10)
+            self.opti_sub = self.create_subscription(PoseStamped, '/opti_pose', self.opti_callback, 10, callback_group=self.opti_group)
             self.odom_trans = TransformBroadcaster(self)
+            self.odom_pub = self.create_publisher(Odometry, '/odometry/filtered', 10)
 
         # initialize nav2
         self.nav = BasicNavigator() 
@@ -40,22 +46,32 @@ class PathFollower(Node):
 
     # callback for if opti mode is being used
     def opti_callback(self, msg):
-        # intiate transform message
+        self.rec_pose = True
+
+        stamp = self.get_clock().now().to_msg()
+
+        # broadcast ground truth odom -> base_link transform
         trans = TransformStamped()
-        trans.header.stamp = self.get_clock().now().to_msg()
+        trans.header.stamp = stamp
         trans.header.frame_id = 'odom'
         trans.child_frame_id = 'base_link'
-
-        # populate transform message with pose data
         trans.transform.translation.x = msg.pose.position.x
         trans.transform.translation.y = msg.pose.position.y
         trans.transform.translation.z = msg.pose.position.z
         trans.transform.rotation = msg.pose.orientation
-
-        # broadcast transform
         self.odom_trans.sendTransform(trans)
 
+        # publish ground truth as odometry for nav2
+        odom = Odometry()
+        odom.header.stamp = stamp
+        odom.header.frame_id = 'odom'
+        odom.child_frame_id = 'base_link'
+        odom.pose.pose = msg.pose
+        self.odom_pub.publish(odom)
+
     def follow_waypoints(self):
+        
+        # if using opti mode, dont run until transforms are being published
         # if no path received yet
         if len(self.waypoints) == 0:
             return
@@ -92,7 +108,9 @@ class PathFollower(Node):
 def main(args=None):
     rclpy.init()
     path_follower = PathFollower()
-    rclpy.spin(path_follower)
+    executor = MultiThreadedExecutor()
+    executor.add_node(path_follower)
+    executor.spin()
     rclpy.shutdown()
 
 if __name__ == '__main__':
