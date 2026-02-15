@@ -1,9 +1,10 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Path
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, TransformStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
+from tf2_ros import TransformBroadcaster
 
 class PathFollower(Node):
     def __init__(self):
@@ -20,6 +21,7 @@ class PathFollower(Node):
         # subscribe to ground truth
         if use_opti:
             self.opti_sub = self.create_subscription(Pose, '/opti_pose', self.opti_callback, 10)
+            self.odom_trans = TransformBroadcaster(self)
 
         # initialize nav2
         self.nav = BasicNavigator() 
@@ -36,9 +38,22 @@ class PathFollower(Node):
         # path message with list of posestamped waypoints
         self.waypoints = trajectory.poses
 
+    # callback for if opti mode is being used
     def opti_callback(self, msg):
-        pass
+        # intiate transform message
+        trans = TransformStamped()
+        trans.header.stamp = self.get_clock().now().to_msg()
+        trans.header.frame_id = 'odom'
+        trans.child_frame_id = 'base_link'
 
+        # populate transform message with pose data
+        trans.transform.translation.x = msg.pose.position.x
+        trans.transform.translation.y = msg.pose.position.y
+        trans.transform.translation.z = msg.pose.position.z
+        trans.transform.rotation = msg.pose.orientation
+
+        # broadcast transform
+        self.odom_trans.sendTransform(trans)
 
     def follow_waypoints(self):
         # if no path received yet
