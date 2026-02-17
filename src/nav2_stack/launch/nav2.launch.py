@@ -5,6 +5,13 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
+
+    bt_xml = PathJoinSubstitution([
+        FindPackageShare('nav2_stack'),
+        'behavior_trees',
+        'navigate_recovery.xml'
+    ])
+
     nav2_config = PathJoinSubstitution([
         FindPackageShare('nav2_stack'),
         'config',
@@ -89,7 +96,9 @@ def generate_launch_description():
         name='bt_navigator',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': True,
+            'default_nav_to_pose_bt_xml': bt_xml,
+            'default_nav_through_poses_bt_xml': bt_xml
         }]
     )
     
