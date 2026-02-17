@@ -70,7 +70,7 @@ Bridged topics are configured in `config/ros_gz_bridge.yaml`. All topics are bri
 - `/imu` -> Imu
 - `/roseybot_base_controller/odom_raw` -> Odometry
 - `/joint_states` -> JointState
-- `/opti_pose` -> PoseStamped
+- `/CubeRover_V1/pose` -> PoseStamped
 - `/clock` -> Clock
 
 ### nav2_stack
@@ -115,7 +115,7 @@ Decsription: Wheel odometry data with covariance
 Type: nav_msgs/msg/Odometry
 Description: Filtered from roseybot_base_controller/odom and /imu using EKF
 
-/opti_pose
+/CubeRover_V1/pose
 Type: geometry_msgs/msg/PoseStamped
 Description: Ground truth pose from Gazebo
 

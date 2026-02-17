@@ -25,7 +25,7 @@ class PathFollower(Node):
         self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, qos)
         # subscribe to ground truth
         if use_opti:
-            self.opti_sub = self.create_subscription(PoseStamped, '/opti_pose', self.opti_callback, 10, callback_group=self.opti_group)
+            self.opti_sub = self.create_subscription(PoseStamped, '/CubeRover_V1/pose', self.opti_callback, 10, callback_group=self.opti_group)
             self.odom_trans = TransformBroadcaster(self)
             self.odom_pub = self.create_publisher(Odometry, '/odometry/filtered', 10)
 

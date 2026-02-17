@@ -29,7 +29,7 @@
   gz_type_name: gz.msgs.Model
   direction: GZ_TO_ROS
 
-- ros_topic_name: /opti_pose
+- ros_topic_name: /CubeRover_V1/pose
   gz_topic_name: /model/roseybot/pose
   ros_type_name: geometry_msgs/msg/PoseStamped
   gz_type_name: gz.msgs.Pose
