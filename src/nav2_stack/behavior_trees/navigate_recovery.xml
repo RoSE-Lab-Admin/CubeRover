@@ -1,10 +1,10 @@
 <root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
-      
+    <RecoveryNode number_of_retries="3" name="NavigateRecovery">
+
       <!-- Main navigation pipeline -->
       <PipelineSequence name="NavigateWithReplanning">
-        <RateController hz="1.0">
+        <RateController hz="0.5">
           <RecoveryNode number_of_retries="1" name="ComputePathRecovery">
             <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
             <ClearEntireCostmap name="ClearGlobalCostmap-Context"
@@ -19,22 +19,32 @@
         </RecoveryNode>
 
       </PipelineSequence>
-      
-      <!-- Recovery behaviors when navigation fails -->
+
+      <!-- Recovery behaviors - escalates through actions one at a time -->
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
-        <Sequence name="RecoveryActions">
-          <ClearEntireCostmap name="ClearLocalCostmap-Recovery" 
-                              service_name="local_costmap/clear_entirely_local_costmap"/>
-          <ClearEntireCostmap name="ClearGlobalCostmap-Recovery" 
-                              service_name="global_costmap/clear_entirely_global_costmap"/>
-          <Spin spin_dist="1.57"/>  <!-- 90 degrees -->
-          <Wait wait_duration="5"/>
-          <BackUp backup_dist="0.30" backup_speed="-0.10"/>
-        </Sequence>
+        <RoundRobin name="RecoveryActions">
+          <!-- Attempt 1: Just clear costmaps and retry -->
+          <Sequence name="ClearingRecovery">
+            <ClearEntireCostmap name="ClearLocalCostmap-Recovery"
+                                service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Recovery"
+                                service_name="global_costmap/clear_entirely_global_costmap"/>
+            <Wait wait_duration="2"/>
+          </Sequence>
+          <!-- Attempt 2: Back up to free itself -->
+          <Sequence name="BackupRecovery">
+            <BackUp backup_dist="0.10" backup_speed="-0.10"/>
+            <Wait wait_duration="2"/>
+          </Sequence>
+          <!-- Attempt 3: Spin to reorient and rescan -->
+          <Sequence name="SpinRecovery">
+            <Spin spin_dist="0.262"/>
+            <Wait wait_duration="2"/>
+          </Sequence>
+        </RoundRobin>
       </ReactiveFallback>
-      
+
     </RecoveryNode>
   </BehaviorTree>
 </root>
-
