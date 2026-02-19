@@ -5,6 +5,13 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
+
+    bt_xml = PathJoinSubstitution([
+        FindPackageShare('nav2_stack'),
+        'behavior_trees',
+        'navigate_recovery.xml'
+    ])
+
     nav2_config = PathJoinSubstitution([
         FindPackageShare('nav2_stack'),
         'config',
@@ -23,7 +30,8 @@ def generate_launch_description():
         name='map_server',
         output='screen',
         parameters=[{
-            'yaml_filename': map_config
+            'yaml_filename': map_config,
+            'use_sim_time': True
             }]
     )
 
@@ -33,7 +41,7 @@ def generate_launch_description():
         name='lifecycle_manager_navigation',
         output='screen',
         parameters=[{
-            'use_sim_time': False,
+            'use_sim_time': True,
             'autostart': True,
             'node_names': ['map_server', 'planner_server', 'controller_server',
                            'smoother_server', 'behavior_server', 'bt_navigator', 
@@ -46,7 +54,9 @@ def generate_launch_description():
         executable='planner_server',
         name='planner_server',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config, {
+            'use_sim_time': True
+        }]
     )
 
     controller = Node(
@@ -54,7 +64,9 @@ def generate_launch_description():
         executable='controller_server',
         name='controller_server',
         output='screen',
-        parameters=[nav2_config],
+        parameters=[nav2_config, {
+            'use_sim_time': True
+        }],
         remappings=[('cmd_vel', 'cmd_vel_nav')]
     )
 
@@ -63,7 +75,9 @@ def generate_launch_description():
         executable='smoother_server',
         name='smoother_server',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config, {
+            'use_sim_time': True
+        }]
     )
     
     behavior = Node(
@@ -71,7 +85,9 @@ def generate_launch_description():
         executable='behavior_server',
         name='behavior_server',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config, {
+            'use_sim_time': True
+        }]
     )
     
     bt_nav = Node(
@@ -79,7 +95,11 @@ def generate_launch_description():
         executable='bt_navigator',
         name='bt_navigator',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config, {
+            'use_sim_time': True,
+            'default_nav_to_pose_bt_xml': bt_xml,
+            'default_nav_through_poses_bt_xml': bt_xml
+        }]
     )
     
     waypoint = Node(
@@ -87,7 +107,9 @@ def generate_launch_description():
         executable='waypoint_follower',
         name='waypoint_follower',
         output='screen',
-        parameters=[nav2_config]
+        parameters=[nav2_config, {
+            'use_sim_time': True
+        }]
     )
     
     vel_smoother = Node(
@@ -95,7 +117,9 @@ def generate_launch_description():
         executable='velocity_smoother',
         name='velocity_smoother',
         output='screen',
-        parameters=[nav2_config],
+        parameters=[nav2_config, {
+            'use_sim_time': True
+        }],
         remappings=[
             ('cmd_vel', 'cmd_vel_nav'),
             ('cmd_vel_smoothed', 'cmd_vel')

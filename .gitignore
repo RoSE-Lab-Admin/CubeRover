@@ -7,3 +7,4 @@ src/.vscode
 src/nav2_stack/test/
 src/nav2_stack/resource/
 sim_data/11172025
+src/roseybot_control/test

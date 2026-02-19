@@ -1,8 +1,6 @@
 from setuptools import find_packages, setup
-import os
-from glob import glob
 
-package_name = 'nav2_stack'
+package_name = 'rosey_sim'
 
 setup(
     name=package_name,
@@ -12,10 +10,10 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.py'))),
-        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml'))),
-        (os.path.join('share', package_name, 'maps'), glob(os.path.join('maps', '*'))),
-        (os.path.join('share', package_name, 'behavior_trees'), glob(os.path.join('behavior_trees', '*.xml'))),
+        ('share/' + package_name + '/launch', ['launch/rosey_gz.launch.py']),
+        ('share/' + package_name + '/worlds', ['worlds/world.world']),
+        ('share/' + package_name + '/config', ['config/ros_gz_bridge.yaml']),
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -30,9 +28,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'path_follower = nav2_stack.path_follower:main',
-            'pose_pub = nav2_stack.pose_pub:main',
-            'test_end_to_end = nav2_stack.test_end_to_end:main'
+            'covariance_relay = rosey_sim.covariance_relay:main'
         ],
     },
 )
