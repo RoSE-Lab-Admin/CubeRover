@@ -80,6 +80,8 @@ class PosePub(Node):
         waypoints.header.frame_id = 'map'
 
         for idx in range(len(self.poses)):
+            self.poses[idx].header.stamp = self.get_clock().now().to_msg()
+            self.poses[idx].header.frame_id = 'map'
             waypoints.poses.append(self.poses[idx])
 
         # publish waypoints as a path message
