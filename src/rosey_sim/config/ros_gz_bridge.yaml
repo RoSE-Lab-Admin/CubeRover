@@ -11,7 +11,7 @@
   gz_type_name: gz.msgs.Twist
   direction: ROS_TO_GZ
 
-- ros_topic_name: /imu
+- ros_topic_name: /bno055/imu
   gz_topic_name: /imu
   ros_type_name: sensor_msgs/msg/Imu
   gz_type_name: gz.msgs.IMU
