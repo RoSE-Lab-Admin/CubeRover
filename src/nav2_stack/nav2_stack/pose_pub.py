@@ -14,6 +14,10 @@ class PosePub(Node):
     def __init__(self):
         super().__init__('pose_pub')
 
+        # csv file parameter
+        self.declare_parameter('csv_file', 'pose.csv')
+        self.csv_file = self.get_parameter('csv_file').value
+
         # transform broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
         self.current_odom = None
@@ -23,35 +27,46 @@ class PosePub(Node):
         self.waypoint_pub = self.create_publisher(Path, '/sim_waypoints', qos)
 
         # create list of waypoints
-        self.poses = self.gen_poses()
+        self.poses = self.read_pose()
 
         # publish after a delay to allow DDS discovery to complete
         self.pub_timer = self.create_timer(2.0, self.publish_waypoints)
+
+    def read_pose(self):
+        poses = []
+        try:
+            with open(self.csv_file, 'r') as f:
+                reader = csv.reader(f)
+                next(reader)
+
+                for row in reader:
+                    pose = PoseStamped()
+
+                    pose.pose.position.x = float(row[0]) 
+                    pose.pose.position.y = float(row[1])
+
+                    poses.append(pose)
+
+        except Exception as e:
+            self.get_logger().info(f'CSV reading failed: {e}')
+
+        return poses
 
     def gen_poses(self):
         # initialize list of poses
         poses = []
 
         # generate a few different pose messages
-        x = 0.0
-        y = 0.0
-        yaw = 0.0
-        for i in range(5):
-            # step forward BEFORE creating the pose (skip the origin)
-            x += 2.0 * math.cos(yaw)
-            y += 2.0 * math.sin(yaw)
+        corners = [(2.0, 0.0), (2.0, -2.0), (0.0, -2.0), (0.0, 0.0), (2.0, 0.0)]
+        for x, y in corners:
 
             pose = PoseStamped()
             pose.header.stamp = self.get_clock().now().to_msg()
             pose.header.frame_id = 'map'
             pose.pose.position.x = x
             pose.pose.position.y = y
-            pose.pose.orientation.z = math.sin(yaw/2.0)
-            pose.pose.orientation.w = math.cos(yaw/2.0)
+            pose.pose.orientation.w = 1.0
             poses.append(pose)
-
-            # update yaw for the next segment
-            yaw -= math.pi/2.0
 
         return poses
 

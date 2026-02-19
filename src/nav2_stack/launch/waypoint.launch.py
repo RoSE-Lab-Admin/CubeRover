@@ -15,7 +15,8 @@ def launch_setup(context):
 
     is_opti = use_opti.lower() == 'true'
 
-    csv_file = os.path.expanduser('~/CubeRover/sim_data/extracted_data/11172025/11-21-10/pose_data/pose.csv')
+    pkg_path = get_package_share_directory('nav2_stack')
+    csv_file = os.path.join(pkg_path, 'pose.csv')
 
     pose_pub_node = Node(
         package='nav2_stack',
