@@ -67,7 +67,7 @@ private:
   // Parameters for the RoseyBot simulation
   int BAUD_;
   int TIMEOUT_MS_;
-  int ENC_PER_REV_;
+  float ENC_PER_REV_;
   int STD_ACCEL;
   std::string DEVICE_;
   std::vector<std::unique_ptr<wheel>> wheels_;

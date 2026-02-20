@@ -24,14 +24,14 @@ def launch_setup(context):
         parameters=[{
             'csv_file': csv_file,
             'num_waypoints': 100.0,
-            'use_sim_time': True
+            'use_sim_time': False
         }]
     )
 
     path_follower_node = Node(
         package='nav2_stack',
         executable='path_follower',
-        parameters=[{'use_sim_time': True},
+        parameters=[{'use_sim_time': False},
                     {'use_opti': is_opti}]
     )
 
@@ -47,7 +47,7 @@ def launch_setup(context):
             executable='ekf_node',
             name='ekf_filter_node',
             output='screen',
-            parameters=[ekf_params, {'use_sim_time': True}],
+            parameters=[ekf_params, {'use_sim_time': False}],
         )
         nodes.append(robot_localization_node)
 
@@ -67,7 +67,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_opti', default_value='true'),
+        DeclareLaunchArgument('use_opti', default_value='false'),
         OpaqueFunction(function=launch_setup),
         nav2_launch,
     ])

@@ -7,7 +7,6 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
 
     imu_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'bno055.yaml')
-    ekf_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'ekf.yaml')
 
     imu_node = Node(
         package="bno055",
@@ -16,15 +15,16 @@ def generate_launch_description():
         output='log'
     )
 
-    # robot_localization_node = Node(
-    #     package='robot_localization',
-    #     executable='ekf_node',
-    #     name='ekf_node',
-    #     output='screen',
-    #     parameters=[ekf_params],
-    # )
+    # Static transform: bno055 sensor frame relative to base_link.
+    # Update x/y/z/yaw/pitch/roll to match actual IMU mounting position.
+    bno055_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='bno055_tf',
+        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'bno055']
+    )
 
     return LaunchDescription([
         imu_node,
-        # robot_localization_node,
+        bno055_tf,
     ])

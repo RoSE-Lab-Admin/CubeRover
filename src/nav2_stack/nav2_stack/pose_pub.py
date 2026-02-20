@@ -42,8 +42,9 @@ class PosePub(Node):
                 for row in reader:
                     pose = PoseStamped()
 
-                    pose.pose.position.x = float(row[0]) 
+                    pose.pose.position.x = float(row[0])
                     pose.pose.position.y = float(row[1])
+                    pose.pose.orientation.w = 1.0
 
                     poses.append(pose)
 

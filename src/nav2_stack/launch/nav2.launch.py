@@ -31,7 +31,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'yaml_filename': map_config,
-            'use_sim_time': True
+            'use_sim_time': False
             }]
     )
 
@@ -41,7 +41,7 @@ def generate_launch_description():
         name='lifecycle_manager_navigation',
         output='screen',
         parameters=[{
-            'use_sim_time': True,
+            'use_sim_time': False,
             'autostart': True,
             'node_names': ['map_server', 'planner_server', 'controller_server',
                            'smoother_server', 'behavior_server', 'bt_navigator', 
@@ -55,7 +55,7 @@ def generate_launch_description():
         name='planner_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': False
         }]
     )
 
@@ -65,7 +65,7 @@ def generate_launch_description():
         name='controller_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': False
         }],
         remappings=[('cmd_vel', 'cmd_vel_nav')]
     )
@@ -76,7 +76,7 @@ def generate_launch_description():
         name='smoother_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': False
         }]
     )
     
@@ -86,7 +86,7 @@ def generate_launch_description():
         name='behavior_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': False
         }]
     )
     
@@ -96,7 +96,7 @@ def generate_launch_description():
         name='bt_navigator',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True,
+            'use_sim_time': False,
             'default_nav_to_pose_bt_xml': bt_xml,
             'default_nav_through_poses_bt_xml': bt_xml
         }]
@@ -108,7 +108,7 @@ def generate_launch_description():
         name='waypoint_follower',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': False
         }]
     )
     
@@ -118,7 +118,7 @@ def generate_launch_description():
         name='velocity_smoother',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': True
+            'use_sim_time': False
         }],
         remappings=[
             ('cmd_vel', 'cmd_vel_nav'),
@@ -126,7 +126,17 @@ def generate_launch_description():
         ]
     )
     
+    # Static map->odom transform (identity). Assumes robot starts at map origin.
+    # Replace with AMCL or SLAM if relocalization is needed.
+    map_to_odom_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='map_to_odom_tf',
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
+    )
+
     return LaunchDescription([
+        map_to_odom_tf,
         map_server,
         lifecycle_mgr,
         planner,
