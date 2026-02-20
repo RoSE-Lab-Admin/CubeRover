@@ -2,11 +2,14 @@ import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.time import Time
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
+
+from collections import deque
 
 class PathFollower(Node):
     def __init__(self):
@@ -28,6 +31,9 @@ class PathFollower(Node):
             self.opti_sub = self.create_subscription(PoseStamped, '/CubeRover_V1/pose', self.opti_callback, 10, callback_group=self.opti_group)
             self.odom_trans = TransformBroadcaster(self)
             self.odom_pub = self.create_publisher(Odometry, '/odometry/filtered', 10)
+            # create previous poses list
+            self.prev_poses = deque()
+            self.pose_idx = 0
 
         # initialize nav2
         self.nav = BasicNavigator() 
@@ -67,7 +73,26 @@ class PathFollower(Node):
         odom.header.frame_id = 'odom'
         odom.child_frame_id = 'base_link'
         odom.pose.pose = msg.pose
-        self.odom_pub.publish(odom)
+
+        # calculate a rough linear and angular velocity
+        if len(self.prev_poses) < 5:
+            self.prev_poses.append(msg.pose)
+            self.odom_pub.publish(odom)
+            return
+        
+        # if enough points to calculate:
+        self.prev_poses.popleft()
+        self.prev_poses.append(msg.pose)
+
+        # time dif in seconds
+        first_time = Time.from_msg(self.prev_poses[0])
+        last_time = Time.from_msg(self.prev_poses[4])
+        delta_t = (first_time - last_time).nanoseconds / 1e9
+
+        # linear velocity interp
+
+
+
 
     def follow_waypoints(self):
         
