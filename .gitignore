@@ -54,3 +54,7 @@ qtcreator-*
 
 # Emacs
 .#*
+
+src/nav2_stack/resource/
+src/nav2_stack/test
+sim_data/
