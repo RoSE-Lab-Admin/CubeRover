@@ -21,8 +21,8 @@ class CovarianceRelay(Node):
     def odom_callback(self, msg):
         for i in range(6):
             # set diagnonal values to covariance values
-            msg.pose.covariance[i * 6 + 1] = self.pose_cov[i]
-            msg.twist.covariance[i * 6 +1] = self.twist_cov[i]
+            msg.pose.covariance[i * 7] = self.pose_cov[i]
+            msg.twist.covariance[i * 7] = self.twist_cov[i]
 
         # sends back modified odometry data
         self.odom_pub.publish(msg)

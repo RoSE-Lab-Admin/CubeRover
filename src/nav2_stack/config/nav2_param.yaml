@@ -26,7 +26,7 @@ controller_server:
     costmap_update_timeout: 0.0 #maybe change back to 5.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    failure_tolerance: 1.0
     odom_topic: /odometry/filtered
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
@@ -37,12 +37,12 @@ controller_server:
     FollowPath:
       plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
       desired_linear_vel: 0.22
-      lookahead_dist: 0.35
-      min_lookahead_dist: 0.25
-      max_lookahead_dist: 0.60
-      lookahead_time: 0.8
+      lookahead_dist: 0.2
+      min_lookahead_dist: 0.15
+      max_lookahead_dist: 0.5
+      lookahead_time: 1.5
       rotate_to_heading_angular_vel: 0.7
-      transform_tolerance: 0.1
+      transform_tolerance: 0.5
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
       approach_velocity_scaling_dist: 0.5
@@ -53,7 +53,7 @@ controller_server:
       regulated_linear_scaling_min_radius: 0.9
       regulated_linear_scaling_min_speed: 0.1
       allow_reversing: false
-      use_rotate_to_heading: false
+      use_rotate_to_heading: true
       rotate_to_heading_min_angle: 0.2
       max_angular_accel: 1.5
       max_robot_pose_search_dist: 10.0
@@ -179,7 +179,7 @@ behavior_server:
     local_frame: base_link
     global_frame: map
     robot_base_frame: base_link
-    transform_tolerance: 0.1
+    transform_tolerance: 0.5
     # simulate_ahead_time: 2.0
     # max_rotational_vel: 0.50
     # min_rotational_vel: 0.40
@@ -208,7 +208,7 @@ velocity_smoother:
     max_decel: [-0.5, 0.0, -5.0]
     odom_topic: /odometry/filtered
     odom_duration: 0.1
-    deadband_velocity: [0.0, 0.0, 0.0]
+    deadband_velocity: [0.0, 0.0, 0.05]
     velocity_timeout: 1.0
     enable_stamped_cmd_vel: True
 
