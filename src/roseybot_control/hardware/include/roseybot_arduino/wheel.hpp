@@ -38,17 +38,21 @@ void wheel::updateVel(int encVel){
 }
 
 void wheel::updateCur(int mCur){
+    // RoboClaw Manual: 49 - Read Motor Currents
     // RH: recorded in increments of 10mA (100th of amp)
     current_ = mCur / 100.0;
 }
 
 void wheel::updateVolt(int mVolt){
+    // RoboClaw Manual: 24 - Read Main Battery Voltage Level
     // RH: recorded in increments of 100mV (10th of volt)
     voltage_ = mVolt / 10.0;
 }
 
 void wheel::updatePWM(int mPWM) {
-    pwm_ = mPWM;
+    // RoboClaw Manual: 48 - Read Motor PWM values
+    // Duty cycle percent is calculated by dividing the Value by 327.67.
+    pwm_ = mPWM / 327.67;
 }
 
 int wheel::cmd_to_enc() {
