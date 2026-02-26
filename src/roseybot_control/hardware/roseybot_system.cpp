@@ -87,12 +87,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
 
-    const int NUM_STATE_INTERFACES = 5; // Safety check to ensure state interfaces match the urdf.
+    const size_t NUM_STATE_INTERFACES = 5; // Safety check to ensure state interfaces match the urdf.
     if (joint.state_interfaces.size() != NUM_STATE_INTERFACES)
     {
       RCLCPP_FATAL(
-        get_logger(), "Joint '%s' has %zu state interface. 4 expected.", joint.name.c_str(),
-        joint.state_interfaces.size());
+        get_logger(), "Joint '%s' has %zu state interface. %zu expected.", joint.name.c_str(),
+        joint.state_interfaces.size(), NUM_STATE_INTERFACES);
       return hardware_interface::CallbackReturn::ERROR;
     }
 
