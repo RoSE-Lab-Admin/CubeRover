@@ -142,9 +142,14 @@ String get_telemetry() {
 
   // Build return telemetry string
   String telemetry;
-  telemetry.reserve(64);
+  telemetry.reserve(256); // 32-bit signed integer can take up to 11 chars + 1 space = 12 per number.
   telemetry += 'e';
-  for (size_t i = 0; i < TELEMETRY_DATA_SIZE; i++) telemetry += ' ' + String(telemetryData[i]);
+  for (size_t i = 0; i < TELEMETRY_DATA_SIZE; i++) {
+    // Note: Arduino String library has overloads to handle directly appending int32_t to String
+    // The space and data MUST be added individually for the compiler to recognize these are two differnet pieces of data
+    telemetry += ' ';
+    telemtry += telemetryData[i];
+  }
   telemetry += "\r\n";
 
   // uint32_t dur = millis() - start;
