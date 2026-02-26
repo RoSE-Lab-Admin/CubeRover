@@ -148,7 +148,7 @@ String get_telemetry() {
     // Note: Arduino String library has overloads to handle directly appending int32_t to String
     // The space and data MUST be added individually for the compiler to recognize these are two differnet pieces of data
     telemetry += ' ';
-    telemtry += telemetryData[i];
+    telemetry += telemetryData[i];
   }
   telemetry += "\r\n";
 
