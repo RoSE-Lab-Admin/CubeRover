@@ -141,6 +141,9 @@ std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_s
       state_interfaces.emplace_back(hardware_interface::StateInterface(
         joint.name, "voltage", &wheel_map_[joint.name]->voltage_));
       RCLCPP_INFO(get_logger(), "Joint %s: added voltage state", joint.name.c_str());
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, "pwm", &wheel_map_[joint.name]->pwm_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added pwm state", joint.name.c_str());
     }
 
   return state_interfaces;
