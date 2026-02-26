@@ -6,8 +6,8 @@ import pytest
 @pytest.mark.hardware
 def test_bag():
     # set paths
-    bag_dir = Path("/mnt/d/ros-bags")
-    script_path = Path(__file__).resolve().parent/"bag_topics.sh"
+    bag_dir = Path("/mnt/d/ros_bags")
+    script_path = Path(__file__).resolve().parent/"bag_topics.py"
 
     # set bash script variables
     env = os.environ.copy()
@@ -16,14 +16,14 @@ def test_bag():
 
     # run bash script
     result = subprocess.run(
-        ["bash", str(script_path)],
+        ["python3", str(script_path)],
         check=True,
         text=True,
         capture_output=True,
         env=env
     )
 
-    bag_path = None
+    bag_path: Path | None = None
 
     # grab output of bash script
     for line in result.stdout.splitlines():
@@ -32,7 +32,7 @@ def test_bag():
             break
         
     # check if the bag path exists
-    assert bag_path.exists() and bag_path.is_dir(), f"Bag Folder Missing: {bag_path}"
+    assert bag_path and bag_path.exists() and bag_path.is_dir(), f"Bag Folder Missing: {bag_path}"
 
     # checks if the metadata file exists
     meta_file = bag_path / "metadata.yaml"
