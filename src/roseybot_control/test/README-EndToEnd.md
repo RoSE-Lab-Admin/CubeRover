@@ -1,6 +1,7 @@
 # Instructions to Run on Raspberry Pi
 1. Connect computer to the same network as the Raspberry Pi
 2. On the lab computer, open a terminal:
+
     i. SSH into the Raspberry Pi
     ```bash
     ssh [username]@[IP_address]
@@ -14,6 +15,7 @@
     ros2 launch roseybot_control hardware_startup.launch.py
     ```
 3. On the lab computer, navigate to the testing folder:
+
     i. From project root, navigate to `test` folder:
     ```bash
     cd src/roseybot_control/test
