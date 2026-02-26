@@ -229,7 +229,8 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
 hardware_interface::return_type RoseyBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  std::vector<int> telemVals(14); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
+  const uint16_t TELEMETRY_DATA_SIZE = 18;
+  std::vector<int> telemVals(TELEMETRY_DATA_SIZE); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
   comm_->read_telem_values(telemVals);
 
   for (size_t i = 0; i < info_.joints.size(); ++i) {

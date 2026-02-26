@@ -2,60 +2,21 @@
 #include <EEPROM.h>
 #include "motor_driver.h"
 
-// Anonymous namespace for helper functions
-namespace {
-  #define qpps 3400     // quadrature pulses per second at max rpm
-  #define ADDRESS ADDRESS  // default roboclaw address - 128
+#define qpps 3400     // quadrature pulses per second at max rpm
+#define ADDRESS 0x80  // default roboclaw address - 128
 
 
-  // pointers to store reference to roboclaws on init
-  extern RoboClaw *ROBOCLAW_1;
-  extern RoboClaw *ROBOCLAW_2;
+// pointers to store reference to roboclaws on init
+extern RoboClaw *ROBOCLAW_1;
+extern RoboClaw *ROBOCLAW_2;
 
 
-  // define wheel classes to store relevant wheel info
-  Wheel FL;
-  Wheel BL;
-  Wheel FR;
-  Wheel BR;
+// define wheel classes to store relevant wheel info
+Wheel FL;
+Wheel BL;
+Wheel FR;
+Wheel BR;
 
-  // Execute with Retry Abstraction
-  template <typename Func>
-  bool executeWithRetry(uint16_t attempts, Func action) {
-      for (uint16_t i = 0; i < attempts; ++i) {
-          if (action()) {
-              return true;
-          }
-          // Could add tiny delay here to help the bus recover
-          // delay(2); 
-      }
-      return false;
-  }
-
-  // String Builder to Improve Memory Usage
-  String buildTelemetryString(const int32_t* data, size_t size) {
-      char buffer[256]; 
-      int offset = snprintf(buffer, sizeof(buffer), "e");
-
-      for (size_t i = 0; i < size; i++) {
-          if (offset < 0 || offset >= sizeof(buffer)) break; // Safety check
-          
-          int written = snprintf(buffer + offset, sizeof(buffer) - offset, " %ld", data[i]);
-          
-          if (written > 0 && offset + written < sizeof(buffer)) {
-              offset += written;
-          } else {
-              break; // Stop if buffer fills up
-          }
-      }
-
-      if (offset >= 0 && offset < sizeof(buffer)) {
-          snprintf(buffer + offset, sizeof(buffer) - offset, "\r\n");
-      }
-
-      return String(buffer);
-  }
-}
 
 // start custom function implementations
 void set_motor_speed(int motorIndex, uint32_t speed) {
@@ -88,7 +49,7 @@ void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
 
 
 String get_telemetry() {
-  const uint16_t TELEMETRY_DATA_SIZE = 18;
+  const uint16_t TELEMETRY_DATA_SIZE = 18; // IMPORTANT: Update other files with this same variable name!!
   const uint16_t CAPTURE_ATTEMPTS = 3;
 
   // uint32_t start = millis();
@@ -99,12 +60,12 @@ String get_telemetry() {
 
   // Retrieve Encoder counts
   uint32_t count1 = 0, count2 = 0, count3 = 0, count4 = 0;
-  executeWithRetry(CAPTURE_ATTEMPTS, [&]() {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
       bool v1, v2;
       v1 = ROBOCLAW_1->ReadEncoders(ADDRESS, count1, count2);
       v2 = ROBOCLAW_2->ReadEncoders(ADDRESS, count3, count4);
-      return v1 && v2;
-  });
+      if (v1 && v2) break;
+  }
 
   // Note: Technically, this is an unsafe typecast. However, for 
   // this to be an issue, the motors would need to run for a very long time
@@ -116,15 +77,15 @@ String get_telemetry() {
 
   // Retrieve Encoder velocities
   uint32_t speed1 = 0, speed2 = 0, speed3 = 0, speed4 = 0;
-  executeWithRetry(CAPTURE_ATTEMPTS, [&]() {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
     uint8_t status5, status6, status7, status8;
     bool v1, v2, v3, v4;
     speed1 = ROBOCLAW_1->ReadSpeedM1(ADDRESS, &status5, &v1);
     speed2 = ROBOCLAW_1->ReadSpeedM2(ADDRESS, &status6, &v2);
     speed3 = ROBOCLAW_2->ReadSpeedM1(ADDRESS, &status7, &v3);
     speed4 = ROBOCLAW_2->ReadSpeedM2(ADDRESS, &status8, &v4);
-    return v1 && v2 && v3 && v4;
-  });
+    if (v1 && v2 && v3 && v4) break;
+  }
 
   safety_check(FL.velocity(), speed1);
   safety_check(BL.velocity(), speed2);
@@ -141,12 +102,12 @@ String get_telemetry() {
 
   // Read Currents
   int16_t c1 = 0, c2 = 0, c3 = 0, c4 = 0;
-  executeWithRetry(CAPTURE_ATTEMPTS, [&]() {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
     bool rc1cval, rc2cval;
     rc1cval = ROBOCLAW_1->ReadCurrents(ADDRESS, c1, c2);
     rc2cval = ROBOCLAW_2->ReadCurrents(ADDRESS, c3, c4);
-    return rc1cval && rc2cval;
-  });
+    if (rc1cval && rc2cval) break;
+  }
   telemetryData[8] = (int32_t) c1;
   telemetryData[9] = (int32_t) c2;
   telemetryData[10] = (int32_t) c3;
@@ -155,24 +116,24 @@ String get_telemetry() {
 
   // Read battery voltages
   uint16_t v1 = 0, v2 = 0;
-  executeWithRetry(CAPTURE_ATTEMPTS, [&]() {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
     bool v1val, v2val;
     v1 = ROBOCLAW_1->ReadMainBatteryVoltage(ADDRESS, &v1val);
     v2 = ROBOCLAW_2->ReadMainBatteryVoltage(ADDRESS, &v2val);
-    return v1val && v2val;
-  });
+    if (v1val && v2val) break;
+  }
   telemetryData[12] = (int32_t) v1;
   telemetryData[13] = (int32_t) v2;
 
 
   // Read PWM values
   int16_t pwm1 = 0, pwm2 = 0, pwm3 = 0, pwm4 = 0;
-  executeWithRetry(CAPTURE_ATTEMPTS, [&]() {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
     bool pwms1val, pwms2val;
     pwms1val = ROBOCLAW_1->ReadPWMs(ADDRESS, pwm1, pwm2);
     pwms2val = ROBOCLAW_2->ReadPWMs(ADDRESS, pwm3, pwm4);
-    return pwms1val && pwms2val;
-  });
+    if (pwms1val && pwms2val) break;
+  }
   telemetryData[14] = (int32_t) pwm1;
   telemetryData[15] = (int32_t) pwm2;
   telemetryData[16] = (int32_t) pwm3;
@@ -180,7 +141,11 @@ String get_telemetry() {
 
 
   // Build return telemetry string
-  String telemetry = buildTelemetryString(telemetryData, TELEMETRY_DATA_SIZE);
+  String telemetry;
+  telemetry.reserve(64);
+  telemetry += 'e';
+  for (size_t i = 0; i < TELEMETRY_DATA_SIZE; i++) telemetry += ' ' + String(telemetryData[i]);
+  telemetry += "\r\n";
 
   // uint32_t dur = millis() - start;
   // Serial.println(dur);
