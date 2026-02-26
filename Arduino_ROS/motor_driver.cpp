@@ -6,7 +6,6 @@
 #define ADDRESS 0x80  // default roboclaw address - 128
 
 
-
 // pointers to store reference to roboclaws on init
 extern RoboClaw *ROBOCLAW_1;
 extern RoboClaw *ROBOCLAW_2;
@@ -21,67 +20,70 @@ Wheel BR;
 
 // start custom function implementations
 void set_motor_speed(int motorIndex, uint32_t speed) {
-  if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(speed), speed);
-  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(speed), speed);
-  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(speed), speed);
-  else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(speed), speed);
+  if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
+  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(speed), speed);
+  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(speed), speed);
+  else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(ADDRESS, BR.calcAccel(speed), speed);
 }
 
 
 void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
 
-  ROBOCLAW_1->SpeedM1M2(0x80, lSpeed, lSpeed);
-  ROBOCLAW_2->SpeedM1M2(0x80, rSpeed, rSpeed);
+  ROBOCLAW_1->SpeedM1M2(ADDRESS, lSpeed, lSpeed);
+  ROBOCLAW_2->SpeedM1M2(ADDRESS, rSpeed, rSpeed);
 
-  // ROBOCLAW_1->SpeedAccelM1M2(0x80, FL.calcAccel(lSpeed), lSpeed, lSpeed);
-  // ROBOCLAW_1->SpeedAccelM1M2(0x80, FR.calcAccel(rSpeed), rSpeed, rSpeed);
+  // ROBOCLAW_1->SpeedAccelM1M2(ADDRESS, FL.calcAccel(lSpeed), lSpeed, lSpeed);
+  // ROBOCLAW_1->SpeedAccelM1M2(ADDRESS, FR.calcAccel(rSpeed), rSpeed, rSpeed);
   //Serial.println(BL.calcAccel(lSpeed)); // print out accel
   FL.calcAccel(lSpeed);
   FR.calcAccel(rSpeed);
   BL.calcAccel(lSpeed);
   BR.calcAccel(rSpeed);
-  // ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(lSpeed), lSpeed);
-  // ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(lSpeed), lSpeed);
-  // ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(rSpeed), rSpeed); 
-  // ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(rSpeed), rSpeed);
+  // ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(lSpeed), lSpeed);
+  // ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(lSpeed), lSpeed);
+  // ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(rSpeed), rSpeed); 
+  // ROBOCLAW_2->SpeedAccelM2(ADDRESS, BR.calcAccel(rSpeed), rSpeed);
 
   return;
 }
 
 
 String get_telemetry() {
+  const uint16_t TELEMETRY_DATA_SIZE = 18; // IMPORTANT: If this changes, search for this variable name in other files and update there too!!
+  const uint16_t CAPTURE_ATTEMPTS = 3;
+
   // uint32_t start = millis();
-  int32_t telemetryData[14];
+
+  // Zero-initialize the entire array. If a sensor fails all attempts, 
+  // it safely reports '0' instead of random memory garbage.
+  int32_t telemetryData[TELEMETRY_DATA_SIZE] = {0};
 
   // Retrieve Encoder counts
-  uint32_t count1=0, count2=0, count3=0, count4=0;
-  for (int i = 0; i < 3; i ++) {
-    bool v1,v2; //v3,v4;
-    // uint8_t s1,s2,s3,s4;
-    // count1 = ROBOCLAW_1->ReadEncM1(0x80, &s1, &v1);
-    // count2 = ROBOCLAW_1->ReadEncM2(0x80, &s2, &v2);
-    // count3 = ROBOCLAW_2->ReadEncM1(0x80, &s3, &v3);
-    // count4 = ROBOCLAW_2->ReadEncM2(0x80, &s4, &v4);
-    v1 = ROBOCLAW_1->ReadEncoders(0x80, count1, count2);
-    v2 = ROBOCLAW_2->ReadEncoders(0x80, count3, count4);
-    if (v1 && v2) break;
+  uint32_t count1 = 0, count2 = 0, count3 = 0, count4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
+      bool v1, v2;
+      v1 = ROBOCLAW_1->ReadEncoders(ADDRESS, count1, count2);
+      v2 = ROBOCLAW_2->ReadEncoders(ADDRESS, count3, count4);
+      if (v1 && v2) break;
   }
 
-  telemetryData[0] = (int32_t)count1;
-  telemetryData[1] = (int32_t)count2;
-  telemetryData[2] = (int32_t)count3;
-  telemetryData[3] = (int32_t)count4;
+  // Note: Technically, this is an unsafe typecast. However, for 
+  // this to be an issue, the motors would need to run for a very long time
+  telemetryData[0] = (int32_t) count1;
+  telemetryData[1] = (int32_t) count2;
+  telemetryData[2] = (int32_t) count3;
+  telemetryData[3] = (int32_t) count4;
 
 
   // Retrieve Encoder velocities
-  uint32_t speed1=0, speed2=0, speed3=0, speed4=0;
-  for (int i = 0; i < 3; i++) {
-    uint8_t status5,status6,status7,status8;
+  uint32_t speed1 = 0, speed2 = 0, speed3 = 0, speed4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
+    uint8_t status5, status6, status7, status8;
     bool v1, v2, v3, v4;
-    speed1 = ROBOCLAW_1->ReadSpeedM1(0x80, &status5, &v1);
-    speed2 = ROBOCLAW_1->ReadSpeedM2(0x80, &status6, &v2);
-    speed3 = ROBOCLAW_2->ReadSpeedM1(0x80, &status7, &v3);
-    speed4 = ROBOCLAW_2->ReadSpeedM2(0x80, &status8, &v4);
+    speed1 = ROBOCLAW_1->ReadSpeedM1(ADDRESS, &status5, &v1);
+    speed2 = ROBOCLAW_1->ReadSpeedM2(ADDRESS, &status6, &v2);
+    speed3 = ROBOCLAW_2->ReadSpeedM1(ADDRESS, &status7, &v3);
+    speed4 = ROBOCLAW_2->ReadSpeedM2(ADDRESS, &status8, &v4);
     if (v1 && v2 && v3 && v4) break;
   }
 
@@ -90,43 +92,59 @@ String get_telemetry() {
   safety_check(FR.velocity(), speed3);
   safety_check(BR.velocity(), speed4);
 
-  telemetryData[4] = (int32_t)speed1;
-  telemetryData[5] = (int32_t)speed2;
-  telemetryData[6] = (int32_t)speed3;
-  telemetryData[7] = (int32_t)speed4;
+  // Note: Technically, an unsafe typecast
+  // See note for Encoders typecast
+  telemetryData[4] = (int32_t) speed1;
+  telemetryData[5] = (int32_t) speed2;
+  telemetryData[6] = (int32_t) speed3;
+  telemetryData[7] = (int32_t) speed4;
 
 
   // Read Currents
-  int16_t c1, c2, c3, c4;
-  for (size_t i = 0; i < 3; i++) {
+  int16_t c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool rc1cval, rc2cval;
-    rc1cval = ROBOCLAW_1->ReadCurrents(0x80, c1, c2);
-    rc2cval = ROBOCLAW_2->ReadCurrents(0x80, c3, c4);
+    rc1cval = ROBOCLAW_1->ReadCurrents(ADDRESS, c1, c2);
+    rc2cval = ROBOCLAW_2->ReadCurrents(ADDRESS, c3, c4);
     if (rc1cval && rc2cval) break;
   }
-  telemetryData[8] = (int32_t)c1;
-  telemetryData[9] = (int32_t)c2;
-  telemetryData[10] = (int32_t)c3;
-  telemetryData[11] = (int32_t)c4;
+  telemetryData[8] = (int32_t) c1;
+  telemetryData[9] = (int32_t) c2;
+  telemetryData[10] = (int32_t) c3;
+  telemetryData[11] = (int32_t) c4;
+
 
   // Read battery voltages
   uint16_t v1 = 0, v2 = 0;
-  for (size_t i = 0; i < 3; i++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool v1val, v2val;
-    v1 = ROBOCLAW_1->ReadMainBatteryVoltage(0x80, &v1val);
-    v2 = ROBOCLAW_2->ReadMainBatteryVoltage(0x80, &v2val);
+    v1 = ROBOCLAW_1->ReadMainBatteryVoltage(ADDRESS, &v1val);
+    v2 = ROBOCLAW_2->ReadMainBatteryVoltage(ADDRESS, &v2val);
     if (v1val && v2val) break;
   }
+  telemetryData[12] = (int32_t) v1;
+  telemetryData[13] = (int32_t) v2;
 
-  telemetryData[12] = (int32_t)v1;
-  telemetryData[13] = (int32_t)v2;
+
+  // Read PWM values
+  int16_t pwm1 = 0, pwm2 = 0, pwm3 = 0, pwm4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
+    bool pwms1val, pwms2val;
+    pwms1val = ROBOCLAW_1->ReadPWMs(ADDRESS, pwm1, pwm2);
+    pwms2val = ROBOCLAW_2->ReadPWMs(ADDRESS, pwm3, pwm4);
+    if (pwms1val && pwms2val) break;
+  }
+  telemetryData[14] = (int32_t) pwm1;
+  telemetryData[15] = (int32_t) pwm2;
+  telemetryData[16] = (int32_t) pwm3;
+  telemetryData[17] = (int32_t) pwm4;
 
 
-  //build return telemetry carrige
+  // Build return telemetry string
   String telemetry;
   telemetry.reserve(64);
   telemetry += 'e';
-  for (size_t i = 0; i < 14; i++) telemetry += ' ' + String(telemetryData[i]);
+  for (size_t i = 0; i < TELEMETRY_DATA_SIZE; i++) telemetry += ' ' + String(telemetryData[i]);
   telemetry += "\r\n";
 
   // uint32_t dur = millis() - start;
@@ -137,8 +155,8 @@ String get_telemetry() {
 
 
 void encoder_reset() {
-  ROBOCLAW_1->ResetEncoders(0x80);
-  ROBOCLAW_2->ResetEncoders(0x80);
+  ROBOCLAW_1->ResetEncoders(ADDRESS);
+  ROBOCLAW_2->ResetEncoders(ADDRESS);
 }
 
 
@@ -159,10 +177,10 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   for (size_t idx = 0; idx < 3; idx++) {
     EEPROM.get(idx * sizeof(float), fsettings[idx]);
   }
-  ROBOCLAW_1->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
-  ROBOCLAW_1->SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
-  ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
-  ROBOCLAW_2->SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
+  ROBOCLAW_1->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
+  ROBOCLAW_1->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps);
+  ROBOCLAW_2->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps);
+  ROBOCLAW_2->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps);
   //Serial.println("Motor PID set");
 }
 

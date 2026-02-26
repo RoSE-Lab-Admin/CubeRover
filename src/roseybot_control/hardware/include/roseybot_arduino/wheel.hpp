@@ -12,11 +12,13 @@ class wheel {
         void updateVel(int encVel);
         void updateCur(int mCur);
         void updateVolt(int mVolt);
+        void updatePWM(int mPWM);
         int cmd_to_enc();
         double pos_ = 0; // rad
         double vel_ = 0; // rad/s
         double current_ = 0; // amp
         double voltage_ = 0; // voltage
+        double pwm_ = 0; // motor pwm
         double cmd_ = 0;
     private:
         float rads_per_ct_ = 0;
@@ -43,6 +45,10 @@ void wheel::updateCur(int mCur){
 void wheel::updateVolt(int mVolt){
     // RH: recorded in increments of 100mV (10th of volt)
     voltage_ = mVolt / 10.0;
+}
+
+void wheel::updatePWM(int mPWM) {
+    pwm_ = mPWM;
 }
 
 int wheel::cmd_to_enc() {

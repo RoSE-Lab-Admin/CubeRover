@@ -134,7 +134,9 @@ public:
     }
 
     // RH: Changing to 14 elements to account for voltages
-    for (size_t i = 0; i < 14 && ss >> token; ++i) {
+    // CG: Changing to 18 elements to accout for PWM data
+    const uint16_t TELEMETRY_DATA_SIZE = 18;
+    for (size_t i = 0; i < TELEMETRY_DATA_SIZE && ss >> token; ++i) {
         try {
             telem[i] = std::stoi(token);
         } catch (const std::invalid_argument &e) {
