@@ -56,7 +56,7 @@ class PathFollower(Node):
     def opti_callback(self, msg):
         self.rec_pose = True
 
-        stamp = msg.header.stamp
+        stamp = self.get_clock().now().to_msg()
 
         # broadcast ground truth odom -> base_link transform
         trans = TransformStamped()

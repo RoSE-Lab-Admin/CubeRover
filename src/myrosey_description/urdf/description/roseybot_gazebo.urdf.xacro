@@ -27,7 +27,7 @@
             <publish_link_pose>false</publish_link_pose>
             <publish_nested_model_pose>true</publish_nested_model_pose>
             <use_pose_vector_msg>false</use_pose_vector_msg>
-            <update_frequency>60</update_frequency>
+            <update_frequency>200</update_frequency>
         </plugin>
 
     </gazebo>
@@ -38,8 +38,8 @@
             <surface>
                 <friction>
                     <ode>
-                        <mu>0.5</mu>
-                        <mu2>0.2</mu2>
+                        <mu>1.2</mu>
+                        <mu2>0.4</mu2>
                     </ode>
                 </friction>
             </surface>
@@ -51,8 +51,8 @@
             <surface>
                 <friction>
                     <ode>
-                        <mu>0.5</mu>
-                        <mu2>0.2</mu2>
+                        <mu>1.2</mu>
+                        <mu2>0.4</mu2>
                     </ode>
                 </friction>
             </surface>
@@ -64,8 +64,8 @@
             <surface>
                 <friction>
                     <ode>
-                        <mu>0.5</mu>
-                        <mu2>0.2</mu2>
+                        <mu>1.2</mu>
+                        <mu2>0.4</mu2>
                     </ode>
                 </friction>
             </surface>
@@ -77,8 +77,8 @@
             <surface>
                 <friction>
                     <ode>
-                        <mu>0.5</mu>
-                        <mu2>0.2</mu2>
+                        <mu>1.2</mu>
+                        <mu2>0.4</mu2>
                     </ode>
                 </friction>
             </surface>
