@@ -87,7 +87,8 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
 
-    if (joint.state_interfaces.size() != 4)
+    const int NUM_STATE_INTERFACES = 5; // Safety check to ensure state interfaces match the urdf.
+    if (joint.state_interfaces.size() != NUM_STATE_INTERFACES)
     {
       RCLCPP_FATAL(
         get_logger(), "Joint '%s' has %zu state interface. 4 expected.", joint.name.c_str(),
