@@ -49,7 +49,7 @@ void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
 
 
 String get_telemetry() {
-  const uint16_t TELEMETRY_DATA_SIZE = 18; // IMPORTANT: Update other files with this same variable name!!
+  const uint16_t TELEMETRY_DATA_SIZE = 18; // IMPORTANT: If this changes, search for this variable name in other files and update there too!!
   const uint16_t CAPTURE_ATTEMPTS = 3;
 
   // uint32_t start = millis();
@@ -60,7 +60,7 @@ String get_telemetry() {
 
   // Retrieve Encoder counts
   uint32_t count1 = 0, count2 = 0, count3 = 0, count4 = 0;
-  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
       bool v1, v2;
       v1 = ROBOCLAW_1->ReadEncoders(ADDRESS, count1, count2);
       v2 = ROBOCLAW_2->ReadEncoders(ADDRESS, count3, count4);
@@ -77,7 +77,7 @@ String get_telemetry() {
 
   // Retrieve Encoder velocities
   uint32_t speed1 = 0, speed2 = 0, speed3 = 0, speed4 = 0;
-  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     uint8_t status5, status6, status7, status8;
     bool v1, v2, v3, v4;
     speed1 = ROBOCLAW_1->ReadSpeedM1(ADDRESS, &status5, &v1);
@@ -102,7 +102,7 @@ String get_telemetry() {
 
   // Read Currents
   int16_t c1 = 0, c2 = 0, c3 = 0, c4 = 0;
-  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool rc1cval, rc2cval;
     rc1cval = ROBOCLAW_1->ReadCurrents(ADDRESS, c1, c2);
     rc2cval = ROBOCLAW_2->ReadCurrents(ADDRESS, c3, c4);
@@ -116,7 +116,7 @@ String get_telemetry() {
 
   // Read battery voltages
   uint16_t v1 = 0, v2 = 0;
-  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool v1val, v2val;
     v1 = ROBOCLAW_1->ReadMainBatteryVoltage(ADDRESS, &v1val);
     v2 = ROBOCLAW_2->ReadMainBatteryVoltage(ADDRESS, &v2val);
@@ -128,7 +128,7 @@ String get_telemetry() {
 
   // Read PWM values
   int16_t pwm1 = 0, pwm2 = 0, pwm3 = 0, pwm4 = 0;
-  for (int i = 0; i < CAPTURE_ATTEMPTS; i ++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool pwms1val, pwms2val;
     pwms1val = ROBOCLAW_1->ReadPWMs(ADDRESS, pwm1, pwm2);
     pwms2val = ROBOCLAW_2->ReadPWMs(ADDRESS, pwm3, pwm4);
