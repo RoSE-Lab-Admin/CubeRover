@@ -3,6 +3,8 @@ import os
 from glob import glob
 
 package_name = 'nav2_stack'
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 setup(
     name=package_name,
@@ -12,11 +14,16 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.py'))),
-        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.yaml'))),
-        (os.path.join('share', package_name, 'maps'), glob(os.path.join('maps', '*'))),
-        (os.path.join('share', package_name, 'behavior_trees'), glob(os.path.join('behavior_trees', '*.xml'))),
-        (os.path.join('share', package_name), glob('*.csv')),
+        (os.path.join('share', package_name, 'launch'), 
+            glob(os.path.join('launch', '*launch.py'))),
+        (os.path.join('share', package_name, 'config'), 
+            glob(os.path.join('config', '*.yaml'))),
+        (os.path.join('share', package_name, 'maps'), 
+            glob(os.path.join('maps', '*'))),
+        (os.path.join('share', package_name, 'behavior_trees'), 
+            glob(os.path.join('behavior_trees', '*.xml'))),
+        (os.path.join('share', package_name), 
+            glob('*.csv')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
