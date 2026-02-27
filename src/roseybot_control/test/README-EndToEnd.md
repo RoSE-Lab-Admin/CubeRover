@@ -1,5 +1,5 @@
-# Instructions to Run on Raspberry Pi
-1. Connect computer to the same network as the Raspberry Pi
+# Instructions to Run End-to-End Test
+1. Connect the lab computer to the same network as the Raspberry Pi.
 2. On the lab computer, open a terminal:
 
     i. SSH into the Raspberry Pi
@@ -22,9 +22,6 @@
     ```
     ii. Run test:
     ```bash
-    # Bash
     sh end_to_end.sh
-
-    # Python - May have bug which prevents from ending properly
-    python3 test_end_to_end.py
     ```
+    ii. Kill test process using `Ctrl` + `C`.
