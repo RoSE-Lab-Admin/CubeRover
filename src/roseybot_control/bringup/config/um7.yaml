@@ -1,0 +1,9 @@
+um7:
+  ros__parameters:
+    port: "/dev/ttyUSB0" #check on flat rosey ls /dev/ttyUSB* to identify correct port
+    baud: 115200
+    frame_id: "um7"
+    update_rate: 100
+    # variance_acc: [0.0, 0.0, 0.0]
+    # variance_angular_vel: [0.0, 0.0, 0.0]
+    # variance_orientation: [0.0, 0.0, 0.0]
