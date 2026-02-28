@@ -2,7 +2,7 @@
   <BehaviorTree ID="MainTree">
     <RecoveryNode number_of_retries="3" name="NavigateRecovery">
 
-      <!-- Main navigation pipeline -->
+      <!-- Main pipeline sequence -->
       <PipelineSequence name="NavigateWithReplanning">
         <RateController hz="0.5">
           <RecoveryNode number_of_retries="1" name="ComputePathRecovery">
@@ -20,24 +20,26 @@
 
       </PipelineSequence>
 
-      <!-- Recovery behaviors - escalates through actions one at a time -->
+      <!-- Recovery Behaviors -->
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
         <RoundRobin name="RecoveryActions">
-          <!-- Attempt 1: Just clear costmaps and retry -->
+          <!-- First try, clear costmap and retry -->
           <Sequence name="ClearingRecovery">
-            <ClearEntireCostmap name="ClearLocalCostmap-Recovery"
-                                service_name="local_costmap/clear_entirely_local_costmap"/>
-            <ClearEntireCostmap name="ClearGlobalCostmap-Recovery"
-                                service_name="global_costmap/clear_entirely_global_costmap"/>
+            <ClearCostmapAroundRobot name="ClearLocalCostmap-Recovery"
+                                service_name="local_costmap/clear_around_local_costmap"
+                                reset_distance="1.0"/>
+            <ClearCostmapAroundRobot name="ClearGlobalCostmap-Recovery"
+                                service_name="global_costmap/clear_around_global_costmap"
+                                reset_distance="2.0"/>
             <Wait wait_duration="2"/>
           </Sequence>
-          <!-- Attempt 2: Back up to free itself -->
+          <!-- Next try, back up -->
           <Sequence name="BackupRecovery">
             <BackUp backup_dist="0.10" backup_speed="-0.10"/>
             <Wait wait_duration="2"/>
           </Sequence>
-          <!-- Attempt 3: Spin to reorient and rescan -->
+          <!-- Next try, spin (possibly add new scans) -->
           <Sequence name="SpinRecovery">
             <Spin spin_dist="0.262"/>
             <Wait wait_duration="2"/>
