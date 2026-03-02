@@ -18,16 +18,26 @@
           <ClearCostmapAroundRobot name="ClearLocalCostmap-Context"
                       service_name="local_costmap/clear_around_local_costmap"
                       reset_distance="1.0"/>
+          <ClearCostmapAroundRobot name="ClearLocalCostmap-Context"
+                      service_name="local_costmap/clear_around_local_costmap"
+                      reset_distance="1.0"/>
         </RecoveryNode>
 
       </PipelineSequence>
 
-      <!-- Recovery Behaviors -->
+      <!-- Recovery behaviors -->
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
         <RoundRobin name="RecoveryActions">
           <!-- First try, clear costmap and retry -->
+          <!-- First try, clear costmap and retry -->
           <Sequence name="ClearingRecovery">
+            <ClearCostmapAroundRobot name="ClearLocalCostmap-Recovery"
+                                service_name="local_costmap/clear_around_local_costmap"
+                                reset_distance="1.0"/>
+            <ClearCostmapAroundRobot name="ClearGlobalCostmap-Recovery"
+                                service_name="global_costmap/clear_around_global_costmap"
+                                reset_distance="2.0"/>
             <ClearCostmapAroundRobot name="ClearLocalCostmap-Recovery"
                                 service_name="local_costmap/clear_around_local_costmap"
                                 reset_distance="1.0"/>
@@ -37,11 +47,12 @@
             <Wait wait_duration="2"/>
           </Sequence>
           <!-- Next try, back up -->
+          <!-- Next try, back up -->
           <Sequence name="BackupRecovery">
             <BackUp backup_dist="0.10" backup_speed="-0.10"/>
             <Wait wait_duration="2"/>
           </Sequence>
-          <!-- Next try, spin (possibly add new scans) -->
+          <!-- Next try, spin -->
           <Sequence name="SpinRecovery">
             <Spin spin_dist="0.262"/>
             <Wait wait_duration="2"/>
