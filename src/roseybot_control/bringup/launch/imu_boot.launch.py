@@ -30,8 +30,8 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", robot, "' == 'rosey'"]))
     )
     um7_node = Node(
-        package="um7", #umx_driver
-        executable="um7", #?? umx_driver_node verify with ros2 package executables umx driver
+        package="umx_driver", #umx_driver
+        executable="um7_driver", #?? umx_driver_node verify with ros2 package executables umx driver
         parameters=[um7_params],
         output='log',
         condition=IfCondition(PythonExpression(["'", robot, "' == 'flat_rosey'"]))
