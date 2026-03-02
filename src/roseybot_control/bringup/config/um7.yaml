@@ -1,4 +1,4 @@
-um7:
+um7_driver:
   ros__parameters:
     ros_topic_prefix: "bno055/"
     port: "/dev/ttyAMA0" #check on flat rosey ls /dev/ttyUSB* to identify correct port
