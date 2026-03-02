@@ -1,18 +1,41 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.conditions import IfCondition
 
 import os
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
 
-    imu_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'bno055.yaml')
+    config_dir = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config')
 
-    imu_node = Node(
+    bno055_params = os.path.join(config_dir, 'bno055.yaml')
+    um7_params = os.path.join(config_dir, 'um7.yaml')
+
+    robot_arg = DeclareLaunchArgument(
+        'robot',
+        default_value='rosey',
+        description='Which Robot to Launch: rosey or flat_rosey'
+    )
+
+    robot = LaunchConfiguration('robot')
+
+    bno055_node = Node(
         package="bno055",
         executable="bno055",
-        parameters=[imu_params],
-        output='log'
+        parameters=[bno055_params],
+        output='log',
+        condition=IfCondition(PythonExpression(["'", robot, "' == 'rosey'"]))
+    )
+    um7_node = Node(
+        package="um7", #umx_driver
+        executable="um7", #?? umx_driver_node verify with ros2 package executables umx driver
+        parameters=[um7_params],
+        output='log',
+        condition=IfCondition(PythonExpression(["'", robot, "' == 'flat_rosey'"]))
+
     )
 
     # Static transform: bno055 sensor frame relative to base_link.
@@ -20,11 +43,22 @@ def generate_launch_description():
     bno055_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
-        name='bno055_tf',
-        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'bno055']
+        name='imu_tf',
+        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'bno055'],
+        condition=IfCondition(PythonExpression(["'", robot, "' == 'rosey'"]))
+    )
+    um7_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='imu_tf',
+        arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'um7'],
+        condition=IfCondition(PythonExpression(["'", robot, "' == 'flat_rosey'"]))
     )
 
     return LaunchDescription([
-        imu_node,
+        robot_arg,
+        bno055_node,
         bno055_tf,
+        um7_node,
+        um7_tf,
     ])
