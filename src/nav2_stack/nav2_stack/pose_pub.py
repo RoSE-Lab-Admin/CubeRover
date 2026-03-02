@@ -54,19 +54,32 @@ class PosePub(Node):
         return poses
 
     def gen_poses(self):
-        # initialize list of poses
         poses = []
 
-        # generate a few different pose messages
-        corners = [(2.0, 0.0), (2.0, -2.0), (0.0, -2.0), (0.0, 0.0), (2.0, 0.0)]
-        for x, y in corners:
+        # Circle parameters
+        cx, cy = 1.0, -1.0     # center of the circle in map frame
+        r = 2.0               # radius (meters)
+        n = 5               # number of points around the circle
+        close_loop = True      # repeat the first pose at the end
+
+        # Generate poses around the circle
+        for i in range(n + (1 if close_loop else 0)):
+            theta = 2.0 * math.pi * (i / n)
+
+            x = cx + r * math.cos(theta)
+            y = cy + r * math.sin(theta)
 
             pose = PoseStamped()
             pose.header.stamp = self.get_clock().now().to_msg()
             pose.header.frame_id = 'map'
             pose.pose.position.x = x
             pose.pose.position.y = y
-            pose.pose.orientation.w = 1.0
+
+            # Face tangent to the circle (yaw = theta + 90deg)
+            yaw = theta + math.pi / 2.0
+            pose.pose.orientation.z = math.sin(yaw / 2.0)
+            pose.pose.orientation.w = math.cos(yaw / 2.0)
+
             poses.append(pose)
 
         return poses

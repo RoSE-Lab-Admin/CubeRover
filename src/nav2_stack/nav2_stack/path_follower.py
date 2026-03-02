@@ -181,7 +181,11 @@ class PathFollower(Node):
             self.get_logger().info("trajectory completed")
 
         elif result == TaskResult.CANCELED:
-            self.get_logger().info("trajectory cancelled")
+            self.get_logger().info("trajectory cancelled")\
+            
+    def stop_nav(self):
+        self.nav.cancelTask()
+        self.nav.clearAllCostmaps()
             
 
 def main(args=None):
@@ -189,8 +193,12 @@ def main(args=None):
     path_follower = PathFollower()
     executor = MultiThreadedExecutor()
     executor.add_node(path_follower)
-    executor.spin()
-    rclpy.shutdown()
+
+    try:
+        executor.spin()
+    finally:
+        path_follower.stop_nav()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
