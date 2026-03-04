@@ -33,7 +33,12 @@ def generate_launch_description():
         package="umx_driver", #umx_driver
         executable="um7_driver", #?? umx_driver_node verify with ros2 package executables umx driver
         parameters=[um7_params],
-        remappings=[('imu', 'bno055')],
+        remappings=[
+		('/imu/data', '/bno055/data'),
+		('/imu/mag', '/bno055/mag'),
+		('/imu/rpy', '/bno055/rpy'),
+		('/imu/temperature', '/bno055/temperature'),
+	],
         output='log',
         condition=IfCondition(PythonExpression(["'", robot, "' == 'flat_rosey'"]))
 

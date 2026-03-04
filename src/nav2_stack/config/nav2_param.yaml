@@ -42,8 +42,8 @@ controller_server:
       angular_dist_threshold: 0.2
       forward_sampling_distance: 0.5
       angular_disengage_threshold: 0.15
-      rotate_to_heading_angular_vel: 1.0
-      max_angular_accel: 1.5
+      rotate_to_heading_angular_vel: 0.05
+      max_angular_accel: 1.0
       simulate_ahead_time: 1.0
       rotate_to_goal_heading: false
 
@@ -54,21 +54,21 @@ controller_server:
       min_lookahead_dist: 0.5
       max_lookahead_dist: 1.2
       lookahead_time: 1.5
-      rotate_to_heading_angular_vel: 1.0
+      rotate_to_heading_angular_vel: 0.05
       transform_tolerance: 0.5
       use_velocity_scaled_lookahead_dist: false
-      min_approach_linear_velocity: 0.10
+      min_approach_linear_velocity: 0.01
       approach_velocity_scaling_dist: 0.5
       use_collision_detection: false
       max_allowed_time_to_collision_up_to_carrot: 1.0
       use_regulated_linear_velocity_scaling: false
       use_cost_regulated_linear_velocity_scaling: false
       regulated_linear_scaling_min_radius: 0.9
-      regulated_linear_scaling_min_speed: 0.15
+      regulated_linear_scaling_min_speed: 0.01
       allow_reversing: false
       use_rotate_to_heading: false
       rotate_to_heading_min_angle: 0.5
-      max_angular_accel: 1.5
+      max_angular_accel: 1.0
       max_robot_pose_search_dist: 10.0
 
     progress_checker:
@@ -162,9 +162,9 @@ behavior_server:
     spin:
       plugin: "nav2_behaviors::Spin"
       simulate_ahead_time: 2.0
-      max_rotational_vel: 0.50
-      min_rotational_vel: 0.40
-      rotational_acc_lim: 3.2
+      max_rotational_vel: 0.10
+      min_rotational_vel: 0.01
+      rotational_acc_lim: 1.0
     
     backup:
       plugin: "nav2_behaviors::BackUp"
@@ -176,11 +176,11 @@ behavior_server:
     drive_on_heading:
       plugin: "nav2_behaviors::DriveOnHeading"
       simulate_ahead_time: 2.0
-      max_linear_vel: 0.25
-      min_linear_vel: 0.10
+      max_linear_vel: 0.10
+      min_linear_vel: 0.01
       linear_acc_lim: 1.0
-      max_angular_vel: 0.5
-      min_angular_vel: 0.2
+      max_angular_vel: 0.1
+      min_angular_vel: 0.01
       angular_acc_lim: 1.0
       time_allowance: 10.0
     
@@ -218,9 +218,9 @@ velocity_smoother:
     smoothing_frequency: 10.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.3, 0.0, 1.0]
+    max_velocity: [0.05, 0.0, 0.10]
     min_velocity: [-0.5, 0.0, -1.0]
-    max_accel: [0.3, 0.0, 1.5]
+    max_accel: [0.1, 0.0, 1.0]
     max_decel: [-0.5, 0.0, -5.0]
     odom_topic: /odometry/filtered
     odom_duration: 0.1
