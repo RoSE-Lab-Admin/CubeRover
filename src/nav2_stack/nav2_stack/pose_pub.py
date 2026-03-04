@@ -4,10 +4,11 @@ from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import Path
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
-
+from ament_index_python.packages import get_package_share_directory
 
 import math
 import csv
+import os
 from datetime import datetime
 
 class PosePub(Node):
@@ -15,7 +16,8 @@ class PosePub(Node):
         super().__init__('pose_pub')
 
         # csv file parameter
-        self.declare_parameter('csv_file', 'pose.csv')
+        default_csv = os.path.join(get_package_share_directory('nav2_stack'), 'pose.csv')
+        self.declare_parameter('csv_file', default_csv)
         self.csv_file = self.get_parameter('csv_file').value
 
         # transform broadcaster
