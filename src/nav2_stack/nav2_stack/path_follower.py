@@ -11,7 +11,7 @@ from tf2_ros import TransformBroadcaster
 
 from collections import deque
 import numpy as np
-from scipy.spatial.transform import Rotation as R, Slerp
+from scipy.spatial.transform import Rotation as R
 
 class PathFollower(Node):
     def __init__(self):
@@ -38,7 +38,7 @@ class PathFollower(Node):
             self.pose_idx = 0
 
         # initialize nav2
-        self.nav = BasicNavigator() 
+        self.nav = BasicNavigator()
 
         self.waypoints = []
 
@@ -46,7 +46,9 @@ class PathFollower(Node):
         self.nav2_ready = False
         self.started = False
 
-        self.timer = self.create_timer(0.5, self.follow_waypoints)
+        # poll for nav2 readiness separately so it doesn't block the control loop
+        self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
+        self.timer = self.create_timer(0.1, self.follow_waypoints)
 
     def waypoint_callback(self, trajectory):
         # path message with list of posestamped waypoints
@@ -106,6 +108,8 @@ class PathFollower(Node):
         first_time = Time.from_msg(self.prev_poses[0].header.stamp)
         last_time = Time.from_msg(self.prev_poses[-1].header.stamp)
         delta_t = (last_time - first_time).nanoseconds / 1e9
+        if delta_t == 0.0:
+            return 0.0, 0.0, np.zeros(3)
 
         # SHOULD I ADD COVIARIANCE FOR THIS?
         # linear velocity interp, in xy plane only
@@ -150,17 +154,20 @@ class PathFollower(Node):
         return velx, vely, omega
 
 
+    def check_nav2_ready(self):
+        self.nav2_check_timer.cancel()
+        self.nav._waitForNodeToActivate('bt_navigator')
+        self.nav2_ready = True
+
     def follow_waypoints(self):
-        
-        # if using opti mode, dont run until transforms are being published
+
         # if no path received yet
         if len(self.waypoints) == 0:
             return
-        
+
         # wait for nav2 to initialize
         if not self.nav2_ready:
-            self.nav._waitForNodeToActivate('bt_navigator')
-            self.nav2_ready = True
+            return
 
         # start navigating
         if not self.started:
@@ -181,8 +188,8 @@ class PathFollower(Node):
             self.get_logger().info("trajectory completed")
 
         elif result == TaskResult.CANCELED:
-            self.get_logger().info("trajectory cancelled")\
-            
+            self.get_logger().info("trajectory cancelled")
+
     def stop_nav(self):
         self.nav.cancelTask()
         self.nav.clearAllCostmaps()
