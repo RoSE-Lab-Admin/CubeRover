@@ -10,6 +10,8 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/logger.hpp"
+#include "commands.h"
+#include "messages.h"
 
 
 LibSerial::BaudRate convert_baud_rate(int baud_rate)
@@ -39,6 +41,7 @@ class ArduinoComms
 
 public:
   ArduinoComms(const rclcpp::Logger& logger) : logger_(logger) {}
+
 
   void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms)
   {  
@@ -124,18 +127,51 @@ public:
 
   void read_telem_values(std::vector<int> &telem)
   {
-    std::stringstream ss(send_msg("t\r"));
-    std::string token;
+    std::string command_string = std::string{GET_TELEM, '\r'};
+    std::stringstream ss(send_msg(command_string));
     //std::cerr << ss.str() << std::endl;
-    ss >> token;
-    if (token != "e") {
-        std::cerr << "Expected 'e' token but got: '" << token << "'" << std::endl;
-        return;
-    }
 
+    // Get the message type received
+    char message_type;
+    ss >> message_type;
+
+    // Handle the different message types
+    switch (message_type)
+    {
+      case TELEMETRY_MESSAGE: 
+        on_telem_received(ss, telem);
+        break;
+            
+      case GENERAL_MESSAGE: 
+        on_message_received(ss);
+        break;
+      
+      default:
+        std::cerr << "Invalid message type: '" << message_type << "'" << std::endl;
+        break;
+    }
+  }
+
+
+  void set_motor_values(int left_motors, int right_motors)
+  {
+    std::stringstream ss;
+    ss << GENERAL_MESSAGE << " " << left_motors << " " << right_motors << "\r";
+    serial_conn_.Write(ss.str());
+  }
+
+
+private:
+  LibSerial::SerialPort serial_conn_;
+  int timeout_ms_;
+  rclcpp::Logger logger_;
+
+
+  void on_telem_received(std::stringstream &ss, std::vector<int> &telem) {
     // RH: Changing to 14 elements to account for voltages
     // CG: Changing to 18 elements to accout for PWM data
     const uint16_t TELEMETRY_DATA_SIZE = 18;
+    std::string token;
     for (size_t i = 0; i < TELEMETRY_DATA_SIZE && ss >> token; ++i) {
         try {
             telem[i] = std::stoi(token);
@@ -147,18 +183,20 @@ public:
   }
 
 
-  void set_motor_values(int left_motors, int right_motors)
-  {
-    std::stringstream ss;
-    ss << "m " << left_motors << " " << right_motors << "\r";
-    serial_conn_.Write(ss.str());
+  void on_message_received(std::stringstream &ss) {
+    int error_code;
+    ss >> error_code; // Safely reads "1", "9", or "15" into an integer!
+
+    // Grabs the rest of the string payload automatically
+    // std::ws consumes the space between the error code and the message
+    std::string message;
+    std::getline(ss >> std::ws, message);
+
+    // Print message
+    std::cerr << "[Error " << error_code << " - " 
+              << errorCodeToString(error_code) << "]: " 
+              << message << std::endl;
   }
-
-
-private:
-    LibSerial::SerialPort serial_conn_;
-    int timeout_ms_;
-    rclcpp::Logger logger_;
 };
 
 

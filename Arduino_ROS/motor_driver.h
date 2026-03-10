@@ -4,6 +4,7 @@
 #include <EEPROM.h>
 #include <elapsedMillis.h>
 #include <RoboClaw.h>
+#include "messages.h"
 #include "motor_timer.h"
 
 void set_motor_speed(int motorIndex, uint32_t speed);
