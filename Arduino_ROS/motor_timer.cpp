@@ -1,3 +1,5 @@
+#include "motor_timer.h"
+
 MotorTimer::MotorTimer() {
     is_running = false;
 }

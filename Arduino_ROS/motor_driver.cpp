@@ -240,7 +240,7 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
 
   // Max allowable velocity threshold
   const float MAX_QPPS_PERCENT = 0.75;
-  if (abs(actual_vel) > MAX_QPPS * MAX_QPPS_THRESHOLD) {
+  if (abs(actual_vel) > MAX_QPPS * MAX_QPPS_PERCENT) {
     String message = "Velocity setpoint error on ";
     message += motor_name;
     message += " motor!";
