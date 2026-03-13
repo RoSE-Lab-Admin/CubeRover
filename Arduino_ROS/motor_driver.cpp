@@ -23,7 +23,7 @@ MotorTimer BR_timer;
 // At the top of your file
 const char* FL_name = "front left";
 const char* BL_name = "back left";
-const char* FR_name = "front right"
+const char* FR_name = "front right";
 const char* BR_name = "back right";
 
 // start custom function implementations
