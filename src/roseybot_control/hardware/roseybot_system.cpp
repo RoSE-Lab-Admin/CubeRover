@@ -250,7 +250,7 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
       wheel_map_[joint.name]->updatePWM(telemVals[i + 14]);
     }
   } catch (const LibSerial::ReadTimeout& e) {
-    RCLCPP_WARN(rclcpp::get_logger(), "Arduino serial timeout during read: %s", e.what());
+    RCLCPP_WARN(get_logger(), "Arduino serial timeout during read: %s", e.what());
   }
   
   return hardware_interface::return_type::OK;
