@@ -205,6 +205,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_activate(
   //   set_command(name, get_state(name));
   // }
 
+  // Force all velocity commands to zero to prevent unexpected lurches
+  // when the controllers start writing to the hardware.
+  for (const auto & joint : info_.joints) {
+    wheel_map_[joint.name]->cmd_ = 0.0;
+  }
+
   RCLCPP_INFO(get_logger(), "Successfully activated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -219,10 +225,28 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
   
   RCLCPP_INFO(get_logger(), "Deactivating ...please wait...");
 
+  // Immediately send a software halt to the motors.
+  // If the Arduino is in an error state, it will safely ignore this.
+  // If it's operating normally, it stops the robot instantly.
+  comm_->set_motor_values(0, 0);
+
+  RCLCPP_INFO(get_logger(), "Successfully deactivated!");
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+
+
+
+hardware_interface::CallbackReturn RoseyBotSystemHardware::on_cleanup(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  RCLCPP_INFO(get_logger(), "Cleaning up ...please wait...");
+
   //disconnect arduino
   comm_->disconnect();
 
-  RCLCPP_INFO(get_logger(), "Successfully deactivated!");
+  RCLCPP_INFO(get_logger(), "Successfully cleaned up!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -262,8 +286,14 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
 hardware_interface::return_type roseybot_arduino_interface ::RoseyBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  
-  comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc());
+
+  // Grab the front wheel commands using their exact URDF joint names.
+  // We don't need the back wheel commands since they are identical to the front.
+  int left_cmd_enc = wheel_map_["front_left_wheel_joint"]->cmd_to_enc();
+  int right_cmd_enc = wheel_map_["front_right_wheel_joint"]->cmd_to_enc();
+
+  // Send the two commands down the serial wire
+  comm_->set_motor_values(left_cmd_enc, right_cmd_enc);
 
   return hardware_interface::return_type::OK;
 }

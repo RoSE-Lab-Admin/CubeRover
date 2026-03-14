@@ -48,9 +48,25 @@ public:
     timeout_ms_ = timeout_ms;
     for (size_t i = 0; i < 5; i++){
       try {
+        // --- SERIAL CONNECTION CODE ---
         serial_conn_.Open(serial_device);
         serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
         serial_conn_.FlushIOBuffers();
+        // -----------------------------------
+
+        // --- ERROR CANCELLATION CODE ---
+        // Send the clear character
+        serial_conn_.Write(std::string{CLEAR_ERROR});
+
+        // Give the Arduino 50ms to read the clear error character, exit the while(true) loop, 
+        // and flush its own receive buffer.
+        rclcpp::sleep_for(std::chrono::milliseconds(50)); 
+
+        // Flush the PC-side buffers one more time to destroy any final error 
+        // messages the Arduino might have transmitted right before it caught the 'c'.
+        serial_conn_.FlushIOBuffers();
+        // -----------------------------------
+
         return;
       } catch (const LibSerial::OpenFailed& e) {
         RCLCPP_ERROR(logger_, "error opening serial port: %s - %s", serial_device.c_str(), e.what());

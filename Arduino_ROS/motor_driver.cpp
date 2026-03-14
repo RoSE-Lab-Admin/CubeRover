@@ -204,6 +204,44 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
 }
 
 
+void enter_error_state(ErrorCode err, const String& message, uint32_t blink_interval_ms) {
+  // Immediately halt the motors
+  set_motor_speeds(0, 0); 
+  send_message(err, message);
+
+  uint32_t last_blink_time = millis();
+  bool led_state = false;
+
+  // Trap the Arduino in the non-blocking loop
+  while (true) {
+    if (Serial.available()) {
+      char command_char = Serial.read();
+
+      // Allow for cancelling the infinite loop
+      if (command_char == CLEAR_ERROR) { 
+        // Throw away any remaining stale bytes in the buffer
+        while (Serial.available()) {
+          Serial.read();
+        }
+
+        // Break the infinite loop and return to normal execution
+        return;
+      }
+    }
+
+    uint32_t current_time = millis();
+    if (current_time - last_blink_time >= blink_interval_ms) {
+      last_blink_time = current_time;
+      led_state = !led_state;
+      digitalWrite(13, led_state ? HIGH : LOW);
+      
+      // Spam the ROS node with the specific message
+      send_message(err, message);
+    }
+  }
+}
+
+
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
   const int32_t NOISE_FLOOR_PERCENT = 2;
   const int32_t NOISE_FLOOR_QPPS = (NOISE_FLOOR_PERCENT * MAX_QPPS) / 100;
@@ -223,15 +261,12 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
       message += motor_name;
       message += " motor wires!";
 
-      send_message(MessageCode::CHECK_ENCODER, message);
-      set_motor_speeds(0, 0);
-      while (true) {
-        digitalWrite(13,HIGH);
-        delay(500);
-        digitalWrite(13,LOW);
-        delay(500);
-        send_message(MessageCode::CHECK_ENCODER, message);
-      }
+      // Trigger the 500ms blink loop
+      enter_error_state(ErrorCode::CHECK_ENCODER, message, 500);
+
+      // Prevent instant re-trigger when the loop exits
+      motor_timer.reset();
+      return;
     }
   } else {
     // Motor is behaving correctly (or just experiencing tiny noise), so reset the timer
@@ -245,16 +280,10 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
     String message = "Velocity setpoint error on ";
     message += motor_name;
     message += " motor!";
-    
-    send_message(MessageCode::CHECK_VELOCITY, message);
-    set_motor_speeds(0, 0);
-    while (true) {
-      digitalWrite(13,HIGH);
-      delay(1000);
-      digitalWrite(13,LOW);
-      delay(1000);
-      send_message(MessageCode::CHECK_VELOCITY, message);
-    }
+
+    // Trigger the 1000ms blink loop
+    enter_error_state(ErrorCode::CHECK_VELOCITY, message, 1000);
+    return;
   }
 }
 
