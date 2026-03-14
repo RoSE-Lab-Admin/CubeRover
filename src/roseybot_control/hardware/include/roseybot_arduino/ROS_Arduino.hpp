@@ -169,7 +169,7 @@ public:
   void set_motor_values(int left_motors, int right_motors)
   {
     std::stringstream ss;
-    ss << GENERAL_MESSAGE << " " << left_motors << " " << right_motors << "\r";
+    ss << SET_MOTOR_SPEEDS << " " << left_motors << " " << right_motors << "\r";
     serial_conn_.Write(ss.str());
   }
 
