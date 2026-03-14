@@ -15,6 +15,11 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2);
 void pid_set(int arg1, int arg2, int arg3);
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name);
 
+// These functions allow the main Arduino loop to safely interact with the motor driver's error state.
+bool is_system_faulted();                 // Asks if the motors are currently in an error state
+void clear_system_fault();                // Resets the error state back to normal
+void broadcast_fault_state();             // Handles the LED blinking and serial message spam
+
 class Wheel {
   public:
     Wheel();

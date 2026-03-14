@@ -26,6 +26,15 @@ const char* BL_name = "back left";
 const char* FR_name = "front right";
 const char* BR_name = "back right";
 
+// Hidden internal state variables
+static bool _is_faulted = false;
+static MessageCode _current_error_code;
+static String _current_error_message;
+static uint32_t _blink_interval = 500;
+static uint32_t _last_blink_time = 0;
+static bool _led_state = false;
+
+
 // start custom function implementations
 void set_motor_speed(int motorIndex, uint32_t speed) {
   if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
@@ -204,41 +213,40 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
 }
 
 
-void enter_error_state(ErrorCode err, const String& message, uint32_t blink_interval_ms) {
-  // Immediately halt the motors
-  set_motor_speeds(0, 0); 
-  send_message(err, message);
+bool is_system_faulted() {
+  return _is_faulted;
+}
 
-  uint32_t last_blink_time = millis();
-  bool led_state = false;
 
-  // Trap the Arduino in the non-blocking loop
-  while (true) {
-    if (Serial.available()) {
-      char command_char = Serial.read();
+void clear_system_fault() {
+  _is_faulted = false;
+  digitalWrite(13, HIGH); // Set LED back to solid on
+}
 
-      // Allow for cancelling the infinite loop
-      if (command_char == CLEAR_ERROR) { 
-        // Throw away any remaining stale bytes in the buffer
-        while (Serial.available()) {
-          Serial.read();
-        }
 
-        // Break the infinite loop and return to normal execution
-        return;
-      }
-    }
-
-    uint32_t current_time = millis();
-    if (current_time - last_blink_time >= blink_interval_ms) {
-      last_blink_time = current_time;
-      led_state = !led_state;
-      digitalWrite(13, led_state ? HIGH : LOW);
-      
-      // Spam the ROS node with the specific message
-      send_message(err, message);
-    }
+// This runs non-stop in the main loop ONLY if is_system_faulted() is true
+void broadcast_fault_state() {
+  uint32_t current_time = millis();
+  if (current_time - _last_blink_time >= _blink_interval) {
+    _last_blink_time = current_time;
+    _led_state = !_led_state;
+    digitalWrite(13, _led_state ? HIGH : LOW);
+    
+    send_message(_current_error_code, _current_error_message);
   }
+}
+
+
+// Update your enter_error_state function to just trigger these hidden variables
+void enter_error_state(MessageCode msg_code, const String& message, uint32_t blink_interval_ms) {
+  set_motor_speeds(0, 0); 
+  send_message(msg_code, message);
+
+  _is_faulted = true;
+  _current_error_code = msg_code;
+  _current_error_message = message;
+  _blink_interval = blink_interval_ms;
+  _last_blink_time = millis();
 }
 
 
@@ -262,7 +270,7 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
       message += " motor wires!";
 
       // Trigger the 500ms blink loop
-      enter_error_state(ErrorCode::CHECK_ENCODER, message, 500);
+      enter_error_state(MessageCode::CHECK_ENCODER, message, 500);
 
       // Prevent instant re-trigger when the loop exits
       motor_timer.reset();
@@ -282,7 +290,7 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
     message += " motor!";
 
     // Trigger the 1000ms blink loop
-    enter_error_state(ErrorCode::CHECK_VELOCITY, message, 1000);
+    enter_error_state(MessageCode::CHECK_VELOCITY, message, 1000);
     return;
   }
 }
