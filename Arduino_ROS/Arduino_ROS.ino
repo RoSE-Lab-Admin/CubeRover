@@ -79,6 +79,13 @@ void run_command() {
       //Serial.println("pid OK");
       break;
     }
+    case SET_SAFETY_PARAMS: {
+      set_safety_params(arg1, arg2, arg3);
+      
+      // ROS-side is expecting a character to confirm the message was received
+      Serial.println(); 
+      break;
+    }
   }
 }
 

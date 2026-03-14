@@ -21,6 +21,11 @@
           <param name="timeout_ms">150</param>
           <param name="device">/dev/ttyACM0</param>
           <param name="enc/rev">5281.1</param>
+          
+          <!-- safety_check tuning parameters -->
+          <param name="noise_floor_percent">2</param>
+          <param name="opposite_direction_ms">500</param>
+          <param name="max_velocity_percent">75</param>
         </hardware>
 
         <!-- <hardware>

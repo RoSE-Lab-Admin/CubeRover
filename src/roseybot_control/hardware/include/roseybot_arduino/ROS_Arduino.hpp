@@ -43,7 +43,8 @@ public:
   ArduinoComms(const rclcpp::Logger& logger) : logger_(logger) {}
 
 
-  void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms)
+  void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms, 
+               int32_t noise_floor_pct, int32_t opp_dir_ms, int32_t max_vel_pct)
   {  
     timeout_ms_ = timeout_ms;
     for (size_t i = 0; i < 5; i++){
@@ -55,17 +56,20 @@ public:
         // -----------------------------------
 
         // --- ERROR CANCELLATION CODE ---
-        // Send the clear character
         serial_conn_.Write(std::string{CLEAR_ERROR});
-
         // Give the Arduino 50ms to read the clear error character, exit the while(true) loop, 
         // and flush its own receive buffer.
-        rclcpp::sleep_for(std::chrono::milliseconds(50)); 
-
+        rclcpp::sleep_for(std::chrono::milliseconds(50));
         // Flush the PC-side buffers one more time to destroy any final error 
         // messages the Arduino might have transmitted right before it caught the 'c'.
         serial_conn_.FlushIOBuffers();
         // -----------------------------------
+        
+        // --- SEND SAFETY PARAMS CODE ---
+        std::stringstream ss;
+        ss << SET_SAFETY_PARAMS << " " << noise_floor << " " << opp_dir_ms << " " << max_qpps_pct << "\r";
+        // Use send_msg so it waits for the Arduino to acknowledge receipt
+        send_msg(ss.str());
 
         return;
       } catch (const LibSerial::OpenFailed& e) {
@@ -74,7 +78,14 @@ public:
       } catch (const std::exception& e) {
         RCLCPP_ERROR(logger_, "error opening serial port: %s - %s", serial_device.c_str(), e.what());
         std::cerr << "exception thrown! " << e.what();
+
+        // Close the port so that the next loop iteration can reopen it
+        if (serial_conn_.IsOpen()) {
+            serial_conn_.Close();
+        }
       }
+
+      // Wait 5 seconds before attempting to open the port again
       rclcpp::sleep_for(std::chrono::seconds(5));
     }
     RCLCPP_FATAL(logger_, "cannot open serial port: %s", serial_device.c_str());

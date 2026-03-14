@@ -51,6 +51,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
   ENC_PER_REV_ = std::stof(info_.hardware_parameters["enc/rev"]);
   // END
 
+  // BEGIN: get safety check params
+  NOISE_FLOOR_PCT_ = std::stoi(info_.hardware_parameters["noise_floor_percent"]);
+  OPP_DIR_MS_ = std::stoi(info_.hardware_parameters["opposite_direction_ms"]);
+  MAX_VEL_PCT_ = std::stoi(info_.hardware_parameters["max_velocity_percent"]);
+  // END
+
   // create class for handling arduino comm_
   comm_ = new ArduinoComms(get_logger());
 
@@ -176,7 +182,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_configure(
     comm_->disconnect();
   }
   try{
-    comm_->connect(DEVICE_, BAUD_, TIMEOUT_MS_);
+    comm_->connect(DEVICE_, BAUD_, TIMEOUT_MS_, NOISE_FLOOR_PCT_, OPP_DIR_MS_, MAX_VEL_PCT_);
   } catch (const std::runtime_error& e) {
     return hardware_interface::CallbackReturn::ERROR;
   }
