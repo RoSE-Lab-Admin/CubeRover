@@ -78,37 +78,35 @@ public:
   }
 
 
+  /**
+  * @brief Sends a pure ASCII message to the Arduino and waits for a newline.
+  * * @param msg_to_send The string payload to transmit.
+  * @param print_output If true, echoes the transaction to standard out.
+  * @return std::string The exact response string received from the Arduino.
+  * * @throws LibSerial::ReadTimeout If the Arduino fails to respond within timeout_ms_.
+  */
   std::string send_msg(const std::string &msg_to_send, bool print_output = false)
   {
     serial_conn_.FlushIOBuffers(); // Just in case
     serial_conn_.Write(msg_to_send);
 
-
-
     std::string response = "";
-    try {
-      auto start = std::chrono::high_resolution_clock::now();
-      char c = '\0';
-      while (true) {
-        if (serial_conn_.IsDataAvailable()) {
-          serial_conn_.ReadByte(c);
-          response += c;
-          if (c== '\n') break;
-        }
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() >= timeout_ms_) {
-          std::cout << response << ": timed out" << std::endl;
-          throw LibSerial::ReadTimeout("read timeout");
-        }
+    auto start = std::chrono::high_resolution_clock::now();
+    char c = '\0';
+    while (true) {
+      if (serial_conn_.IsDataAvailable()) {
+        serial_conn_.ReadByte(c);
+        response += c;
+        if (c== '\n') break;
       }
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() >= timeout_ms_) {
+        std::cout << response << ": timed out" << std::endl;
+        throw LibSerial::ReadTimeout("read timeout");
+      }
+    }
 
-      // Responses end with \r\n so we will read up to (and including) the \n.
-      // response = serial_conn_.ReadLine(timeout_ms_);
-    }
-    catch (const LibSerial::ReadTimeout& e)
-    {
-        std::cerr << "Read timeout: " << e.what() << std::endl;
-        response = "dnf";
-    }
+    // Responses end with \r\n so we will read up to (and including) the \n.
+    // response = serial_conn_.ReadLine(timeout_ms_);
 
     if (print_output)
     {
