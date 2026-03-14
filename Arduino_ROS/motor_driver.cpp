@@ -205,7 +205,7 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
 
 
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
-  const uint32_t NOISE_FLOOR_PERCENT = 2;
+  const int32_t NOISE_FLOOR_PERCENT = 2;
   const int32_t NOISE_FLOOR_QPPS = (NOISE_FLOOR_PERCENT * MAX_QPPS) / 100;
   const uint32_t OPPOSITE_DIR_THRESHOLD_MS = 500; // Half a second of consistently moving in the wrong direction
 
@@ -221,16 +221,16 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
     if (motor_timer.hasExpired(OPPOSITE_DIR_THRESHOLD_MS)) {
       String message = "Check ";
       message += motor_name;
-      message += " motor wire!";
+      message += " motor wires!";
 
-      send_message(ErrorCode::CHECK_ENCODER, message);
+      send_message(MessageCode::CHECK_ENCODER, message);
       set_motor_speeds(0, 0);
       while (true) {
         digitalWrite(13,HIGH);
         delay(500);
         digitalWrite(13,LOW);
         delay(500);
-        send_message(ErrorCode::CHECK_ENCODER, message);
+        send_message(MessageCode::CHECK_ENCODER, message);
       }
     }
   } else {
@@ -239,20 +239,21 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
   }
 
   // Max allowable velocity threshold
-  const float MAX_QPPS_PERCENT = 0.75;
-  if (abs(actual_vel) > MAX_QPPS * MAX_QPPS_PERCENT) {
+  const int32_t MAX_QPPS_PERCENT = 75;
+  const int32_t MAX_VEL_QPPS = (MAX_QPPS_PERCENT * MAX_QPPS) / 100;
+  if (abs(actual_vel) > MAX_VEL_QPPS) {
     String message = "Velocity setpoint error on ";
     message += motor_name;
     message += " motor!";
     
-    send_message(ErrorCode::CHECK_VELOCITY, message);
+    send_message(MessageCode::CHECK_VELOCITY, message);
     set_motor_speeds(0, 0);
     while (true) {
       digitalWrite(13,HIGH);
       delay(1000);
       digitalWrite(13,LOW);
       delay(1000);
-      send_message(ErrorCode::CHECK_VELOCITY, message);
+      send_message(MessageCode::CHECK_VELOCITY, message);
     }
   }
 }

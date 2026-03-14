@@ -190,8 +190,8 @@ private:
     std::getline(ss >> std::ws, message);
 
     // Print message
-    std::cerr << "[Error " << error_code << " - " 
-              << errorCodeToString(error_code) << "]: " 
+    std::cerr << "[Message " << error_code << " - " 
+              << messageCodeToString(error_code) << "]: " 
               << message << std::endl;
   }
 };
