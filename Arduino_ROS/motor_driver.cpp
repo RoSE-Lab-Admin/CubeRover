@@ -237,7 +237,6 @@ void broadcast_fault_state() {
 }
 
 
-// Update your enter_error_state function to just trigger these hidden variables
 void enter_error_state(MessageCode msg_code, const String& message, uint32_t blink_interval_ms) {
   set_motor_speeds(0, 0); 
   send_message(msg_code, message);
