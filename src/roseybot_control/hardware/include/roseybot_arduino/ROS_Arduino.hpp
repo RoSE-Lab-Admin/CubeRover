@@ -100,8 +100,7 @@ public:
         if (c== '\n') break;
       }
       if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() >= timeout_ms_) {
-        std::cout << response << ": timed out" << std::endl;
-        throw LibSerial::ReadTimeout("read timeout");
+        throw LibSerial::ReadTimeout("send_msg timeout");
       }
     }
 
