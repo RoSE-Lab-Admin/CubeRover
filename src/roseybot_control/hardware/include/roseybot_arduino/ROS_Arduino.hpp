@@ -53,7 +53,6 @@ public:
         serial_conn_.Open(serial_device);
         serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
         serial_conn_.FlushIOBuffers();
-        // -----------------------------------
 
         // --- ERROR CANCELLATION CODE ---
         serial_conn_.Write(std::string{CLEAR_ERROR});
@@ -63,7 +62,6 @@ public:
         // Flush the PC-side buffers one more time to destroy any final error 
         // messages the Arduino might have transmitted right before it caught the 'c'.
         serial_conn_.FlushIOBuffers();
-        // -----------------------------------
         
         // --- SEND SAFETY PARAMS CODE ---
         std::stringstream ss;
