@@ -52,24 +52,17 @@ public:
         // --- SERIAL CONNECTION CODE ---
         serial_conn_.Open(serial_device);
         serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
-        serial_conn_.FlushIOBuffers();
 
         // --- ERROR CANCELLATION CODE ---
-        // Send the clear character
         write_msg(std::string{CLEAR_ERROR});
-
         // Give the Arduino 50ms to read the clear error character, exit the while(true) loop, 
         // and flush its own receive buffer.
         rclcpp::sleep_for(std::chrono::milliseconds(50));
-        // Flush the PC-side buffers one more time to destroy any final error 
-        // messages the Arduino might have transmitted right before it caught the 'c'.
-        serial_conn_.FlushIOBuffers();
         
         // --- SEND SAFETY PARAMS CODE ---
         std::stringstream ss;
-        ss << SET_SAFETY_PARAMS << " " << noise_floor_pct << " " << opp_dir_ms << " " << max_vel_pct << "\r";
-        // Use send_msg so it waits for the Arduino to acknowledge receipt
-        send_msg(ss.str());
+        ss << SET_SAFETY_PARAMS << " " << noise_floor_pct << " " << opp_dir_ms << " " << max_vel_pct;
+        send_msg(ss.str()); // Use send_msg so synchronously wait for the Arduino's acknowledgement
 
         return;
       } catch (const LibSerial::OpenFailed& e) {
