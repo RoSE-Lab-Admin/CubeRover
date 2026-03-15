@@ -55,7 +55,7 @@ public:
 
         // --- ERROR CANCELLATION CODE ---
         // Send the clear character
-        write_msg(std::string{CLEAR_ERROR, '\r'});
+        write_msg(std::string{CLEAR_ERROR});
 
         // Give the Arduino 50ms to read the clear error character, exit the while(true) loop, 
         // and flush its own receive buffer.
@@ -100,7 +100,7 @@ public:
   void write_msg(const std::string &msg_to_send)
   {
     serial_conn_.FlushIOBuffers(); 
-    serial_conn_.Write(msg_to_send);
+    serial_conn_.Write(msg_to_send + "\r"); // Automatically append the carriage return
   }
 
 
@@ -158,14 +158,14 @@ public:
 
   void send_empty_msg()
   {
-    std::string response = send_msg("\r");
+    std::string response = send_msg("");
   }
 
 
   void read_telem_values(std::vector<int> &telem)
   {
     // Use the Write primitive
-    write_msg(std::string{GET_TELEM, '\r'});
+    write_msg(std::string{GET_TELEM});
 
     // Keep reading lines while they exist
     while (true) {
@@ -199,7 +199,7 @@ public:
   void set_motor_values(int left_motors, int right_motors)
   {
     std::stringstream ss;
-    ss << SET_MOTOR_SPEEDS << " " << left_motors << " " << right_motors << "\r";
+    ss << SET_MOTOR_SPEEDS << " " << left_motors << " " << right_motors;
     write_msg(ss.str());
   }
 
