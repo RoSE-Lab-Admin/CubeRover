@@ -228,15 +228,14 @@ void clear_system_fault() {
 }
 
 
-// This runs non-stop in the main loop ONLY if is_system_faulted() is true
-void broadcast_fault_state() {
+void update_fault_led() {
+  if (!_is_faulted) return;
+  
   uint32_t current_time = millis();
   if (current_time - _last_blink_time >= _blink_interval) {
     _last_blink_time = current_time;
     _led_state = !_led_state;
     digitalWrite(13, _led_state ? HIGH : LOW);
-    
-    send_message(_current_error_code, _current_error_message);
   }
 }
 
@@ -261,6 +260,11 @@ void set_safety_params(int32_t noise_floor, uint32_t opp_dir_ms, int32_t max_vel
 
 
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
+  // If the system is already faulted, don't keep triggering new faults
+  if (is_system_faulted()) {
+    return;
+  }
+
   const int32_t NOISE_FLOOR_QPPS = (noise_floor_percent * MAX_QPPS) / 100;
   const int32_t MAX_VEL_QPPS = (max_velocity_percent * MAX_QPPS) / 100;
 
