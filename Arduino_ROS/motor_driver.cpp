@@ -250,6 +250,11 @@ void enter_error_state(MessageCode msg_code, const String& message, uint32_t bli
 
 
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
+  // If the system is already faulted, don't keep triggering new faults
+  if (is_system_faulted()) {
+    return;
+  }
+
   const int32_t NOISE_FLOOR_PERCENT = 2;
   const int32_t NOISE_FLOOR_QPPS = (NOISE_FLOOR_PERCENT * MAX_QPPS) / 100;
   const uint32_t OPPOSITE_DIR_THRESHOLD_MS = 500; // Half a second of consistently moving in the wrong direction
