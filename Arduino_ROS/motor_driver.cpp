@@ -224,15 +224,14 @@ void clear_system_fault() {
 }
 
 
-// This runs non-stop in the main loop ONLY if is_system_faulted() is true
-void broadcast_fault_state() {
+void update_fault_led() {
+  if (!_is_faulted) return;
+  
   uint32_t current_time = millis();
   if (current_time - _last_blink_time >= _blink_interval) {
     _last_blink_time = current_time;
     _led_state = !_led_state;
     digitalWrite(13, _led_state ? HIGH : LOW);
-    
-    send_message(_current_error_code, _current_error_message);
   }
 }
 

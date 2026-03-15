@@ -93,30 +93,57 @@ public:
 
 
   /**
-  * @brief Sends a pure ASCII message to the Arduino and waits for a newline.
-  * * @param msg_to_send The string payload to transmit.
+  * @brief Sends a pure ASCII message to the Arduino
+  * @param msg_to_send The string payload to transmit.
   * @param print_output If true, echoes the transaction to standard out.
-  * @return std::string The exact response string received from the Arduino.
-  * * @throws LibSerial::ReadTimeout If the Arduino fails to respond within timeout_ms_.
   */
-  std::string send_msg(const std::string &msg_to_send, bool print_output = false)
+  void write_msg(const std::string &msg_to_send)
   {
-    serial_conn_.FlushIOBuffers(); // Just in case
+    serial_conn_.FlushIOBuffers(); 
     serial_conn_.Write(msg_to_send);
+  }
 
+  
+  /**
+  * @brief Handles reading one line of data
+  * @return std::string The response string received from the Arduino.
+  * @throws LibSerial::ReadTimeout If the Arduino fails to respond within timeout_ms_.
+  */
+  std::string read_line()
+  {
     std::string response = "";
     auto start = std::chrono::high_resolution_clock::now();
     char c = '\0';
+
     while (true) {
       if (serial_conn_.IsDataAvailable()) {
         serial_conn_.ReadByte(c);
         response += c;
         if (c== '\n') break;
       }
-      if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() >= timeout_ms_) {
-        throw LibSerial::ReadTimeout("send_msg timeout");
+
+      // Check for timeout
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - start).count() >= timeout_ms_) {
+        throw LibSerial::ReadTimeout("read_line timeout");
       }
     }
+
+    return response;
+  }
+
+
+  /**
+  * @brief Sends a pure ASCII message to the Arduino and waits for a newline.
+  * @param msg_to_send The string payload to transmit.
+  * @param print_output If true, echoes the transaction to standard out.
+  * @return std::string The response string received from the Arduino.
+  * @throws LibSerial::ReadTimeout If the Arduino fails to respond within timeout_ms_.
+  */
+  std::string send_msg(const std::string &msg_to_send, bool print_output = false)
+  {
+    write_msg(msg_to_send);
+    std::string response = read_line();
 
     // Responses end with \r\n so we will read up to (and including) the \n.
     // response = serial_conn_.ReadLine(timeout_ms_);
@@ -125,7 +152,6 @@ public:
     {
       std::cout << "Sent: " << msg_to_send << " Recv: " << response << std::endl;
     }
-
     return response;
   }
 
@@ -138,28 +164,34 @@ public:
 
   void read_telem_values(std::vector<int> &telem)
   {
-    std::string command_string = std::string{GET_TELEM, '\r'};
-    std::stringstream ss(send_msg(command_string));
-    //std::cerr << ss.str() << std::endl;
+    // Use the Write primitive
+    write_msg(std::string{GET_TELEM, '\r'});
 
-    // Get the message type received
-    char message_type;
-    ss >> message_type;
+    // Keep reading lines while they exist
+    while (true) {
+      std::string line = read_line(); 
+      std::stringstream ss(line);
 
-    // Handle the different message types
-    switch (message_type)
-    {
-      case TELEMETRY_MESSAGE: 
-        on_telem_received(ss, telem);
-        break;
-            
-      case GENERAL_MESSAGE: 
-        on_message_received(ss);
-        break;
-      
-      default:
-        std::cerr << "Invalid message type: '" << message_type << "'" << std::endl;
-        break;
+      // Get the message type received
+      char message_type;
+      ss >> message_type;
+
+      // Handle the different message types
+      switch (message_type)
+      {
+        case TELEMETRY_MESSAGE: 
+          on_telem_received(ss, telem);
+          return;
+              
+        case GENERAL_MESSAGE: 
+          on_message_received(ss);
+          // Loop should also pull the next telemetry line
+          break;
+        
+        default:
+          std::cerr << "Invalid message type: '" << message_type << "'" << std::endl;
+          return;
+      }
     }
   }
 
@@ -168,7 +200,7 @@ public:
   {
     std::stringstream ss;
     ss << SET_MOTOR_SPEEDS << " " << left_motors << " " << right_motors << "\r";
-    serial_conn_.Write(ss.str());
+    write_msg(ss.str());
   }
 
 
@@ -178,7 +210,8 @@ private:
   rclcpp::Logger logger_;
 
 
-  void on_telem_received(std::stringstream &ss, std::vector<int> &telem) {
+  void on_telem_received(std::stringstream &ss, std::vector<int> &telem)
+  {
     // RH: Changing to 14 elements to account for voltages
     // CG: Changing to 18 elements to accout for PWM data
     const uint16_t TELEMETRY_DATA_SIZE = 18;
@@ -194,7 +227,8 @@ private:
   }
 
 
-  void on_message_received(std::stringstream &ss) {
+  void on_message_received(std::stringstream &ss)
+  {
     int error_code;
     ss >> error_code; // Safely reads "1", "9", or "15" into an integer!
 

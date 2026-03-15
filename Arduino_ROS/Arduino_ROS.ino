@@ -57,7 +57,6 @@ void run_command() {
   switch (cmd) {
     case CLEAR_ERROR: {      // Handle clear commands when NOT faulted
       clear_system_fault();
-      Serial.println();      // Acknowledge the command
       break;
     }
     case SET_MOTOR_SPEEDS: {
@@ -119,7 +118,7 @@ void setup() {
 void loop() {
   // If the motor driver is broken, give it CPU time to blink the LED and send errors
   if (is_system_faulted()) {
-    broadcast_fault_state();
+    update_fault_led();
   }
   
   // Read incoming serial bytes
