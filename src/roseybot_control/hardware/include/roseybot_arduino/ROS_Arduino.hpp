@@ -55,7 +55,7 @@ public:
 
         // --- ERROR CANCELLATION CODE ---
         // Send the clear character
-        serial_conn_.Write(std::string{CLEAR_ERROR});
+        write_msg(std::string{CLEAR_ERROR, '\r'});
 
         // Give the Arduino 50ms to read the clear error character, exit the while(true) loop, 
         // and flush its own receive buffer.
@@ -103,7 +103,7 @@ public:
     serial_conn_.Write(msg_to_send);
   }
 
-  
+
   /**
   * @brief Handles reading one line of data
   * @return std::string The response string received from the Arduino.
