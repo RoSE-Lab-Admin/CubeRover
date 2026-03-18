@@ -35,21 +35,32 @@ protected:
 
 TEST_F(SimpleWheelTest, PosAndVelMath) {
   // Since ratio is 1.0, counts should equal radians exactly
+
+  // Forward
   w_simple_.updatePos(10);
   EXPECT_DOUBLE_EQ(w_simple_.pos_, 10.0);
-
   w_simple_.updateVel(5);
   EXPECT_DOUBLE_EQ(w_simple_.vel_, 5.0);
+
+  // Reverse
+  w_simple_.updatePos(-10);
+  EXPECT_DOUBLE_EQ(w_simple_.pos_, -10.0);
+  w_simple_.updateVel(-5);
+  EXPECT_DOUBLE_EQ(w_simple_.vel_, -5.0);
 }
 
 TEST_F(SimpleWheelTest, CmdToEncTruncation) {
-  // 0.99 radians / 1.0 ratio = 0.99 -> round long -> 1
-  w_simple_.cmd_ = 0.99;
+  // Forward rounding
+  w_simple_.cmd_ = 0.99; // 0.99 radians / 1.0 ratio = 0.99 -> round long -> 1
+  EXPECT_EQ(w_simple_.cmd_to_enc(), 1);
+  w_simple_.cmd_ = 1.0; // 1.0 radians / 1.0 ratio = 1.0 -> cast to int -> 1
   EXPECT_EQ(w_simple_.cmd_to_enc(), 1);
 
-  // 1.0 radians / 1.0 ratio = 1.0 -> cast to int -> 1
-  w_simple_.cmd_ = 1.0;
-  EXPECT_EQ(w_simple_.cmd_to_enc(), 1);
+  // Reverse rounding (Protects against accidental int truncation in the future)
+  w_simple_.cmd_ = -0.99;
+  EXPECT_EQ(w_simple_.cmd_to_enc(), -1);
+  w_simple_.cmd_ = -1.0;
+  EXPECT_EQ(w_simple_.cmd_to_enc(), -1);
 }
 
 // Conversion Tests (Current/Voltage)
@@ -57,9 +68,15 @@ TEST_F(SimpleWheelTest, CmdToEncTruncation) {
 TEST_F(SimpleWheelTest, CurrentIn10mA) {
   // Test input in 10 mA increments
   // Expect 150 * 10 mA == 1.5 A
+
+  // Forward
   int inputMilliAmps = 150;
   w_simple_.updateCur(inputMilliAmps);
   EXPECT_DOUBLE_EQ(w_simple_.current_, 1.5);
+
+  // Reverse (Assuming RoboClaw reports negative current here)
+  w_simple_.updateCur(-inputMilliAmps);
+  EXPECT_DOUBLE_EQ(w_simple_.current_, -1.5);
 }
 
 TEST_F(SimpleWheelTest, VoltageIn100mV) {
