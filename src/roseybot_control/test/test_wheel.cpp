@@ -70,6 +70,49 @@ TEST_F(SimpleWheelTest, VoltageIn100mV) {
   EXPECT_DOUBLE_EQ(w_simple_.voltage_, 1.5);
 }
 
+// PWM Tests
+// --------------------------------------------------------
+TEST_F(SimpleWheelTest, PwmZeroInput) {
+  w_simple_.updatePWM(0);
+  EXPECT_DOUBLE_EQ(w_simple_.pwm_, 0.0);
+}
+
+TEST_F(SimpleWheelTest, PwmMaxForward) {
+  // RoboClaw max forward command is 32767, expected to be 100%
+  w_simple_.updatePWM(32767);
+  // Use EXPECT_NEAR for floating-point division precision 
+  EXPECT_NEAR(w_simple_.pwm_, 100.0, 0.001);
+}
+
+TEST_F(SimpleWheelTest, PwmMaxReverse) {
+  // RoboClaw max reverse command is -32767, expected to be -100%
+  w_simple_.updatePWM(-32767);
+  EXPECT_NEAR(w_simple_.pwm_, -100.0, 0.001);
+}
+
+TEST_F(SimpleWheelTest, PwmMidRange) {
+  // Test a mid-point like 16383. 
+  // 16383 / 327.67 = 49.99847...
+  w_simple_.updatePWM(16383);
+  EXPECT_NEAR(w_simple_.pwm_, 49.998, 0.001);
+}
+
+TEST_F(SimpleWheelTest, PwmClampPositiveOutOfRange) {
+  // Pass a value well above the maximum 32767 limit
+  w_simple_.updatePWM(50000);
+  
+  // The value should be clamped, resulting in exactly 100.0%
+  EXPECT_NEAR(w_simple_.pwm_, 100.0, 0.001);
+}
+
+TEST_F(SimpleWheelTest, PwmClampNegativeOutOfRange) {
+  // Pass a value well below the minimum -32767 limit
+  w_simple_.updatePWM(-50000);
+  
+  // The value should be clamped, resulting in exactly -100.0%
+  EXPECT_NEAR(w_simple_.pwm_, -100.0, 0.001);
+}
+
 
 // --------------------------------------------------------
 // Fixture 2: Realistic Math (Ratio != 1.0)
