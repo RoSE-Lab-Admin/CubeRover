@@ -20,6 +20,12 @@ MotorTimer BL_timer;
 MotorTimer FR_timer;
 MotorTimer BR_timer;
 
+// At the top of your file
+const char* FL_name = "front left";
+const char* BL_name = "back left";
+const char* FR_name = "front right";
+const char* BR_name = "back right";
+
 // start custom function implementations
 void set_motor_speed(int motorIndex, uint32_t speed) {
   if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
@@ -97,10 +103,10 @@ String get_telemetry() {
   int32_t FR_speed = (int32_t) speed3;
   int32_t BR_speed = (int32_t) speed4;
 
-  safety_check(FL.velocity(), FL_speed, FL_timer);
-  safety_check(BL.velocity(), BL_speed, BL_timer);
-  safety_check(FR.velocity(), FR_speed, FR_timer);
-  safety_check(BR.velocity(), BR_speed, BR_timer);
+  safety_check(FL.velocity(), FL_speed, FL_timer, FL_name);
+  safety_check(BL.velocity(), BL_speed, BL_timer, BL_name);
+  safety_check(FR.velocity(), FR_speed, FR_timer, FR_name);
+  safety_check(BR.velocity(), BR_speed, BR_timer, BR_name);
 
   telemetryData[4] = FL_speed;
   telemetryData[5] = BL_speed;
@@ -151,7 +157,7 @@ String get_telemetry() {
   // Build return telemetry string
   String telemetry;
   telemetry.reserve(256); // 32-bit signed integer can take up to 11 chars + 1 space = 12 per number.
-  telemetry += 'e';
+  telemetry += TELEMETRY_MESSAGE;
   for (size_t i = 0; i < TELEMETRY_DATA_SIZE; i++) {
     // Note: Arduino String library has overloads to handle directly appending int32_t to String
     // The space and data MUST be added individually for the compiler to recognize these are two differnet pieces of data
@@ -198,8 +204,8 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
 }
 
 
-void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer) {
-  const uint32_t NOISE_FLOOR_PERCENT = 2;
+void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
+  const int32_t NOISE_FLOOR_PERCENT = 2;
   const int32_t NOISE_FLOOR_QPPS = (NOISE_FLOOR_PERCENT * MAX_QPPS) / 100;
   const uint32_t OPPOSITE_DIR_THRESHOLD_MS = 500; // Half a second of consistently moving in the wrong direction
 
@@ -213,14 +219,18 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer)
 
     // The fault is active! Check whether time threshold exceeded.
     if (motor_timer.hasExpired(OPPOSITE_DIR_THRESHOLD_MS)) {
-      Serial.println("ENCODER ERROR! CHECK WIRE!");
+      String message = "Check ";
+      message += motor_name;
+      message += " motor wires!";
+
+      send_message(MessageCode::CHECK_ENCODER, message);
       set_motor_speeds(0, 0);
       while (true) {
         digitalWrite(13,HIGH);
         delay(500);
         digitalWrite(13,LOW);
         delay(500);
-        Serial.println("ENCODER ERROR! CHECK WIRE!");
+        send_message(MessageCode::CHECK_ENCODER, message);
       }
     }
   } else {
@@ -232,14 +242,18 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer)
   const int32_t MAX_QPPS_PERCENT = 75;
   const int32_t MAX_VEL_QPPS = (MAX_QPPS_PERCENT * MAX_QPPS) / 100;
   if (abs(actual_vel) > MAX_VEL_QPPS) {
-    Serial.println("VELOCITY SETPOINT ERROR!");
+    String message = "Velocity setpoint error on ";
+    message += motor_name;
+    message += " motor!";
+    
+    send_message(MessageCode::CHECK_VELOCITY, message);
     set_motor_speeds(0, 0);
     while (true) {
       digitalWrite(13,HIGH);
       delay(1000);
       digitalWrite(13,LOW);
       delay(1000);
-      Serial.println("VELOCITY SETPOINT ERROR!");
+      send_message(MessageCode::CHECK_VELOCITY, message);
     }
   }
 }

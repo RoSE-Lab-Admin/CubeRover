@@ -4,6 +4,7 @@
 #include <EEPROM.h>
 #include <elapsedMillis.h>
 #include <RoboClaw.h>
+#include "messages.h"
 #include "motor_timer.h"
 
 void set_motor_speed(int motorIndex, uint32_t speed);
@@ -12,7 +13,7 @@ String get_telemetry();
 void encoder_reset();
 void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2);
 void pid_set(int arg1, int arg2, int arg3);
-void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer);
+void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name);
 
 class Wheel {
   public:
