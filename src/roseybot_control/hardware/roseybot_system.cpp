@@ -87,11 +87,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
 
-    if (joint.state_interfaces.size() != 4)
+    const size_t NUM_STATE_INTERFACES = 5; // Safety check to ensure state interfaces match the urdf.
+    if (joint.state_interfaces.size() != NUM_STATE_INTERFACES)
     {
       RCLCPP_FATAL(
-        get_logger(), "Joint '%s' has %zu state interface. 4 expected.", joint.name.c_str(),
-        joint.state_interfaces.size());
+        get_logger(), "Joint '%s' has %zu state interface. %zu expected.", joint.name.c_str(),
+        joint.state_interfaces.size(), NUM_STATE_INTERFACES);
       return hardware_interface::CallbackReturn::ERROR;
     }
 
@@ -141,6 +142,9 @@ std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_s
       state_interfaces.emplace_back(hardware_interface::StateInterface(
         joint.name, "voltage", &wheel_map_[joint.name]->voltage_));
       RCLCPP_INFO(get_logger(), "Joint %s: added voltage state", joint.name.c_str());
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, "pwm", &wheel_map_[joint.name]->pwm_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added pwm state", joint.name.c_str());
     }
 
   return state_interfaces;
@@ -229,7 +233,8 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
 hardware_interface::return_type RoseyBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  std::vector<int> telemVals(14); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
+  const uint16_t TELEMETRY_DATA_SIZE = 18;
+  std::vector<int> telemVals(TELEMETRY_DATA_SIZE); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
   comm_->read_telem_values(telemVals);
 
   for (size_t i = 0; i < info_.joints.size(); ++i) {
@@ -240,6 +245,8 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
 
     // RH: Adding roboclaw 1 voltage (wheels m1 and m2) and roboclaw 2 voltage (wheels m3 and m4)
     wheel_map_[joint.name]->updateVolt(telemVals[ ((i < 2) ? 12 : 13) ]);
+
+    wheel_map_[joint.name]->updatePWM(telemVals[i + 14]);
   }
 
   return hardware_interface::return_type::OK;
