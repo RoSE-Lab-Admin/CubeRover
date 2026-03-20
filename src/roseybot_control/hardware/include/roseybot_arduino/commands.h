@@ -10,5 +10,6 @@
 #define RESET_ENCODERS    'r'
 #define SET_MOTOR_SPEEDS  'm'
 #define SET_MOTOR_SPEED   'd'
+#define SET_SAFETY_PARAMS 's'
 
 #endif

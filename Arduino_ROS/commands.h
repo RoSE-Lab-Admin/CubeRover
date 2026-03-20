@@ -9,5 +9,6 @@
 #define RESET_ENCODERS    'r' // reset encoder positions
 #define SET_MOTOR_SPEEDS  'm' // set motor speeds of all 4 motors. arg1 = left motor speed | arg2 = right motor speed
 #define SET_MOTOR_SPEED   'd' // sets motor speed of 1 motor. arg 1 = motor index (FL,BL,FR,BR) | arg2 = speed
+#define SET_SAFETY_PARAMS 's' // sets the saftey check parameters for triggering error states
 
 #endif
