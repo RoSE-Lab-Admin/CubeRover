@@ -4,7 +4,7 @@
 # usages
 # ./run_nav2.sh        #on rosey with optitrack mode
 # ./run_nav2.sh --ekf  #on rosey with ekf mode
-# ./run_nav2.sh --flat #on flat rosey (10.42.0.1, pw ssh)
+# ./run_nav2.sh --flat #on flat rosey (10.42.0.1, pw ssh),default to EKF
 ROVER_TYPE="rosey"
 USE_OPTI=true
 
@@ -23,10 +23,16 @@ case $ROVER_TYPE in
     flat)
         SSH_CMD="ssh rosey@10.42.0.1"
         ROBOT_ARG="robot:=flat_rosey"
+        USE_OPTI=false
         ;;
 esac
 
 ROVER_WS="~/CubeRover/install/setup.bash"
+
+case $ROVER_TYPE in
+    rosey) LOCAL_WS=~/CubeRover-testing/install/setup.bash ;; #slade #check this is right name
+    flat)  LOCAL_WS=~/CubeRover/install/setup.bash         ;; #flat rosey test desktop
+esac
 
 end_nav() {
     echo "Shutting down hardware..."
@@ -55,7 +61,7 @@ gnome-terminal -- bash -c "
 
 sleep 1
 source /opt/ros/jazzy/setup.bash
-source ~/CubeRover-testing/install/setup.bash #check this is right name
+source "$LOCAL_WS"
 
 until ros2 topic list | grep -q "/cmd_vel"; do
     sleep 1
