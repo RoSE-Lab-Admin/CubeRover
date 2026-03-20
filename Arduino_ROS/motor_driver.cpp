@@ -229,8 +229,9 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer)
   }
 
   // Max allowable velocity threshold
-  const float MAX_QPPS_PERCENT = 0.75;
-  if (abs(actual_vel) > MAX_QPPS * MAX_QPPS_PERCENT) {
+  const int32_t MAX_QPPS_PERCENT = 75;
+  const int32_t MAX_VEL_QPPS = (MAX_QPPS_PERCENT * MAX_QPPS) / 100;
+  if (abs(actual_vel) > MAX_VEL_QPPS) {
     Serial.println("VELOCITY SETPOINT ERROR!");
     set_motor_speeds(0, 0);
     while (true) {
