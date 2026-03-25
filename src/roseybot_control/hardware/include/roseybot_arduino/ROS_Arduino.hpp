@@ -227,7 +227,8 @@ private:
   }
 
 
-  void on_message_received(std::stringstream &ss) {
+  void on_message_received(std::stringstream &ss)
+  {
     int message_code;
     ss >> message_code; // Safely reads "1", "9", or "15" into an integer!
 
