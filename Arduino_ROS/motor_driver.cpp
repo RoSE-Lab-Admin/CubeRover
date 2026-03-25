@@ -75,7 +75,8 @@ String get_telemetry() {
       if (v1 && v2) break;
   }
 
-  // Note: These are safe typecasts since the encoder will always be below the max value for a signed integer (2 billion).
+  // Note: Technically, this is an unsafe typecast. However, for 
+  // this to be an issue, the motors would need to run for a very long time
   telemetryData[0] = (int32_t) count1;
   telemetryData[1] = (int32_t) count2;
   telemetryData[2] = (int32_t) count3;
@@ -94,7 +95,8 @@ String get_telemetry() {
     if (v1 && v2 && v3 && v4) break;
   }
 
-  // Note: These are safe typecasts since the speed will always be below the max value for a signed integer (2 billion).
+  // Note: Technically, an unsafe typecast
+  // Speed should always always be below the max value for a signed integer though (~2 billion).
   int32_t FL_speed = (int32_t) speed1;
   int32_t BL_speed = (int32_t) speed2;
   int32_t FR_speed = (int32_t) speed3;
