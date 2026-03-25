@@ -84,8 +84,7 @@ String get_telemetry() {
       if (v1 && v2) break;
   }
 
-  // Note: These are safe typecasts since the encoder count is actually signed.
-  // See manual "16 - Read Encoder Count/Value M1" (encoder values can have a direction).
+  // Note: These are safe typecasts since the encoder will always be below the max value for a signed integer (2 billion).
   telemetryData[0] = (int32_t) count1;
   telemetryData[1] = (int32_t) count2;
   telemetryData[2] = (int32_t) count3;
@@ -104,9 +103,7 @@ String get_telemetry() {
     if (v1 && v2 && v3 && v4) break;
   }
 
-  // Note: These are safe typecasts since the speed is actually signed.
-  // See manual "18 - Read Encoder Speed M1" (speeds have direction)
-  // Also see manual "35 - Drive M1 With Signed Speed" (input speeds are signed)
+  // Note: These are safe typecasts since the speed will always be below the max value for a signed integer (2 billion).
   int32_t FL_speed = (int32_t) speed1;
   int32_t BL_speed = (int32_t) speed2;
   int32_t FR_speed = (int32_t) speed3;
