@@ -235,8 +235,8 @@ private:
 
   void on_message_received(std::stringstream &ss)
   {
-    int error_code;
-    ss >> error_code; // Safely reads "1", "9", or "15" into an integer!
+    int message_code;
+    ss >> message_code; // Safely reads "1", "9", or "15" into an integer!
 
     // Grabs the rest of the string payload automatically
     // std::ws consumes the space between the error code and the message
@@ -244,8 +244,8 @@ private:
     std::getline(ss >> std::ws, message);
 
     // Print message
-    std::cerr << "[Message " << error_code << " - " 
-              << messageCodeToString(error_code) << "]: " 
+    std::cerr << "[Message " << message_code << " - " 
+              << messageCodeToString(message_code) << "]: " 
               << message << std::endl;
   }
 };
