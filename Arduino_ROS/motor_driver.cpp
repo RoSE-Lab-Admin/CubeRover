@@ -21,7 +21,7 @@ MotorTimer FR_timer;
 MotorTimer BR_timer;
 
 // start custom function implementations
-void set_motor_speed(int motorIndex, uint32_t speed) {
+void set_motor_speed(int32_t motorIndex, int32_t speed) {
   if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
   else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(speed), speed);
   else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(speed), speed);
@@ -29,7 +29,7 @@ void set_motor_speed(int motorIndex, uint32_t speed) {
 }
 
 
-void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
+void set_motor_speeds(int32_t lSpeed, int32_t rSpeed) {
 
   ROBOCLAW_1->SpeedM1M2(ADDRESS, lSpeed, lSpeed);
   ROBOCLAW_2->SpeedM1M2(ADDRESS, rSpeed, rSpeed);
@@ -172,7 +172,7 @@ void encoder_reset() {
 }
 
 
-void pid_set(int arg1, int arg2, int arg3) {
+void pid_set(int32_t arg1, int32_t arg2, int32_t arg3) {
   float p = static_cast<float>(arg1) / 100;
   float i = static_cast<float>(arg2) / 100;
   float d = static_cast<float>(arg3) / 100;
