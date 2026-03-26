@@ -293,13 +293,7 @@ hardware_interface::return_type roseybot_arduino_interface ::RoseyBotSystemHardw
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
 
-  // Grab the front wheel commands using their exact URDF joint names.
-  // We don't need the back wheel commands since they are identical to the front.
-  int left_cmd_enc = wheel_map_["front_left_wheel_joint"]->cmd_to_enc();
-  int right_cmd_enc = wheel_map_["front_right_wheel_joint"]->cmd_to_enc();
-
-  // Send the two commands down the serial wire
-  comm_->set_motor_values(left_cmd_enc, right_cmd_enc);
+  comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc());
 
   return hardware_interface::return_type::OK;
 }

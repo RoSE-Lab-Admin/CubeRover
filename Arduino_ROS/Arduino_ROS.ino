@@ -43,9 +43,10 @@ void reset_command() { // reset global variables
 
 // run current command
 void run_command() {
-  long arg1 = atoi(argv1);
-  long arg2 = atoi(argv2);
-  long arg3 = atoi(argv3);
+  // Using atol to guarantee a 32-bit return value on other Arduino architectures as well
+  int32_t arg1 = atol(argv1);
+  int32_t arg2 = atol(argv2);
+  int32_t arg3 = atol(argv3);
 
   // Check if the motor driver is locked in a fault state
   // Allow telemetry messages to continue to be sent
