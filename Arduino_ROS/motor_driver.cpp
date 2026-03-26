@@ -1,8 +1,6 @@
-#include <RoboClaw.h>
-#include <EEPROM.h>
 #include "motor_driver.h"
 
-#define qpps 3400     // quadrature pulses per second at max rpm
+#define MAX_QPPS 3400     // quadrature pulses per second at max rpm
 #define ADDRESS 0x80  // default roboclaw address - 128
 
 
@@ -17,9 +15,13 @@ Wheel BL;
 Wheel FR;
 Wheel BR;
 
+MotorTimer FL_timer;
+MotorTimer BL_timer;
+MotorTimer FR_timer;
+MotorTimer BR_timer;
 
 // start custom function implementations
-void set_motor_speed(int motorIndex, uint32_t speed) {
+void set_motor_speed(int32_t motorIndex, int32_t speed) {
   if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
   else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(speed), speed);
   else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(speed), speed);
@@ -27,7 +29,7 @@ void set_motor_speed(int motorIndex, uint32_t speed) {
 }
 
 
-void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
+void set_motor_speeds(int32_t lSpeed, int32_t rSpeed) {
 
   ROBOCLAW_1->SpeedM1M2(ADDRESS, lSpeed, lSpeed);
   ROBOCLAW_2->SpeedM1M2(ADDRESS, rSpeed, rSpeed);
@@ -87,17 +89,22 @@ String get_telemetry() {
     if (v1 && v2 && v3 && v4) break;
   }
 
-  safety_check(FL.velocity(), speed1);
-  safety_check(BL.velocity(), speed2);
-  safety_check(FR.velocity(), speed3);
-  safety_check(BR.velocity(), speed4);
-
   // Note: Technically, an unsafe typecast
-  // See note for Encoders typecast
-  telemetryData[4] = (int32_t) speed1;
-  telemetryData[5] = (int32_t) speed2;
-  telemetryData[6] = (int32_t) speed3;
-  telemetryData[7] = (int32_t) speed4;
+  // Speed should always always be below the max value for a signed integer though (~2 billion).
+  int32_t FL_speed = (int32_t) speed1;
+  int32_t BL_speed = (int32_t) speed2;
+  int32_t FR_speed = (int32_t) speed3;
+  int32_t BR_speed = (int32_t) speed4;
+
+  safety_check(FL.velocity(), FL_speed, FL_timer);
+  safety_check(BL.velocity(), BL_speed, BL_timer);
+  safety_check(FR.velocity(), FR_speed, FR_timer);
+  safety_check(BR.velocity(), BR_speed, BR_timer);
+
+  telemetryData[4] = FL_speed;
+  telemetryData[5] = BL_speed;
+  telemetryData[6] = FR_speed;
+  telemetryData[7] = BR_speed;
 
 
   // Read Currents
@@ -165,7 +172,7 @@ void encoder_reset() {
 }
 
 
-void pid_set(int arg1, int arg2, int arg3) {
+void pid_set(int32_t arg1, int32_t arg2, int32_t arg3) {
   float p = static_cast<float>(arg1) / 100;
   float i = static_cast<float>(arg2) / 100;
   float d = static_cast<float>(arg3) / 100;
@@ -182,28 +189,48 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   for (size_t idx = 0; idx < 3; idx++) {
     EEPROM.get(idx * sizeof(float), fsettings[idx]);
   }
-  ROBOCLAW_1->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
-  ROBOCLAW_1->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps);
-  ROBOCLAW_2->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps);
-  ROBOCLAW_2->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], qpps);
+  ROBOCLAW_1->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS); // change the velocity settings
+  ROBOCLAW_1->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS);
+  ROBOCLAW_2->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS);
+  ROBOCLAW_2->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS);
   //Serial.println("Motor PID set");
 }
 
 
-void safety_check(int setpoint, int v) {
-  if (!(setpoint * v >= 0) && setpoint != 0) {
-    Serial.println("ENCODDER ERROR! CHECK WIRE!");
-    set_motor_speeds(0, 0);
-    while (true) {
-      digitalWrite(13,HIGH);
-      delay(500);
-      digitalWrite(13,LOW);
-      delay(500);
-      Serial.println("ENCODDER ERROR! CHECK WIRE!");
+void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer) {
+  const uint32_t NOISE_FLOOR_PERCENT = 2;
+  const int32_t NOISE_FLOOR_QPPS = (NOISE_FLOOR_PERCENT * MAX_QPPS) / 100;
+  const uint32_t OPPOSITE_DIR_THRESHOLD_MS = 500; // Half a second of consistently moving in the wrong direction
+
+  // Check whether signs are opposite.
+  bool is_opposite = (setpoint > 0 && actual_vel < 0) || (setpoint < 0 && actual_vel > 0);
+
+  // Is it actually moving, or is it just sensor noise?
+  bool is_physically_moving = abs(actual_vel) > NOISE_FLOOR_QPPS;
+  if (is_opposite && is_physically_moving) {
+    motor_timer.start();
+
+    // The fault is active! Check whether time threshold exceeded.
+    if (motor_timer.hasExpired(OPPOSITE_DIR_THRESHOLD_MS)) {
+      Serial.println("ENCODER ERROR! CHECK WIRE!");
+      set_motor_speeds(0, 0);
+      while (true) {
+        digitalWrite(13,HIGH);
+        delay(500);
+        digitalWrite(13,LOW);
+        delay(500);
+        Serial.println("ENCODER ERROR! CHECK WIRE!");
+      }
     }
+  } else {
+    // Motor is behaving correctly (or just experiencing tiny noise), so reset the timer
+    motor_timer.reset();
   }
 
-  if (abs(v) > qpps * 0.75) {
+  // Max allowable velocity threshold
+  const int32_t MAX_QPPS_PERCENT = 75;
+  const int32_t MAX_VEL_QPPS = (MAX_QPPS_PERCENT * MAX_QPPS) / 100;
+  if (abs(actual_vel) > MAX_VEL_QPPS) {
     Serial.println("VELOCITY SETPOINT ERROR!");
     set_motor_speeds(0, 0);
     while (true) {
@@ -226,17 +253,17 @@ Wheel::Wheel() {
 }
 
 
-uint16_t Wheel::calcAccel(int16_t newVel){
+int32_t Wheel::calcAccel(int32_t newVel){
   uint64_t now = micros();
   double dt = (now - _last) / 1e6f;
   if (dt <= 0) dt = 1e-6;
-  uint16_t target_acl = abs(newVel - _prevVel) / dt;
+  int32_t target_acl = abs(newVel - _prevVel) / dt;
   //Serial.println(target_acl);
   _prevVel = newVel;
   _last = now;
   return target_acl;
  }  
 
-int16_t Wheel::velocity(){
+int32_t Wheel::velocity(){
   return _prevVel;
 }

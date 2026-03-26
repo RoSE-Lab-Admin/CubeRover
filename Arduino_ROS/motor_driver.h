@@ -1,25 +1,27 @@
 #ifndef MOTOR
 #define MOTOR
 
-#include <RoboClaw.h>
+#include <EEPROM.h>
 #include <elapsedMillis.h>
+#include <RoboClaw.h>
+#include "motor_timer.h"
 
-void set_motor_speed(int motorIndex, uint32_t speed);
-void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed);
+void set_motor_speed(int32_t motorIndex, int32_t speed);
+void set_motor_speeds(int32_t lSpeed, int32_t rSpeed);
 String get_telemetry();
 void encoder_reset();
 void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2);
-void pid_set(int arg1, int arg2, int arg3);
-void safety_check(int setpoint, int v);
+void pid_set(int32_t arg1, int32_t arg2, int32_t arg3);
+void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer);
 
 class Wheel {
   public:
     Wheel();
-    uint16_t calcAccel(int16_t newVel);
-    int16_t velocity();
+    int32_t calcAccel(int32_t newVel);
+    int32_t velocity();
   private:
     uint64_t _last;
-    int16_t _prevVel;
+    int32_t _prevVel;
 };
 
 #endif
