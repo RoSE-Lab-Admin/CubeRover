@@ -48,7 +48,18 @@ void run_command() {
   int32_t arg2 = atol(argv2);
   int32_t arg3 = atol(argv3);
 
+  // Check if the motor driver is locked in a fault state
+  // Allow telemetry messages to continue to be sent
+  if (is_system_faulted() && cmd != GET_TELEM && cmd != CLEAR_ERROR) {
+    // Block all other commands (like SET_MOTOR_SPEEDS) while faulted
+    return; 
+  }
+
   switch (cmd) {
+    case CLEAR_ERROR: {      // Handle clear commands when NOT faulted
+      clear_system_fault();
+      break;
+    }
     case SET_MOTOR_SPEEDS: {
       set_motor_speeds(arg1, arg2);
       motor_timeout = 0;
@@ -106,6 +117,12 @@ void setup() {
 
 
 void loop() {
+  // If the motor driver is broken, give it CPU time to blink the LED and send errors
+  if (is_system_faulted()) {
+    update_fault_led();
+  }
+  
+  // Read incoming serial bytes
   while (Serial.available()) {
     chr = Serial.read();
 
@@ -137,10 +154,11 @@ void loop() {
       else if (arg == 3) argv3[i++] = chr;  // ~~~ third arg
     }
   }
+
+  // Motor timeout logic
   if (motor_timeout > MOTOR_TIMEOUT && !timeout) { //sets motor speeds to 0 if more than 2 seconds has ellapsed
     set_motor_speeds(0,0);
     timeout = true;
     motor_timeout = 0;
   }
-
 }
