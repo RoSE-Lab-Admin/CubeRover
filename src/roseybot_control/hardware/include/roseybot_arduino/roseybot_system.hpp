@@ -73,6 +73,9 @@ private:
   int ENC_PER_REV_;
   int STD_ACCEL;
   std::string DEVICE_;
+  int32_t NOISE_FLOOR_PCT_;
+  int32_t OPP_DIR_MS_;
+  int32_t MAX_VEL_PCT_;
   std::vector<std::unique_ptr<wheel>> wheels_;
   std::unordered_map<std::string, std::unique_ptr<wheel>> wheel_map_;
   ArduinoComms* comm_;

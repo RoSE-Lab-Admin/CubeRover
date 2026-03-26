@@ -3,6 +3,10 @@
 #define MAX_QPPS 3400     // quadrature pulses per second at max rpm
 #define ADDRESS 0x80  // default roboclaw address - 128
 
+// Define as global variables with default fallback values
+int32_t  noise_floor_percent = 2;
+uint32_t opposite_dir_threshold_ms = 500;
+int32_t  max_velocity_percent = 75;
 
 // pointers to store reference to roboclaws on init
 extern RoboClaw *ROBOCLAW_1;
@@ -247,15 +251,21 @@ void enter_error_state(MessageCode msg_code, const String& message, uint32_t bli
 }
 
 
+void set_safety_params(int32_t noise_floor, uint32_t opp_dir_ms, int32_t max_vel_percent) {
+  noise_floor_percent = noise_floor;
+  opposite_dir_threshold_ms = opp_dir_ms;
+  max_velocity_percent = max_vel_percent;
+}
+
+
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
   // If the system is already faulted, don't keep triggering new faults
   if (is_system_faulted()) {
     return;
   }
 
-  const int32_t NOISE_FLOOR_PERCENT = 2;
-  const int32_t NOISE_FLOOR_QPPS = (NOISE_FLOOR_PERCENT * MAX_QPPS) / 100;
-  const uint32_t OPPOSITE_DIR_THRESHOLD_MS = 500; // Half a second of consistently moving in the wrong direction
+  const int32_t NOISE_FLOOR_QPPS = (noise_floor_percent * MAX_QPPS) / 100;
+  const int32_t MAX_VEL_QPPS = (max_velocity_percent * MAX_QPPS) / 100;
 
   // Check whether signs are opposite.
   bool is_opposite = (setpoint > 0 && actual_vel < 0) || (setpoint < 0 && actual_vel > 0);
@@ -266,7 +276,7 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
     motor_timer.start();
 
     // The fault is active! Check whether time threshold exceeded.
-    if (motor_timer.hasExpired(OPPOSITE_DIR_THRESHOLD_MS)) {
+    if (motor_timer.hasExpired(opposite_dir_threshold_ms)) {
       String message = "Check ";
       message += motor_name;
       message += " motor wires!";
@@ -284,8 +294,6 @@ void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer,
   }
 
   // Max allowable velocity threshold
-  const int32_t MAX_QPPS_PERCENT = 75;
-  const int32_t MAX_VEL_QPPS = (MAX_QPPS_PERCENT * MAX_QPPS) / 100;
   if (abs(actual_vel) > MAX_VEL_QPPS) {
     String message = "Velocity setpoint error on ";
     message += motor_name;

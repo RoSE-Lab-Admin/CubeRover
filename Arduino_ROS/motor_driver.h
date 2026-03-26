@@ -13,6 +13,7 @@ String get_telemetry();
 void encoder_reset();
 void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2);
 void pid_set(int32_t arg1, int32_t arg2, int32_t arg3);
+void set_safety_params(int32_t noise_floor, uint32_t opp_dir_ms, int32_t max_qpps);
 void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name);
 
 // These functions allow the main Arduino loop to safely interact with the motor driver's error state.

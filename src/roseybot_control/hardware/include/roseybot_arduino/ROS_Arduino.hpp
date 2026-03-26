@@ -43,7 +43,8 @@ public:
   ArduinoComms(const rclcpp::Logger& logger) : logger_(logger) {}
 
 
-  void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms)
+  void connect(const std::string &serial_device, int32_t baud_rate, int32_t timeout_ms, 
+               int32_t noise_floor_pct, int32_t opp_dir_ms, int32_t max_vel_pct)
   {  
     timeout_ms_ = timeout_ms;
     for (size_t i = 0; i < 5; i++){
@@ -51,19 +52,17 @@ public:
         // --- SERIAL CONNECTION CODE ---
         serial_conn_.Open(serial_device);
         serial_conn_.SetBaudRate(convert_baud_rate(baud_rate));
-        serial_conn_.FlushIOBuffers();
 
         // --- ERROR CANCELLATION CODE ---
-        // Send the clear character
         write_msg(std::string{CLEAR_ERROR});
-
         // Give the Arduino 50ms to read the clear error character, exit the while(true) loop, 
         // and flush its own receive buffer.
-        rclcpp::sleep_for(std::chrono::milliseconds(50)); 
-
-        // Flush the PC-side buffers one more time to destroy any final error 
-        // messages the Arduino might have transmitted right before it caught the 'c'.
-        serial_conn_.FlushIOBuffers();
+        rclcpp::sleep_for(std::chrono::milliseconds(50));
+        
+        // --- SEND SAFETY PARAMS CODE ---
+        std::stringstream ss;
+        ss << SET_SAFETY_PARAMS << " " << noise_floor_pct << " " << opp_dir_ms << " " << max_vel_pct;
+        send_msg(ss.str()); // Use send_msg so synchronously wait for the Arduino's acknowledgement
 
         return;
       } catch (const LibSerial::OpenFailed& e) {
@@ -72,7 +71,14 @@ public:
       } catch (const std::exception& e) {
         RCLCPP_ERROR(logger_, "error opening serial port: %s - %s", serial_device.c_str(), e.what());
         std::cerr << "exception thrown! " << e.what();
+
+        // Close the port so that the next loop iteration can reopen it
+        if (serial_conn_.IsOpen()) {
+            serial_conn_.Close();
+        }
       }
+
+      // Wait 5 seconds before attempting to open the port again
       rclcpp::sleep_for(std::chrono::seconds(5));
     }
     RCLCPP_FATAL(logger_, "cannot open serial port: %s", serial_device.c_str());
