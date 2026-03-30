@@ -52,6 +52,9 @@ public:
 
   hardware_interface::CallbackReturn on_deactivate(
     const rclcpp_lifecycle::State & previous_state) override;
+    
+  hardware_interface::CallbackReturn on_cleanup(
+    const rclcpp_lifecycle::State & previous_state) override;
 
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
@@ -70,6 +73,9 @@ private:
   int ENC_PER_REV_;
   int STD_ACCEL;
   std::string DEVICE_;
+  int32_t NOISE_FLOOR_PCT_;
+  int32_t OPP_DIR_MS_;
+  int32_t MAX_VEL_PCT_;
   std::vector<std::unique_ptr<wheel>> wheels_;
   std::unordered_map<std::string, std::unique_ptr<wheel>> wheel_map_;
   ArduinoComms* comm_;

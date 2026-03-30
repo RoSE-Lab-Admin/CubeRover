@@ -51,6 +51,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
   ENC_PER_REV_ = std::stof(info_.hardware_parameters["enc/rev"]);
   // END
 
+  // BEGIN: get safety check params
+  NOISE_FLOOR_PCT_ = std::stoi(info_.hardware_parameters["noise_floor_percent"]);
+  OPP_DIR_MS_ = std::stoi(info_.hardware_parameters["opposite_direction_ms"]);
+  MAX_VEL_PCT_ = std::stoi(info_.hardware_parameters["max_velocity_percent"]);
+  // END
+
   // create class for handling arduino comm_
   comm_ = new ArduinoComms(get_logger());
 
@@ -176,7 +182,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_configure(
     comm_->disconnect();
   }
   try{
-    comm_->connect(DEVICE_, BAUD_, TIMEOUT_MS_);
+    comm_->connect(DEVICE_, BAUD_, TIMEOUT_MS_, NOISE_FLOOR_PCT_, OPP_DIR_MS_, MAX_VEL_PCT_);
   } catch (const std::runtime_error& e) {
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -205,6 +211,12 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_activate(
   //   set_command(name, get_state(name));
   // }
 
+  // Force all velocity commands to zero to prevent unexpected lurches
+  // when the controllers start writing to the hardware.
+  for (const auto & joint : info_.joints) {
+    wheel_map_[joint.name]->cmd_ = 0.0;
+  }
+
   RCLCPP_INFO(get_logger(), "Successfully activated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -219,10 +231,28 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
   
   RCLCPP_INFO(get_logger(), "Deactivating ...please wait...");
 
+  // Immediately send a software halt to the motors.
+  // If the Arduino is in an error state, it will safely ignore this.
+  // If it's operating normally, it stops the robot instantly.
+  comm_->set_motor_values(0, 0);
+
+  RCLCPP_INFO(get_logger(), "Successfully deactivated!");
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+
+
+
+hardware_interface::CallbackReturn RoseyBotSystemHardware::on_cleanup(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  RCLCPP_INFO(get_logger(), "Cleaning up ...please wait...");
+
   //disconnect arduino
   comm_->disconnect();
 
-  RCLCPP_INFO(get_logger(), "Successfully deactivated!");
+  RCLCPP_INFO(get_logger(), "Successfully cleaned up!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -233,22 +263,26 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_deactivate(
 hardware_interface::return_type RoseyBotSystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
-  const uint16_t TELEMETRY_DATA_SIZE = 18;
-  std::vector<int> telemVals(TELEMETRY_DATA_SIZE); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
-  comm_->read_telem_values(telemVals);
+  try {
+    const uint16_t TELEMETRY_DATA_SIZE = 18;
+    std::vector<int> telemVals(TELEMETRY_DATA_SIZE); // RH: Extending vector to include voltage readings (this should be initialized once in init...)
+    comm_->read_telem_values(telemVals);
 
-  for (size_t i = 0; i < info_.joints.size(); ++i) {
-    const auto & joint = info_.joints[i];
-    wheel_map_[joint.name]->updatePos(telemVals[i]);
-    wheel_map_[joint.name]->updateVel(telemVals[i + 4]);
-    wheel_map_[joint.name]->updateCur(telemVals[i + 8]);
+    for (size_t i = 0; i < info_.joints.size(); ++i) {
+      const auto & joint = info_.joints[i];
+      wheel_map_[joint.name]->updatePos(telemVals[i]);
+      wheel_map_[joint.name]->updateVel(telemVals[i + 4]);
+      wheel_map_[joint.name]->updateCur(telemVals[i + 8]);
 
-    // RH: Adding roboclaw 1 voltage (wheels m1 and m2) and roboclaw 2 voltage (wheels m3 and m4)
-    wheel_map_[joint.name]->updateVolt(telemVals[ ((i < 2) ? 12 : 13) ]);
+      // RH: Adding roboclaw 1 voltage (wheels m1 and m2) and roboclaw 2 voltage (wheels m3 and m4)
+      wheel_map_[joint.name]->updateVolt(telemVals[ ((i < 2) ? 12 : 13) ]);
 
-    wheel_map_[joint.name]->updatePWM(telemVals[i + 14]);
+      wheel_map_[joint.name]->updatePWM(telemVals[i + 14]);
+    }
+  } catch (const LibSerial::ReadTimeout& e) {
+    RCLCPP_WARN(get_logger(), "Arduino serial timeout during read: %s", e.what());
   }
-
+  
   return hardware_interface::return_type::OK;
 }
 
@@ -258,7 +292,7 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
 hardware_interface::return_type roseybot_arduino_interface ::RoseyBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  
+
   comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc());
 
   return hardware_interface::return_type::OK;
