@@ -128,7 +128,6 @@ def generate_launch_description():
     
     return LaunchDescription([
         map_server,
-        lifecycle_mgr,
         planner,
         controller,
         smoother,
@@ -136,4 +135,5 @@ def generate_launch_description():
         bt_nav,
         waypoint,
         vel_smoother,
+        lifecycle_mgr,
     ])
