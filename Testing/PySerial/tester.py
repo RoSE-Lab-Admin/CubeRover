@@ -8,7 +8,7 @@ CURRENT_SCALE = 0.01  # Roboclaw reports in 10mA units
 
 def clear():
     # Move cursor to top-left without clearing
-    print('\033[H', end='')
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def bar(value, max_value, width=20, fill='#', empty='-'):
     filled = int((value / max_value) * width) if max_value else 0
