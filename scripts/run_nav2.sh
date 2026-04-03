@@ -40,6 +40,8 @@ end_nav() {
     echo "Stopping Hwardware..."
     if [ ! -z "$HW_PID" ]; then
         $SSH_CMD "pkill -2 -f hardware_startup.launch"
+        #try this if things go bad (kill subprocesses guarantee)
+        #$SSH_CMD "pkill -2 -f hardware_startup.launch; sleep 3; pkill -9 -f hardware_startup.launch.py; pkill -9 -f ros2_control_node; pkill -9 -f robot_state_punlisher"
         sleep 3
         kill -9 $HW_PID 2>/dev/null
     fi
