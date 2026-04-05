@@ -159,7 +159,9 @@ class PathFollower(Node):
 
     def check_nav2_ready(self):
         self.nav2_check_timer.cancel()
-        self.nav.waitUntilNav2Active()
+        self.nav._waitForNodeToActivate('planner_server')
+        self.nav._waitForNodeToActivate('controller_server')
+        self.nav._waitForNodeToActivate('bt_navigator')
         self.nav2_ready = True
 
     def follow_waypoints(self):
