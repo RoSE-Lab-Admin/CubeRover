@@ -12,6 +12,7 @@ from tf2_ros import TransformBroadcaster
 from collections import deque
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+import time, signal
 
 class PathFollower(Node):
     def __init__(self):
@@ -199,6 +200,21 @@ class PathFollower(Node):
         stop_msg = TwistStamped()
         stop_msg.header.stamp = self.get_clock().now().to_msg()
         self.cmd_vel_pub.publish(stop_msg)
+
+    def shutdown_handler(self, signum, frame):
+        self.get_logger().info("Attempting shutdown")
+
+        try:
+            self.nav.cancelTask()
+        except Exception:
+            pass
+
+        stop_msg = TwistStamped()
+        stop_msg.header.stamp = self.get_clock().now().to_msg()
+        self.cmd_vel_pub.publish(stop_msg)
+        time.sleep(0.2)
+        rclpy.shutdown()
+
             
 
 def main(args=None):
@@ -207,11 +223,15 @@ def main(args=None):
     executor = MultiThreadedExecutor()
     executor.add_node(path_follower)
 
-    try:
-        executor.spin()
-    finally:
-        path_follower.stop_nav()
-        rclpy.shutdown()
+    signal.signal(signal.SIGINT, path_follower.shutdown_handler)
+
+    executor.spin()
+
+    # try:
+    #     executor.spin()
+    # finally:
+    #     path_follower.stop_nav()
+    #     rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
