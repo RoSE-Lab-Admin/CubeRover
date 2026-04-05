@@ -159,7 +159,7 @@ class PathFollower(Node):
 
     def check_nav2_ready(self):
         self.nav2_check_timer.cancel()
-        self.nav._waitForNodeToActivate('bt_navigator')
+        self.nav.waitUntilNav2Active()
         self.nav2_ready = True
 
     def follow_waypoints(self):
@@ -195,7 +195,6 @@ class PathFollower(Node):
 
     def stop_nav(self):
         self.nav.cancelTask()
-        self.nav.clearAllCostmaps()
         stop_msg = TwistStamped()
         stop_msg.header.stamp = self.get_clock().now().to_msg()
         self.cmd_vel_pub.publish(stop_msg)
