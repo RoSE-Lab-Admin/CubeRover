@@ -20,7 +20,7 @@ case $ROVER_TYPE in
     rosey)
         SSH_CMD="ssh rosey@192.168.2.50 -i ./ssh/id_rsa_ansible"
         ROBOT_ARG="robot:=rosey"
-        LOCAL_WS=~/CuberRover-testing.install/setup.bash #slade (check correct name - or _)
+        LOCAL_WS=~/CubeRover-testing/install/setup.bash #slade (check correct name - or _)
         ;;
     flat)
         SSH_CMD="ssh rosey@10.42.0.1"

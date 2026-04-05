@@ -4,7 +4,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.time import Time
 from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, Vector3
+from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped, Vector3
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
@@ -36,6 +36,9 @@ class PathFollower(Node):
             # create previous poses list
             self.prev_poses = deque()
             self.pose_idx = 0
+
+        # publisher to explicitly stop motors on shutdown
+        self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
 
         # initialize nav2
         self.nav = BasicNavigator()
@@ -193,6 +196,9 @@ class PathFollower(Node):
     def stop_nav(self):
         self.nav.cancelTask()
         self.nav.clearAllCostmaps()
+        stop_msg = TwistStamped()
+        stop_msg.header.stamp = self.get_clock().now().to_msg()
+        self.cmd_vel_pub.publish(stop_msg)
             
 
 def main(args=None):
