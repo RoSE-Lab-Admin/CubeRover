@@ -196,7 +196,6 @@ class PathFollower(Node):
             self.get_logger().info("trajectory cancelled")
 
     def stop_nav(self):
-        self.nav.cancelTask()
         stop_msg = TwistStamped()
         stop_msg.header.stamp = self.get_clock().now().to_msg()
         self.cmd_vel_pub.publish(stop_msg)
