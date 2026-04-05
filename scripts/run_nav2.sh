@@ -36,17 +36,14 @@ ROVER_WS="~/CubeRover/install/setup.bash" #pi (should be same on both)
 end_nav() {
     echo ""
 
-
-    echo "Stopping Hwardware..."
+    echo "Stopping hardware..."
     if [ ! -z "$HW_PID" ]; then
-        $SSH_CMD "pkill -2 -f hardware_startup.launch"
-        #try this if things go bad (kill subprocesses guarantee)
-        #$SSH_CMD "pkill -2 -f hardware_startup.launch; sleep 3; pkill -9 -f hardware_startup.launch.py; pkill -9 -f ros2_control_node; pkill -9 -f robot_state_punlisher"
-        sleep 3
-        kill -9 $HW_PID 2>/dev/null
+        $SSH_CMD "pkill -2 -f hardware_startup.launch.py" 2>/dev/null
+        kill -9 $HW_PID 2>/dev/null  # disconnect SSH immediately to stop terminal output flood
+        sleep 3                       # give remote process time to shut down cleanly
+        $SSH_CMD "pkill -9 -f hardware_startup.launch.py" 2>/dev/null  # force kill if still running
     fi
     sleep 2
-
 
     echo "Stopping nav2..."
     if [ ! -z "$NAV_PID" ]; then
@@ -54,7 +51,7 @@ end_nav() {
         sleep 3
         kill -9 $NAV_PID 2>/dev/null
     fi
-    sleep2
+    sleep 2
 
     echo "ended nodes."
     exit 130
@@ -91,7 +88,7 @@ echo "Hardware ready. Waiting for nodes to stabilize..." #safety wait for servic
 sleep 3
 
 echo "Starting nav2..."
-ros2 launch nav2_stack waypoint.launch.py use_opti:= $USE_OPTI & NAV_PID=$!
+ros2 launch nav2_stack waypoint.launch.py use_opti:=$USE_OPTI & NAV_PID=$!
 echo "nav2 PID: $NAV_PID"
 wait $NAV_PID
 #test remove
