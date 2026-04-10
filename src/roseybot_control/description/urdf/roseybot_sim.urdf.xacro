@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<!-- Sim URDF: roseybot_control stack drives everything, Gazebo visualizes via gz_ros2_control -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="roseybot">
+
+    <!-- Tell the ros2_control xacro to use gz_ros2_control/GazeboSimSystem -->
+    <xacro:arg name="use_sim" default="true"/>
+
+    <!-- Robot links and joints -->
+    <xacro:include filename="$(find roseybot_control)/description/robot/roseybot_colors.urdf.xacro" />
+    <xacro:include filename="$(find roseybot_control)/description/robot/roseybot_description.urdf.xacro"/>
+
+    <!-- ros2_control hardware section (uses GazeboSimSystem when use_sim=true) -->
+    <xacro:include filename="$(find roseybot_control)/description/ros2_control/roseybot_control.urdf.xacro" />
+
+    <!-- IMU link and Gazebo sensor -->
+    <link name="imu_link"/>
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="imu_link"/>
+        <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    </joint>
+    <gazebo reference="imu_link">
+        <sensor name="imu_sensor" type="imu">
+            <always_on>1</always_on>
+            <update_rate>100</update_rate>
+            <visualize>true</visualize>
+            <topic>imu</topic>
+            <imu>
+                <angular_velocity>
+                    <x><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></x>
+                    <y><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></y>
+                    <z><noise type="gaussian"><mean>0.0</mean><stddev>2e-4</stddev></noise></z>
+                </angular_velocity>
+                <linear_acceleration>
+                    <x><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></x>
+                    <y><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></y>
+                    <z><noise type="gaussian"><mean>0.0</mean><stddev>1.7e-2</stddev></noise></z>
+                </linear_acceleration>
+            </imu>
+        </sensor>
+    </gazebo>
+
+    <!-- gz_ros2_control Gazebo plugin — starts the controller manager inside Gazebo
+         and connects roseybot_control's controllers to Gazebo's joint physics -->
+    <gazebo>
+        <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+            <parameters>$(find roseybot_control)/bringup/config/roseybot_controllers.yaml</parameters>
+            <ros>
+                <!-- remap DiffDriveController's input to the global /cmd_vel -->
+                <remapping>/roseybot_base_controller/cmd_vel:=/cmd_vel</remapping>
+                <parameter name="use_sim_time">true</parameter>
+            </ros>
+        </plugin>
+    </gazebo>
+
+    <!-- Pose publisher (used by bridge for /CubeRover_V1/pose) -->
+    <gazebo>
+        <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+            <publish_model_pose>true</publish_model_pose>
+            <publish_link_pose>false</publish_link_pose>
+            <publish_nested_model_pose>true</publish_nested_model_pose>
+            <use_pose_vector_msg>false</use_pose_vector_msg>
+            <update_frequency>200</update_frequency>
+        </plugin>
+    </gazebo>
+
+    <!-- Wheel friction coefficients -->
+    <gazebo reference="front_left_wheel_link">
+        <collision><surface><friction><ode>
+            <mu>1.2</mu><mu2>0.4</mu2>
+        </ode></friction></surface></collision>
+    </gazebo>
+    <gazebo reference="front_right_wheel_link">
+        <collision><surface><friction><ode>
+            <mu>1.2</mu><mu2>0.4</mu2>
+        </ode></friction></surface></collision>
+    </gazebo>
+    <gazebo reference="back_left_wheel_link">
+        <collision><surface><friction><ode>
+            <mu>1.2</mu><mu2>0.4</mu2>
+        </ode></friction></surface></collision>
+    </gazebo>
+    <gazebo reference="back_right_wheel_link">
+        <collision><surface><friction><ode>
+            <mu>1.2</mu><mu2>0.4</mu2>
+        </ode></friction></surface></collision>
+    </gazebo>
+
+</robot>
