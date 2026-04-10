@@ -162,8 +162,8 @@ behavior_server:
     spin:
       plugin: "nav2_behaviors::Spin"
       simulate_ahead_time: 2.0
-      max_rotational_vel: 0.10
-      min_rotational_vel: 0.01
+      max_rotational_vel: 1.5
+      min_rotational_vel: 0.10
       rotational_acc_lim: 1.0
     
     backup:

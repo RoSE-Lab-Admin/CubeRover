@@ -9,14 +9,19 @@ from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
 import os
 
-
+#csv use:
+#ros2 launch nav2 stack waypoint.launch.py pose_csv:=/path/to/pose.csv
 def launch_setup(context):
     use_opti = LaunchConfiguration('use_opti').perform(context)
+    pose_csv = LaunchConfiguration('pose_csv').perform(context)
 
     is_opti = use_opti.lower() == 'true'
 
-    pkg_path = get_package_share_directory('nav2_stack')
-    csv_file = os.path.join(pkg_path, 'pose.csv')
+    if not os.path.isabs(pose_csv):
+        pkg_path = get_package_share_directory('nav2_stack')
+        csv_file = os.path.join(pkg_path, 'pose.csv')
+    else:
+        csv_file = pose_csv
 
     pose_pub_node = Node(
         package='nav2_stack',
@@ -68,6 +73,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_opti', default_value='false'),
+        DeclareLaunchArgument('pose_csv', default_value='pose.csv'),
         OpaqueFunction(function=launch_setup),
         nav2_launch,
     ])
