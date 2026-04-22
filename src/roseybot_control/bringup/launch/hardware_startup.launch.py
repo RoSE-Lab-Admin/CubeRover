@@ -1,22 +1,28 @@
-from launch import LaunchDescription
-from launch_ros.actions import Node
-
 import os
+
+from launch import LaunchDescription
 from ament_index_python.packages import get_package_share_directory
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
+
+#https://docs.ros.org/en/foxy/Tutorials/Intermediate/Launch/Using-ROS2-Launch-For-Large-Projects.html#writing-launch-files
 
 def generate_launch_description():
+    #launch file path for imu
+    imu_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'imu_boot.launch.py')
 
-    imu_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'bno055.yaml')
-    ekf_params = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'config', 'ekf.yaml')
+    #launch file path for control
+    control_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'ros2_control.launch.py')
 
-    robot_localization_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_node',
-        output='screen',
-        parameters=[ekf_params],
-    )
+    imu = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(imu_launch)
+        )
 
+    control  = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(control_launch)
+        )
     return LaunchDescription([
-        robot_localization_node,
+        imu,
+        control
     ])
