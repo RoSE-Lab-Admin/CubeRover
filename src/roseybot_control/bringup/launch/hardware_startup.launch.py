@@ -10,19 +10,18 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
     #launch file path for imu
-    imu_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'imu_boot.launch.py')
+    #imu_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'imu_boot.launch.py')
 
     #launch file path for control
     control_launch = os.path.join(get_package_share_directory('roseybot_control'),'bringup', 'launch', 'ros2_control.launch.py')
 
-    imu = IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(imu_launch)
-        )
+    # imu = IncludeLaunchDescription(
+    #         PythonLaunchDescriptionSource(imu_launch)
+    #     )
 
     control  = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(control_launch)
         )
     return LaunchDescription([
-        imu,
         control
     ])
