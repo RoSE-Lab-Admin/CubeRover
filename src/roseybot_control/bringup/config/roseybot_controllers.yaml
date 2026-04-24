@@ -30,7 +30,8 @@ roseybot_base_controller:
     enable_odom_tf: true
     position_feedback: true
 
-    cmd_vel_timeout: 0.5
+    use_stamped_vel: true
+    cmd_vel_timeout: 2.0
     publish_limited_velocity: true
     velocity_rolling_window_size: 10
 

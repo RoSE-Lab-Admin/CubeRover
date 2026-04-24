@@ -178,13 +178,16 @@ class PathFollower(Node):
         result = self.nav.getResult()
 
         # reset 
-        self.started = False
+        # self.started = False
 
         if result == TaskResult.SUCCEEDED:
             self.get_logger().info("trajectory completed")
+            
 
         elif result == TaskResult.CANCELED:
-            self.get_logger().info("trajectory cancelled")\
+            self.get_logger().info("trajectory cancelled")
+
+        self.stop_nav()
             
     def stop_nav(self):
         self.nav.cancelTask()

@@ -15,7 +15,7 @@ def generate_launch_description():
     nav2_config = PathJoinSubstitution([
         FindPackageShare('nav2_stack'),
         'config',
-        'nav2_param.yaml'
+        'nav2_param2.yaml'
     ])
 
     map_config = PathJoinSubstitution([
