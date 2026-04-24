@@ -138,8 +138,8 @@ planner_server:
       analytic_expansion_max_length: 3.0 # if the length is too far reject the expansion
       analytic_expansion_max_cost: 200.0 # for hybrid/lattice nodes: max cost for any part of an analytic expansion to contain and be considered valid
       analytic_expansion_max_cost_ovveride: false # for hybrid/lattice nodes: whether or not to overrid max cost setting if w/i critical dist to goaL
-      minimum_turning_radius: 0.4 # min turning radius of path in m
-      motion_model_for_search: "REEDS_SHEPP"
+      minimum_turning_radius: 0.5 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
+      motion_model_for_search: "DUBIN"
       non_straight_penalty: 1.20 # heuristic penalty to apply to SE2 node if searching in a non straight direction
       cost_penalty: 2.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality

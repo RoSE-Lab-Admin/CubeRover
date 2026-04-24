@@ -16,7 +16,7 @@ def launch_setup(context):
     is_opti = use_opti.lower() == 'true'
 
     pkg_path = get_package_share_directory('nav2_stack')
-    csv_file = os.path.join(pkg_path, 'pose_straight.csv')
+    csv_file = os.path.join(pkg_path, 'pose_norm.csv')
 
     pose_pub_node = Node(
         package='nav2_stack',
