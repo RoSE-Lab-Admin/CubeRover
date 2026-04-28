@@ -34,8 +34,8 @@
         </hardware> -->
       
         <xacro:connect_joint prefix="front_left"/>
-        <xacro:connect_joint prefix="back_left"/>
         <xacro:connect_joint prefix="front_right"/>
+        <xacro:connect_joint prefix="back_left"/>
         <xacro:connect_joint prefix="back_right"/>
 
     </ros2_control>
