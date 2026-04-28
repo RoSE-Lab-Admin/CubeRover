@@ -15,13 +15,13 @@ extern RoboClaw *ROBOCLAW_2;
 
 // define wheel classes to store relevant wheel info
 Wheel FL;
-Wheel BL;
 Wheel FR;
+Wheel BL;
 Wheel BR;
 
 MotorTimer FL_timer;
-MotorTimer BL_timer;
 MotorTimer FR_timer;
+MotorTimer BL_timer;
 MotorTimer BR_timer;
 
 // At the top of your file
@@ -50,8 +50,8 @@ void set_motor_speed(int32_t motorIndex, int32_t speed) {
 
 void set_motor_speeds(int32_t lSpeed, int32_t rSpeed) {
 
-  ROBOCLAW_1->SpeedM1M2(ADDRESS, lSpeed, lSpeed);
-  ROBOCLAW_2->SpeedM1M2(ADDRESS, rSpeed, rSpeed);
+  ROBOCLAW_1->SpeedM1M2(ADDRESS, lSpeed, rSpeed);
+  ROBOCLAW_2->SpeedM1M2(ADDRESS, lSpeed, rSpeed);
 
   // ROBOCLAW_1->SpeedAccelM1M2(ADDRESS, FL.calcAccel(lSpeed), lSpeed, lSpeed);
   // ROBOCLAW_1->SpeedAccelM1M2(ADDRESS, FR.calcAccel(rSpeed), rSpeed, rSpeed);
