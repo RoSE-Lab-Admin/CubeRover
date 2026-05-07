@@ -22,7 +22,7 @@ class PathFollower(Node):
 
         # parameters
         self.declare_parameter('use_opti', True)
-        use_opti = self.get_parameter('use_opti').value
+        self.use_opti = self.get_parameter('use_opti').value
 
         # create callback group so it can execute while nav2 blocks
         self.opti_group = ReentrantCallbackGroup()
@@ -31,23 +31,13 @@ class PathFollower(Node):
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, qos)
         # subscribe to ground truth
-        if use_opti:
+        if self.use_opti:
             self.opti_sub = self.create_subscription(PoseStamped, '/CubeRover_V1/pose', self.opti_callback, 10, callback_group=self.opti_group)
             self.odom_trans = TransformBroadcaster(self)
             self.odom_pub = self.create_publisher(Odometry, '/odometry/filtered', 10)
             # create previous poses list
             self.prev_poses = deque()
             self.pose_idx = 0
-
-            # create static odom to cuberover transform
-            stamp = self.get_clock().now().to_msg()
-
-            odom = Odometry()
-            odom.header.stamp = stamp
-            odom.header.frame_id = 'odom'
-            odom.child_frame_id = 'CubeRover_V1'
-
-            self.odom_pub.publish(odom)
 
         # publisher to explicitly stop motors on shutdown
         self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
@@ -61,6 +51,7 @@ class PathFollower(Node):
         self.nav2_ready = False
         self.started = False
         self.finished = False
+        self.rec_pose = False
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -73,19 +64,11 @@ class PathFollower(Node):
     # callback for if opti mode is being used
     def opti_callback(self, msg):
 
-        pass # change so that if no message recieved goes to ekf mode
+        self.rec_pose = True
 
-        # ok so what needs to happen here is if opti drops out during opti mode use ekf otherwise just use cuberover trans
+        stamp = self.get_clock().now().to_msg()
 
-        # publish static odom to cuberover transform
-
-
-
-        # self.rec_pose = True
-
-        # stamp = self.get_clock().now().to_msg()
-
-        # # broadcast ground truth odom -> base_link transform
+        # broadcast ground truth odom -> base_link transform
         # trans = TransformStamped()
         # trans.header.stamp = stamp
         # trans.header.frame_id = 'odom'
@@ -96,34 +79,34 @@ class PathFollower(Node):
         # trans.transform.rotation = msg.pose.orientation
         # self.odom_trans.sendTransform(trans)
 
-        # # publish ground truth as odometry for nav2
-        # odom = Odometry()
-        # odom.header.stamp = stamp
-        # odom.header.frame_id = 'odom'
-        # odom.child_frame_id = 'base_link'
-        # odom.pose.pose = msg.pose
+        # publish ground truth as odometry for nav2
+        odom = Odometry()
+        odom.header.stamp = stamp
+        odom.header.frame_id = 'odom'
+        odom.child_frame_id = 'CubeRover_V1'
+        odom.pose.pose = msg.pose
 
-        # # calculate a rough linear and angular velocity
-        # if len(self.prev_poses) < 5:
-        #     self.prev_poses.append(msg)
-        #     self.odom_pub.publish(odom)
-        #     return
+        # calculate a rough linear and angular velocity
+        if len(self.prev_poses) < 5:
+            self.prev_poses.append(msg)
+            self.odom_pub.publish(odom)
+            return
         
-        # # if enough points to calc, pop first and add to end
-        # self.prev_poses.popleft()
-        # self.prev_poses.append(msg)
+        # if enough points to calc, pop first and add to end
+        self.prev_poses.popleft()
+        self.prev_poses.append(msg)
 
-        # velx, vely, omega = self.vel_interp()
+        velx, vely, omega = self.vel_interp()
 
-        # twist_vel = Twist()
-        # twist_vel.linear.x = velx
-        # twist_vel.linear.y = vely
-        # twist_vel.angular.x = omega[0]
-        # twist_vel.angular.y = omega[1]
-        # twist_vel.angular.z = omega[2]
+        twist_vel = Twist()
+        twist_vel.linear.x = velx
+        twist_vel.linear.y = vely
+        twist_vel.angular.x = omega[0]
+        twist_vel.angular.y = omega[1]
+        twist_vel.angular.z = omega[2]
 
-        # odom.twist.twist = twist_vel
-        # self.odom_pub.publish(odom)
+        odom.twist.twist = twist_vel
+        self.odom_pub.publish(odom)
 
 
 
@@ -143,8 +126,15 @@ class PathFollower(Node):
         last_posx = self.prev_poses[-1].pose.position.x
         last_posy = self.prev_poses[-1].pose.position.y
         
-        velx = (last_posx - first_posx) / delta_t
-        vely = (last_posy - first_posy) / delta_t
+        velx_world = (last_posx - first_posx) / delta_t
+        vely_world = (last_posy - first_posy) / delta_t
+
+        # rotate world-frame velocity into robot body frame
+        last_quat = self.prev_poses[-1].pose.orientation
+        q_robot = np.array([last_quat.x, last_quat.y, last_quat.z, last_quat.w])
+        v_body = R.from_quat(q_robot).inv().apply(np.array([velx_world, vely_world, 0.0]))
+        velx = v_body[0]
+        vely = v_body[1]
 
         # angular velocity interp 
         first_rot = self.prev_poses[0].pose.orientation
@@ -201,6 +191,9 @@ class PathFollower(Node):
 
         # start navigating
         if not self.started:
+            if self.use_opti and not self.rec_pose:
+                self.get_logger().info("waiting to receive OptiTrack pose before beginning trajectory")
+                return
             self.nav.followWaypoints(self.waypoints)
             self.started = True
             return

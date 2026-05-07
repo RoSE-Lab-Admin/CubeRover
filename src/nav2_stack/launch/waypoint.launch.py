@@ -57,16 +57,6 @@ def launch_setup(context):
         nodes.append(robot_localization_node)
 
 
-    if is_opti:
-        odom_to_cuberover_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='odom_to_cuberover_tf',
-        arguments=['0', '0', '0', '0', '0', '0', 'world', 'map']
-        )
-        nodes.append(odom_to_cuberover_tf)
-
-
     return nodes
 
 
