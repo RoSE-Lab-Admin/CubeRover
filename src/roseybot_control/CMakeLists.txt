@@ -64,9 +64,17 @@ install(DIRECTORY
 if(BUILD_TESTING)
   # --- AUTOMATED C++ TEST DISCOVERY ---
   find_package(ament_cmake_gtest REQUIRED)
-  file(GLOB TEST_SOURCES "test/*.cpp")
+  file(GLOB TEST_SOURCES "test/hardware/*.cpp" "test/software/*.cpp") # Glob all cpp files inside the subdirectories
   foreach(TEST_FILE ${TEST_SOURCES})
-    get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
+    # Get the file name (e.g., "serial_comm")
+    get_filename_component(BASE_NAME ${TEST_FILE} NAME_WE)
+    
+    # Get the parent directory name (e.g., "hardware" or "software")
+    get_filename_component(DIR_PATH ${TEST_FILE} DIRECTORY)
+    get_filename_component(FOLDER_NAME ${DIR_PATH} NAME)
+    
+    # Create a target name like "hardware_serial_comm"
+    set(TEST_NAME "${FOLDER_NAME}_${BASE_NAME}")
     
     # Create the executable
     ament_add_gtest(${TEST_NAME} ${TEST_FILE})
@@ -77,7 +85,18 @@ if(BUILD_TESTING)
 
   # --- AUTOMATED PYTHON TEST DISCOVERY ---
   find_package(ament_cmake_pytest REQUIRED)
-  ament_add_pytest_test(all_python_tests test/)
+  
+  # Software Tests (Fast, safe for CI)
+  file(GLOB SW_PY_TESTS "test/software/test_*.py" "test/software/*_test.py")
+  if(SW_PY_TESTS)
+    ament_add_pytest_test(software_python_tests test/software/)
+  endif()
+
+  # Hardware Tests (Requires physical robot)
+  file(GLOB HW_PY_TESTS "test/hardware/test_*.py" "test/hardware/*_test.py")
+  if(HW_PY_TESTS)
+    ament_add_pytest_test(hardware_python_tests test/hardware/)
+  endif()
 
   # --- LINTER (DISABLE FOR NOW) ---
   # find_package(ament_lint_auto REQUIRED)
