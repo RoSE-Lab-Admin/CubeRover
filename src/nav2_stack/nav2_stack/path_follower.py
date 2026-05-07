@@ -49,6 +49,7 @@ class PathFollower(Node):
         # state trackers
         self.nav2_ready = False
         self.started = False
+        self.finished = False
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -174,6 +175,9 @@ class PathFollower(Node):
         # wait for nav2 to initialize
         if not self.nav2_ready:
             return
+        
+        if self.finished:
+            return
 
         # start navigating
         if not self.started:
@@ -195,6 +199,11 @@ class PathFollower(Node):
 
         elif result == TaskResult.CANCELED:
             self.get_logger().info("trajectory cancelled")
+
+        self.finished = True
+
+        self.stop_nav()
+
 
     def stop_nav(self):
         stop_msg = TwistStamped()
