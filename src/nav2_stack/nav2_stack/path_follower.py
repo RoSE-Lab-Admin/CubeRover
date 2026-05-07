@@ -8,6 +8,7 @@ from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
+from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
 from collections import deque
 import numpy as np
@@ -38,6 +39,16 @@ class PathFollower(Node):
             self.prev_poses = deque()
             self.pose_idx = 0
 
+            # create static odom to cuberover transform
+            stamp = self.get_clock().now().to_msg()
+
+            odom = Odometry()
+            odom.header.stamp = stamp
+            odom.header.frame_id = 'odom'
+            odom.child_frame_id = 'CubeRover_V1'
+
+            self.odom_pub.publish(odom)
+
         # publisher to explicitly stop motors on shutdown
         self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
 
@@ -61,49 +72,58 @@ class PathFollower(Node):
 
     # callback for if opti mode is being used
     def opti_callback(self, msg):
-        self.rec_pose = True
 
-        stamp = self.get_clock().now().to_msg()
+        pass # change so that if no message recieved goes to ekf mode
 
-        # broadcast ground truth odom -> base_link transform
-        trans = TransformStamped()
-        trans.header.stamp = stamp
-        trans.header.frame_id = 'odom'
-        trans.child_frame_id = 'base_link'
-        trans.transform.translation.x = msg.pose.position.x
-        trans.transform.translation.y = msg.pose.position.y
-        trans.transform.translation.z = msg.pose.position.z
-        trans.transform.rotation = msg.pose.orientation
-        self.odom_trans.sendTransform(trans)
+        # ok so what needs to happen here is if opti drops out during opti mode use ekf otherwise just use cuberover trans
 
-        # publish ground truth as odometry for nav2
-        odom = Odometry()
-        odom.header.stamp = stamp
-        odom.header.frame_id = 'odom'
-        odom.child_frame_id = 'base_link'
-        odom.pose.pose = msg.pose
+        # publish static odom to cuberover transform
 
-        # calculate a rough linear and angular velocity
-        if len(self.prev_poses) < 5:
-            self.prev_poses.append(msg)
-            self.odom_pub.publish(odom)
-            return
+
+
+        # self.rec_pose = True
+
+        # stamp = self.get_clock().now().to_msg()
+
+        # # broadcast ground truth odom -> base_link transform
+        # trans = TransformStamped()
+        # trans.header.stamp = stamp
+        # trans.header.frame_id = 'odom'
+        # trans.child_frame_id = 'base_link'
+        # trans.transform.translation.x = msg.pose.position.x
+        # trans.transform.translation.y = msg.pose.position.y
+        # trans.transform.translation.z = msg.pose.position.z
+        # trans.transform.rotation = msg.pose.orientation
+        # self.odom_trans.sendTransform(trans)
+
+        # # publish ground truth as odometry for nav2
+        # odom = Odometry()
+        # odom.header.stamp = stamp
+        # odom.header.frame_id = 'odom'
+        # odom.child_frame_id = 'base_link'
+        # odom.pose.pose = msg.pose
+
+        # # calculate a rough linear and angular velocity
+        # if len(self.prev_poses) < 5:
+        #     self.prev_poses.append(msg)
+        #     self.odom_pub.publish(odom)
+        #     return
         
-        # if enough points to calc, pop first and add to end
-        self.prev_poses.popleft()
-        self.prev_poses.append(msg)
+        # # if enough points to calc, pop first and add to end
+        # self.prev_poses.popleft()
+        # self.prev_poses.append(msg)
 
-        velx, vely, omega = self.vel_interp()
+        # velx, vely, omega = self.vel_interp()
 
-        twist_vel = Twist()
-        twist_vel.linear.x = velx
-        twist_vel.linear.y = vely
-        twist_vel.angular.x = omega[0]
-        twist_vel.angular.y = omega[1]
-        twist_vel.angular.z = omega[2]
+        # twist_vel = Twist()
+        # twist_vel.linear.x = velx
+        # twist_vel.linear.y = vely
+        # twist_vel.angular.x = omega[0]
+        # twist_vel.angular.y = omega[1]
+        # twist_vel.angular.z = omega[2]
 
-        odom.twist.twist = twist_vel
-        self.odom_pub.publish(odom)
+        # odom.twist.twist = twist_vel
+        # self.odom_pub.publish(odom)
 
 
 

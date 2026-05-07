@@ -1,8 +1,8 @@
 bt_navigator:
   ros__parameters:
     use_sim_time: true
-    global_frame: map
-    robot_base_frame: base_link
+    global_frame: world
+    robot_base_frame: CubeRover_V1
     odom_topic: /odometry/filtered
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -165,7 +165,7 @@ local_costmap:
       update_frequency: 10.0
       publish_frequency: 10.0
       global_frame: odom
-      robot_base_frame: base_link
+      robot_base_frame: CubeRover_V1
       rolling_window: true
       width: 5
       height: 5
@@ -190,7 +190,7 @@ global_costmap:
       update_frequency: 5.0
       publish_frequency: 5.0
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: CubeRover_V1
       footprint: "[[0.37, 0.23], [0.37, -0.23], [-0.37, -0.23], [-0.37, 0.23]]"
       resolution: 0.05
       track_unknown_space: true
@@ -257,9 +257,9 @@ behavior_server:
       projection_time: 1.0
       simulation_time_step: 0.1
     
-    local_frame: base_link
-    global_frame: map
-    robot_base_frame: base_link
+    local_frame: CubeRover_V1
+    global_frame: world
+    robot_base_frame: CubeRover_V1
     transform_tolerance: 0.5
     # simulate_ahead_time: 2.0
     # max_rotational_vel: 0.50

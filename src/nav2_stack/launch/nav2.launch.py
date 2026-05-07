@@ -135,8 +135,16 @@ def generate_launch_description():
         arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
     )
 
+    world_to_map_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='world_to_map_tf',
+        arguments=['0', '0', '0', '0', '0', '0', 'world', 'map']
+    )
+
     return LaunchDescription([
         map_to_odom_tf,
+        world_to_map_tf,
         map_server,
         planner,
         controller,

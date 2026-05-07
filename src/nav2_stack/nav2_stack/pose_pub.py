@@ -65,7 +65,7 @@ class PosePub(Node):
 
             pose = PoseStamped()
             pose.header.stamp = self.get_clock().now().to_msg()
-            pose.header.frame_id = 'map'
+            pose.header.frame_id = 'world'
             pose.pose.position.x = x
             pose.pose.position.y = y
             pose.pose.orientation.w = 1.0
@@ -80,11 +80,11 @@ class PosePub(Node):
         # create path message
         waypoints = Path()
         waypoints.header.stamp = self.get_clock().now().to_msg()
-        waypoints.header.frame_id = 'map'
+        waypoints.header.frame_id = 'world'
 
         for idx in range(len(self.poses)):
             self.poses[idx].header.stamp = self.get_clock().now().to_msg()
-            self.poses[idx].header.frame_id = 'map'
+            self.poses[idx].header.frame_id = 'world'
             waypoints.poses.append(self.poses[idx])
 
         # publish waypoints as a path message
