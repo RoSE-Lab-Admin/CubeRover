@@ -12,7 +12,7 @@ roseybot_base_controller:
     left_wheel_names: ["front_left_wheel_joint", "back_left_wheel_joint"]
     right_wheel_names: ["front_right_wheel_joint", "back_right_wheel_joint"]
 
-    wheel_separation: 0.315
+    wheel_separation: 0.422
     wheels_per_side: 2 
     wheel_radius: 0.1515
 
