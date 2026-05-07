@@ -73,7 +73,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_opti', default_value='false'),
+        DeclareLaunchArgument('use_opti', default_value='true'),
         DeclareLaunchArgument('pose_csv', default_value='pose.csv'),
         OpaqueFunction(function=launch_setup),
         nav2_launch,
