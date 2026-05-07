@@ -60,8 +60,8 @@ controller_server:
       vx_max: 0.3 # max/min speeds
       vx_min: -0.3
       wz_max: 0.635
-      ax_max: 0.1 # max/min accelerations
-      ax_min: -0.1
+      ax_max: 0.5 # max/min accelerations
+      ax_min: -0.5
       az_max: 0.211666666667
       iteration_count: 1
       temperature: 0.3 # selectiveness of trajectories by their costs
