@@ -44,8 +44,8 @@ def generate_launch_description():
             'use_sim_time': False,
             'autostart': True,
             'node_names': ['map_server', 'planner_server', 'controller_server',
-                           'smoother_server', 'behavior_server', 'bt_navigator', 
-                           'waypoint_follower', 'velocity_smoother']
+                           'smoother_server', 'behavior_server', 'bt_navigator',
+                           'waypoint_follower']
         }]
     )
 
@@ -66,8 +66,7 @@ def generate_launch_description():
         output='screen',
         parameters=[nav2_config, {
             'use_sim_time': False
-        }],
-        remappings=[('cmd_vel', 'cmd_vel_nav')]
+        }]
     )
 
     smoother = Node(
@@ -112,20 +111,6 @@ def generate_launch_description():
         }]
     )
     
-    vel_smoother = Node(
-        package='nav2_velocity_smoother',
-        executable='velocity_smoother',
-        name='velocity_smoother',
-        output='screen',
-        parameters=[nav2_config, {
-            'use_sim_time': False
-        }],
-        remappings=[
-            ('cmd_vel', 'cmd_vel_nav'),
-            ('cmd_vel_smoothed', 'cmd_vel')
-        ]
-    )
-    
     # Static map->odom transform (identity). Assumes robot starts at map origin.
     # Replace with AMCL or SLAM if relocalization is needed.
     map_to_odom_tf = Node(
@@ -152,6 +137,5 @@ def generate_launch_description():
         behavior,
         bt_nav,
         waypoint,
-        vel_smoother,
         lifecycle_mgr,
     ])

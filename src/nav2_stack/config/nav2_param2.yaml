@@ -139,7 +139,7 @@ planner_server:
       analytic_expansion_max_cost: 200.0 # for hybrid/lattice nodes: max cost for any part of an analytic expansion to contain and be considered valid
       analytic_expansion_max_cost_ovveride: false # for hybrid/lattice nodes: whether or not to overrid max cost setting if w/i critical dist to goaL
       minimum_turning_radius: 0.5 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
-      motion_model_for_search: "DUBIN"
+      motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 1.20 # heuristic penalty to apply to SE2 node if searching in a non straight direction
       cost_penalty: 2.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality
@@ -203,16 +203,6 @@ global_costmap:
         cost_scaling_factor: 2.58
         inflation_radius: 1.75
       always_send_full_costmap: false
-
-smoother_server:
-  ros__parameters:
-    use_sim_time: true
-    smoother_plugins: ["simple_smoother"]
-    simple_smoother:
-      plugin: "nav2_smoother::SimpleSmoother"
-      tolerance: 1.0e-5
-      max_its: 250
-      do_refinement: false
 
 behavior_server:
   ros__parameters:
