@@ -1,0 +1,47 @@
+name: Software Unit Tests
+
+on:
+  workflow_dispatch: # allow manually starting this workflow
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+
+    steps:
+      # 1. Checkout the repository code
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      # 2. Setup standard ROS 2 Humble environment
+      - name: Setup ROS 2
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      # 3. Download and install all package.xml dependencies (including libserial-dev)
+      - name: Install Dependencies
+        run: |
+          rosdep update
+          rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+
+      # 4. Build the ROS 2 workspace
+      - name: Build Workspace
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --symlink-install
+
+      # 5. Run the tests (Excluding targets with "hardware_")
+      - name: Run Software Tests
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_cohesion+ --ctest-args -E "hardware_"
+          
+      # 6. Report the results and fail the Action if any tests didn't pass
+      - name: Check Test Results
+        if: always() 
+        run: |
+          colcon test-result --all
