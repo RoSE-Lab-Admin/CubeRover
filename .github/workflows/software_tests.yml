@@ -1,8 +1,14 @@
 name: Software Unit Tests
 
 on:
-  workflow_dispatch: # allow manually starting this workflow
+  # Allow manually starting this workflow
+  workflow_dispatch:
+  # Run when PR into dev opened
   pull_request:
+    branches:
+      - dev
+  # Run when dev updated
+  push:
     branches:
       - dev
 
