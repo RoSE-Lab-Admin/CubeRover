@@ -2,8 +2,8 @@ name: Auto PR to Main
 
 on:
   push:
-    branches:
-      - dev
+    # branches:
+    #   - dev
 
 jobs:
   create-release-pr:

@@ -12,8 +12,8 @@ on:
       - edited
   # Triggers when dev is updated
   push:
-    branches:
-      - dev
+    # branches:
+    #   - dev
 
 jobs:
   check-branches:
