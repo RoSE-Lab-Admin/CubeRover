@@ -104,7 +104,7 @@ local_costmap:
         cost_scaling_factor: 2.58 #maybe try 3.0
         inflation_radius: 0.35 #see if this works instead of 0.1
       transform_tolerance: 1.0
-      always_send_full_costmap: false
+      always_send_full_costmap: true #change back to false AFTER TESTING
       track_unknown_space: false
 
 global_costmap:
@@ -126,7 +126,7 @@ global_costmap:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.58
         inflation_radius: 1.75
-      always_send_full_costmap: false
+      always_send_full_costmap: true #false change back to false after testing
 
 planner_server:
   ros__parameters:
