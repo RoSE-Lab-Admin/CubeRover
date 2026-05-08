@@ -9,8 +9,8 @@ on:
       - dev
   # Run when dev updated
   push:
-    branches:
-      - dev
+    # branches:
+    #   - dev
 
 jobs:
   build-and-test:
