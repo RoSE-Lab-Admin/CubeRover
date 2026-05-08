@@ -164,11 +164,15 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
 
 
 ## 🧪 Running Tests
-- **All:** `colcon test`
-    - **Live console output:** `colcon test --packages-select roseybot_control --event-handlers console_direct+`
-- **Specific package:** `colcon test --packages-select <package_name>`
-- **Hardware only:** `colcon test --pytest-args -m hardware`
-- **Software only:** `colcon test --pytest-args -m "not hardware"`
+- **All:** `colcon test --event-handlers console_cohesion+`
+- **Hardware only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "hardware"`
+- **Software only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "software"`
+- **Flag Info:**
+    - **Live console output:** `--event-handlers console_direct+`
+    - **Final console output:** `--event-handlers console_cohesion+`
+    - **Specific package:** `--packages-select <package_name>`
+    - **Run hardware (or software):** `--ctest-args -R "hardware"`
+    - **Exclude hardware (or software):** `--ctest-args -E "hardware"`
 
 
 ## 🔄 Developer Workflow
