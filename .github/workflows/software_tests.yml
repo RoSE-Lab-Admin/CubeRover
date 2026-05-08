@@ -19,6 +19,11 @@ env:
   # Explicitly tell ccache where to store files so actions/cache can find them
   CCACHE_DIR: ${{ github.workspace }}/.ccache
 
+# If another update is pushed before the workflow completes, cancel the old workflow run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
