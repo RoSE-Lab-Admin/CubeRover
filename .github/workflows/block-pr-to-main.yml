@@ -1,5 +1,5 @@
 # Based on  - https://stackoverflow.com/a/77435773
-name: Check pull request source branch
+name: Only Allow Dev-to-Main PR
 on:
   # Triggers when a contributor manually opens a PR
   pull_request_target:
@@ -16,7 +16,7 @@ on:
       - dev
 
 jobs:
-  check-branches:
+  check-pr-from-dev-to-main:
     runs-on: ubuntu-latest
     steps:
       - name: Check branches
