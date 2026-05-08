@@ -6,7 +6,7 @@ This README provides information for the development team on the current Docker 
 
 # Docker Image Update
 
-## Overview:
+## Overview
 
 * The `Dockerfile` in this folder provides instructions for Docker to build the image that the Dev Container uses.
 * The Docker image being used by the Dev Container is specified at the top of the `devcontainer.json` file.
