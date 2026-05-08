@@ -9,8 +9,8 @@ on:
       - dev
   # Run when dev updated
   push:
-    # branches:
-    #   - dev
+    branches:
+      - dev
 
 env:
   # FIXME: Remove this flag once ros-tooling/setup-ros releases a version 
