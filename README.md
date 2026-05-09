@@ -63,7 +63,7 @@ X11 is required only if the container launches GUI applications (e.g., RViz, Gaz
 2. Open XQuartz > **Settings > Security** > Check **"Allow connections from network clients"**.
 3. **Restart XQuartz** (Quit and reopen) for this to take effect.
 
-**Running the Repo:**
+**Launch the Environment**
 1. Open a **Mac terminal**.
 2. Clone and open:
     ```bash
@@ -137,15 +137,34 @@ Once inside the container, you must build the workspace to generate the setup fi
 > Future terminals inside the container will **automatically** source the workspace if a build exists.
 
 
+## 🏗️ System Architecture
+
+### 💠 Components
+
+The RoSE Lab CubeRover is composed of several components:
+
+| Component | Hardware | Role | Code Path |
+| :--- | :--- | :--- | :--- |
+| **High-Level** | Raspberry Pi 5 | Navigation, Perception, & ROS 2 Nodes | `src/roseybot_control` |
+| **Low-Level** | Teensy 4.1 | Motor Control & Sensor Polling (Real-Time) | `Arduino_ROS` |
+| **Dev Station** | Desktop/Laptop | Simulation (RViz/Gazebo), Control, & Monitoring | `Testing` |
+
+
+### 🖧 Communication
+
+Communication between the Raspberry Pi and the Teensy is handled in the following source files:
+
+| Hardware | Code Folder |
+| :--- | :--- |
+| Raspberry Pi | `src/roseybot_control/hardware/include/roseybot_arduino/ROS_Arduino.hpp` |
+| Teensy | `Arduino_ROS/Arduion_ROS.ino` |
+
+
 ## 📡 Network & Robot Connection
-To communicate with the physical CubeRover, your Dev Container and the Raspberry Pi must share the same network settings.
+To communicate with the physical robot, your Dev Container and the Raspberry Pi <u>must</u> be on the same network.
 
 1.  **Shared Network:** Ensure your computer and the Raspberry Pi are on the same Wi-Fi or Ethernet network.
-2.  **Network Mode:** This container is set to `ROS_LOCALHOST_ONLY=0`, allowing it to communicate with external robots.
-3.  **ROS Domain ID:** This project uses `ROS_DOMAIN_ID=42`.
-    - **Check the Robot:** SSH into the Pi and run `echo $ROS_DOMAIN_ID`.
-    - **Set the Robot:** If it is not 42, run: `echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc && source ~/.bashrc`
-4.  **Verify Connection:**
+2.  **Verify Connection:**
     - On the Pi: `ros2 topic pub /ping std_msgs/msg/String "data: hello" -1`
     - In Dev Container: `ros2 topic echo /ping`
     - If you see "hello", the connection is working.
@@ -163,30 +182,9 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
     - Mac users must have XQuartz running.
 
 
-## 🧪 Running Tests
-- **All:** `colcon test --event-handlers console_cohesion+`
-- **Hardware only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "hardware"`
-- **Software only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "software"`
-- **Flag Info:**
-    - **Live console output:** `--event-handlers console_direct+`
-    - **Final console output:** `--event-handlers console_cohesion+`
-    - **Specific package:** `--packages-select <package_name>`
-    - **Run hardware (or software):** `--ctest-args -R "hardware"`
-    - **Exclude hardware (or software):** `--ctest-args -E "hardware"`
-
-
-## 🔄 Developer Workflow
-- **Smart Terminal:**
-    - **Auto-Sourcing:** New terminals automatically find and source your workspace setup file.
-    - **Tab Completion:** `colcon` commands support tab completion (e.g., type `colcon b` + `Tab` → `colcon build`).
-- **Adding Dependencies:** If you modify `package.xml`, run:
-    ```bash
-    sudo apt update && rosdep install --from-paths src -y --ignore-src
-    ```
-- **Symlinks:** We use `colcon build --symlink-install`. You only need to rebuild if you add new files or change C++ code; existing Python scripts update instantly.
-
-
 ## 🔌 Hardware Setup (Microcontroller USB)
+
+*Follow these steps only if you need to connect a microcontroller or joystick directly to your computer's USB port for use inside the container.*
 
 #### 🪟 Windows (WSL 2)
 - Native USB passthrough is not supported by Docker Desktop. You must bridge devices from Windows:
@@ -205,6 +203,35 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
 
 #### 🐧 Linux (Native Docker)
 - **Plug and Play:** Native Docker passes `/dev` devices automatically. No setup required.
+
+
+## 🧪 Unit Tests
+
+### ▶️ Running Tests:
+- **All:** `colcon test --event-handlers console_cohesion+`
+- **Hardware only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "hardware"`
+- **Software only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "software"`
+- **Flag Info:**
+    - **Live console output:** `--event-handlers console_direct+`
+    - **Final console output:** `--event-handlers console_cohesion+`
+    - **Specific package:** `--packages-select <package_name>`
+    - **Run hardware (or software):** `--ctest-args -R "hardware"`
+    - **Exclude hardware (or software):** `--ctest-args -E "hardware"`
+
+### 📝 Writing New Tests
+- New tests can be written using GTest or PyTest.
+- Examples and instructions can be found at [src/roseybot_control/test](src/roseybot_control/test).
+
+
+## 🔄 Developer Workflow
+- **Smart Terminal:**
+    - **Auto-Sourcing:** New terminals automatically find and source your workspace setup file.
+    - **Tab Completion:** `colcon` commands support tab completion (e.g., type `colcon b` + `Tab` → `colcon build`).
+- **Adding Dependencies:** If you modify `package.xml`, run:
+    ```bash
+    sudo apt update && rosdep install --from-paths src -y --ignore-src
+    ```
+- **Symlinks:** We use `colcon build --symlink-install`. You only need to rebuild if you add new files or change C++ code; existing Python scripts update instantly.
 
 
 ## 🛠️ Troubleshooting
