@@ -139,7 +139,9 @@ Once inside the container, you must build the workspace to generate the setup fi
 
 ## 🏗️ System Architecture
 
-The RoSE Lab CubeRover is composed of several components.
+### 💠 Components
+
+The RoSE Lab CubeRover is composed of several components:
 
 | Component | Hardware | Role | Code Path |
 | :--- | :--- | :--- | :--- |
@@ -147,6 +149,8 @@ The RoSE Lab CubeRover is composed of several components.
 | **Low-Level** | Teensy 4.1 | Motor Control & Sensor Polling (Real-Time) | `Arduino_ROS` |
 | **Dev Station** | Desktop/Laptop | Simulation (RViz/Gazebo), Control, & Monitoring | `Testing` |
 
+
+### 🖧 Communication
 
 Communication between the Raspberry Pi and the Teensy is handled in the following source files:
 
@@ -164,6 +168,41 @@ To communicate with the physical robot, your Dev Container and the Raspberry Pi 
     - On the Pi: `ros2 topic pub /ping std_msgs/msg/String "data: hello" -1`
     - In Dev Container: `ros2 topic echo /ping`
     - If you see "hello", the connection is working.
+
+
+## 🖥️ Graphical Interface (GUI)
+This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS). Tools like RViz2 and Gazebo appear as native windows on your desktop.
+
+1. Launch a tool from the container terminal:
+    ```bash
+    ros2 run rviz2 rviz2
+    ```
+2. **Notes:**
+    - Windows users with WSLg will see windows immediately. WSLg provides GPU acceleration automatically on supported systems.
+    - Mac users must have XQuartz running.
+
+
+## 🔌 Hardware Setup (Microcontroller USB)
+
+*Follow these steps only if you need to connect a microcontroller or joystick directly to your computer's USB port for use inside the container.*
+
+#### 🪟 Windows (WSL 2)
+- Native USB passthrough is not supported by Docker Desktop. You must bridge devices from Windows:
+    1.  Install [usbipd-win v4.0+](https://github.com/dorssel/usbipd-win/releases).
+    2. Open **PowerShell (Admin)** and list devices: `usbipd list`.
+    3. Bind the device (once): `usbipd bind --busid <BUSID>`.
+    4. Attach and auto-reconnect: `usbipd attach --wsl --busid <BUSID> --auto-attach`.
+    5. The device will appear at `/dev/ttyUSB*` or `/dev/ttyACM*` inside the container.
+
+> [!NOTE]
+> Once attached, the device stays attached until unplugged or the WSL session ends.
+
+#### 🍎 macOS
+- Ensure your Mac host has the necessary drivers (CH340/CP210x).
+- **Docker Desktop 4.35+** includes experimental USB passthrough, but many serial microcontrollers are not yet supported. If unsupported, use `socat` to bridge the serial port.
+
+#### 🐧 Linux (Native Docker)
+- **Plug and Play:** Native Docker passes `/dev` devices automatically. No setup required.
 
 
 ## 🧪 Unit Tests
@@ -193,39 +232,6 @@ To communicate with the physical robot, your Dev Container and the Raspberry Pi 
     sudo apt update && rosdep install --from-paths src -y --ignore-src
     ```
 - **Symlinks:** We use `colcon build --symlink-install`. You only need to rebuild if you add new files or change C++ code; existing Python scripts update instantly.
-
-
-## 🖥️ Graphical Interface (GUI)
-This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS). Tools like RViz2 and Gazebo appear as native windows on your desktop.
-
-1. Launch a tool from the container terminal:
-    ```bash
-    ros2 run rviz2 rviz2
-    ```
-2. **Notes:**
-    - Windows users with WSLg will see windows immediately. WSLg provides GPU acceleration automatically on supported systems.
-    - Mac users must have XQuartz running.
-
-
-## 🔌 Hardware Setup (Microcontroller USB)
-
-#### 🪟 Windows (WSL 2)
-- Native USB passthrough is not supported by Docker Desktop. You must bridge devices from Windows:
-    1.  Install [usbipd-win v4.0+](https://github.com/dorssel/usbipd-win/releases).
-    2. Open **PowerShell (Admin)** and list devices: `usbipd list`.
-    3. Bind the device (once): `usbipd bind --busid <BUSID>`.
-    4. Attach and auto-reconnect: `usbipd attach --wsl --busid <BUSID> --auto-attach`.
-    5. The device will appear at `/dev/ttyUSB*` or `/dev/ttyACM*` inside the container.
-
-> [!NOTE]
-> Once attached, the device stays attached until unplugged or the WSL session ends.
-
-#### 🍎 macOS
-- Ensure your Mac host has the necessary drivers (CH340/CP210x).
-- **Docker Desktop 4.35+** includes experimental USB passthrough, but many serial microcontrollers are not yet supported. If unsupported, use `socat` to bridge the serial port.
-
-#### 🐧 Linux (Native Docker)
-- **Plug and Play:** Native Docker passes `/dev` devices automatically. No setup required.
 
 
 ## 🛠️ Troubleshooting
