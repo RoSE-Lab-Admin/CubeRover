@@ -42,10 +42,10 @@
             <Wait wait_duration="2"/>
           </Sequence>
           <!-- Next try, spin -->
-          <Sequence name="SpinRecovery">
+          <!-- <Sequence name="SpinRecovery">
             <Spin spin_dist="0.262"/>
             <Wait wait_duration="2"/>
-          </Sequence>
+          </Sequence> -->
         </RoundRobin>
       </ReactiveFallback>
 
