@@ -20,7 +20,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: true
-    controller_frequency: 30.0
+    controller_frequency: 10.0
     costmap_update_timeout: 0.3 # timeout value for costmap to be updated
     use_realtime_priority: false # adds real time prioritization to controller server, will set as higher priority
     publish_zero_velocity: true # whether to publish zero vel command on goal exit
@@ -86,9 +86,9 @@ controller_server:
         enabled: true
         cost_power: 1
         cost_weight: 5.0
-        threshold_to_consider: 0.5 # min distance to robot and goal where goal cost considered, should be same as predeiction horizon
+        threshold_to_consider: 1.68 # min distance to robot and goal where goal cost considered, should be same as predeiction horizon
       ObstaclesCritic: # incentives navigating away from obstacles using distances from obstacles
-        enabled: true
+        enabled: false
         critical_weight: 20.0 # weight to apply critic for near collisions closer than collision_margin_distance
         repulsion_weight: 1.5 # weight for preferring lower cost routes
         cost_power: 1 # power order
@@ -100,7 +100,7 @@ controller_server:
         inflation_radius: 0.55 # radius to inflate costmap around lethal obstacles
         inflation_layer_name: ""
       CostCritic: # incentivizes navigating away from obstacles using costmap values
-        enabled: true
+        enabled: false
         cost_power: 1
         cost_weight: 3.81
         consider_footprint: false
@@ -114,7 +114,7 @@ controller_server:
         cost_weight: 5.0
         cost_power: 1
         threshold_to_consider: 0.5 # distance between robot and goal to stop considering path following and let goal critic take over
-        offset_from_furthest: 6 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
+        offset_from_furthest: 10 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
       VelocityDeadbandCritic: # penalizes velocities that fall below deadband threshold
         enabled: true
         cost_weight: 35.0 
@@ -139,7 +139,7 @@ planner_server:
       analytic_expansion_max_cost: 200.0 # for hybrid/lattice nodes: max cost for any part of an analytic expansion to contain and be considered valid
       analytic_expansion_max_cost_ovveride: false # for hybrid/lattice nodes: whether or not to overrid max cost setting if w/i critical dist to goaL
       minimum_turning_radius: 0.5 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
-      motion_model_for_search: "DUBIN"
+      motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 1.20 # heuristic penalty to apply to SE2 node if searching in a non straight direction
       cost_penalty: 2.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality
