@@ -144,7 +144,7 @@ planner_server:
       cost_penalty: 2.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality
       lookup_table_size: 20.0
-      debug_visualizations: true # whether to publish expansions on the /expansions topic as an array of poses and the paths footprints on the /planned_footprints
+      debug_visualizations: true # whether to publish expansions on the /expansions on /planned_footprints topic as an array of poses and the paths footprints on the /planned_footprints
       use_quadratic_cost_penalty: false
       goal_heading_mode: "ALL_DIRECTION"
       coarse_search_resolution: 4 # number of goal headings bins to skip during coarse search phase 
