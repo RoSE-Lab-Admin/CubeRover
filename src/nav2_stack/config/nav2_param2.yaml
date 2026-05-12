@@ -20,7 +20,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: false
-    controller_frequency: 30.0
+    controller_frequency: 10.0
     costmap_update_timeout: 0.3 # timeout value for costmap to be updated
     use_realtime_priority: false # adds real time prioritization to controller server, will set as higher priority
     publish_zero_velocity: true # whether to publish zero vel command on goal exit
@@ -55,7 +55,7 @@ controller_server:
       time_steps: 56
       model_dt: 0.1 # should match roseybot_control frequency
       batch_size: 2000
-      vx_std: 0.2 # speed standard deviations
+      vx_std: 0.35 # speed standard deviations
       wz_std: 0.5
       vx_max: 0.3 # max/min speeds
       vx_min: -0.3
