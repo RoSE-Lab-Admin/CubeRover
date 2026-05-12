@@ -60,8 +60,8 @@ controller_server:
       vx_max: 0.3 # max/min speeds
       vx_min: -0.3
       wz_max: 0.635
-      ax_max: 0.1 # max/min accelerations
-      ax_min: -0.1
+      ax_max: 1.0 # max/min accelerations
+      ax_min: -1.0
       az_max: 0.211666666667
       iteration_count: 1
       temperature: 0.3 # selectiveness of trajectories by their costs
@@ -111,10 +111,10 @@ controller_server:
         trajectory_point_step: 2 # the step to take in trajectories for evaluating in critic
       PathFollowCritic: # incentivizes making progress along path
         enabled: true
-        cost_weight: 5.0
+        cost_weight: 10.0
         cost_power: 1
         threshold_to_consider: 0.5 # distance between robot and goal to stop considering path following and let goal critic take over
-        offset_from_furthest: 10 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
+        offset_from_furthest: 20 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
       VelocityDeadbandCritic: # penalizes velocities that fall below deadband threshold
         enabled: true
         cost_weight: 35.0 
