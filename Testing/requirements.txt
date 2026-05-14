@@ -1,6 +1,5 @@
-nicegui
-nicegui-highcharts
-pandas  # For handling static CSV/Excel data
+nicegui[highcharts]>=1.4.0
+pandas
 setuptools
 typeguard
 pyserial

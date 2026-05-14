@@ -1,6 +1,5 @@
 import io
 import time
-import random
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -25,14 +24,44 @@ analysis_df_A = pd.DataFrame()
 analysis_df_B = pd.DataFrame()
 using_live_for_A = False
 
-SENSORS = [
-    {"id": "pwm", "name": "Motor PWM (%)", "color": "#ef4444", "base_val": 0.1},
-    {"id": "rpm", "name": "Motor Speed (RPM)", "color": "#10b981", "base_val": 0.1},
-    {"id": "curr", "name": "Motor Current (A)", "color": "#3b82f6", "base_val": 0.5},
-    {"id": "volt", "name": "Bus Voltage (V)", "color": "#f59e0b", "base_val": 24.0}
+# # --- UI Element Placeholders (Satisfies the Linter) ---
+# time_range = None
+
+MOTORS = [
+    {"id": "fl", "name": "Front Left", "dash": "Solid"},
+    {"id": "fr", "name": "Front Right", "dash": "Dash"},
+    {"id": "bl", "name": "Back Left", "dash": "Dot"},
+    {"id": "br", "name": "Back Right", "dash": "DashDot"}
 ]
-sensor_names = [s['name'] for s in SENSORS]
+
+MOTOR_SENSORS = [
+    {"id": "pwm", "name": "Motor PWM (%)", "color": "#ef4444"},   # Red
+    {"id": "rpm", "name": "Motor Speed (RPM)", "color": "#10b981"}, # Green
+    {"id": "curr", "name": "Motor Current (A)", "color": "#3b82f6"},# Blue
+    {"id": "enc", "name": "Encoder Count", "color": "#8b5cf6"}      # Purple (New!)
+]
+
+motor_switches = {}
 sensor_switches = {}
+
+# Create separate dictionaries for the Analysis Dropdowns
+analysis_motor_options = {m['id']: m['name'] for m in MOTORS}
+
+# Add motor sensors, plus the two global voltages
+analysis_sensor_options = {s['id']: s['name'] for s in MOTOR_SENSORS}
+analysis_sensor_options['volt1'] = 'Bus Voltage 1 (V)'
+analysis_sensor_options['volt2'] = 'Bus Voltage 2 (V)'
+
+# Build a dictionary mapping DataFrame columns to pretty UI labels
+analysis_options = {
+    'volt1': 'Bus Voltage 1 (V)',
+    'volt2': 'Bus Voltage 2 (V)'
+}
+for m in MOTORS:
+    for s in MOTOR_SENSORS:
+        # e.g., 'fl_pwm': 'Front Left Motor PWM (%)'
+        analysis_options[f"{m['id']}_{s['id']}"] = f"{m['name']} {s['name']}"
+all_metric_keys = list(analysis_options.keys())
 
 current_dir = Path(__file__).parent.resolve()
 engine = TestEngine(hardware_interface=None, base_path=current_dir)
@@ -70,29 +99,45 @@ def update_master_stream():
     elapsed = round(time.time() - start_time, 2)
     row = {'Seconds': elapsed}
     
-    # Grab a thread-safe snapshot from the DAQ
-    snap = daq.telemetry
+    snap = daq.telemetry 
     
     BATTERY_SCALE = 0.1   # Roboclaw reports in 10mV units
     CURRENT_SCALE = 0.01  # Roboclaw reports in 10mA units
     PWM_SCALE = 1 / 327.67 # See wheel.hpp for details
     
-    # Map the telemetry to the UI sensors. 
-    # Convert hardware integer units (10mA, 10mV) back into real-world Floats.
-    row['Motor PWM (%)'] = snap.fl.pwm * PWM_SCALE
-    row['Motor Speed (RPM)'] = snap.fl.velocity
-    row['Motor Current (A)'] = snap.fl.current * CURRENT_SCALE      # 10mA units -> Amps
-    row['Bus Voltage (V)'] = snap.battery_voltage_1 * BATTERY_SCALE # 10mV units -> Volts
+    # Extract Rover-level data
+    row['volt1'] = snap.battery_voltage_1 * BATTERY_SCALE
+    row['volt2'] = snap.battery_voltage_2 * BATTERY_SCALE
     
+    # Extract all 16 Motor-level data points
+    for m in MOTORS:
+        m_id = m['id']
+        motor_data = getattr(snap, m_id) 
+        
+        row[f"{m_id}_pwm"] = motor_data.pwm * PWM_SCALE
+        row[f"{m_id}_rpm"] = motor_data.velocity
+        row[f"{m_id}_curr"] = motor_data.current * CURRENT_SCALE
+        row[f"{m_id}_enc"] = motor_data.encoder_count
+        
     global_history.append(row)
     display_history = global_history[-MAX_LIVE_POINTS:]
     
-    js_commands = [f'const chart = getElement({master_chart.id}).chart;']
-    for s in SENSORS:
-        sensor_data = [[r['Seconds'], r[s['name']]] for r in display_history]
-        js_commands.append(f'chart.get("live_{s["id"]}").setData({sensor_data}, false, false, false);')
+    # Push to Chart
+    js_commands = [f'{{ const chart = getElement({master_chart.id}).chart;']
     
-    js_commands.append('chart.redraw(false);')
+    # Push Both Voltages
+    for v_id in ['volt1', 'volt2']:
+        v_data = [[r['Seconds'], r[v_id]] for r in display_history]
+        js_commands.append(f'chart.get("live_{v_id}").setData({v_data}, false, false, false);')
+    
+    # Push Motor Data
+    for s in MOTOR_SENSORS:
+        for m in MOTORS:
+            data_key = f"{m['id']}_{s['id']}"
+            sensor_data = [[r['Seconds'], r[data_key]] for r in display_history]
+            js_commands.append(f'chart.get("live_{s["id"]}_{m["id"]}").setData({sensor_data}, false, false, false);')
+            
+    js_commands.append('chart.redraw(false); }')
     ui.run_javascript('\n'.join(js_commands))
     
     if using_live_for_A:
@@ -177,8 +222,16 @@ def reset_master_live(show_notify=True):
     global_history.clear()
     
     js_commands = [f'const chart = getElement({master_chart.id}).chart;']
-    for s in SENSORS:
-        js_commands.append(f'chart.get("live_{s["id"]}").setData([], false, false, false);')
+    
+    # Reset Voltages
+    for v_id in ['volt1', 'volt2']:
+        js_commands.append(f'chart.get("live_{v_id}").setData([], false, false, false);')
+        
+    # Reset Motor Streams
+    for s in MOTOR_SENSORS:
+        for m in MOTORS:
+            js_commands.append(f'chart.get("live_{s["id"]}_{m["id"]}").setData([], false, false, false);')
+            
     js_commands.append('chart.redraw();')
     ui.run_javascript('\n'.join(js_commands))
     update_time_slider_limits()
@@ -190,19 +243,46 @@ def download_master_csv():
     if not global_history:
         ui.notify('No data to save!', type='warning')
         return
+    
     df = pd.DataFrame(global_history)
-    df = df[['Seconds'] + [s['name'] for s in SENSORS]]
+    
+    # Define the desired column order: Seconds, Voltages, then Motor Data
+    cols = ['Seconds', 'volt1', 'volt2']
+    for m in MOTORS:
+        for s in MOTOR_SENSORS:
+            cols.append(f"{m['id']}_{s['id']}")
+            
+    # Only keep columns that actually exist in the dataframe (safeguard)
+    valid_cols = [c for c in cols if c in df.columns]
+    df = df[valid_cols]
+    
     csv_content = df.to_csv(index=False).encode('utf-8')
     ui.download(csv_content, filename=f'robot_run_{datetime.now().strftime("%H-%M-%S")}.csv')
 
-def update_visibility(sensor_id, is_visible):
-    visible_str = str(is_visible).lower()
-    ui.run_javascript(f'''
-        const chart = getElement({master_chart.id}).chart;
-        if (chart.get("live_{sensor_id}")) chart.get("live_{sensor_id}").setVisible({visible_str}, false);
-        if (chart.get("ref_{sensor_id}")) chart.get("ref_{sensor_id}").setVisible({visible_str}, false);
-        chart.redraw();
-    ''')
+def update_chart_visibility():
+    """Calculates visibility based on Motor Toggles AND Sensor Toggles"""
+    js_commands = [f'{{ const chart = getElement({master_chart.id}).chart;']
+    
+    # Update Both Voltages
+    for v_id in ['volt1', 'volt2']:
+        v_vis = str(sensor_switches[v_id].value).lower()
+        # Add safety checks and toggle both Live AND Ref traces
+        js_commands.append(f'if (chart.get("live_{v_id}")) chart.get("live_{v_id}").setVisible({v_vis}, false);')
+        js_commands.append(f'if (chart.get("ref_{v_id}")) chart.get("ref_{v_id}").setVisible({v_vis}, false);')
+    
+    # Update Motor Streams (Depends on BOTH switches)
+    for s in MOTOR_SENSORS:
+        is_sensor_on = sensor_switches[s['id']].value
+        for m in MOTORS:
+            is_motor_on = motor_switches[m['id']].value
+            is_visible = str(is_sensor_on and is_motor_on).lower()
+            
+            # Add safety checks and toggle both Live AND Ref traces
+            js_commands.append(f'if (chart.get("live_{s["id"]}_{m["id"]}")) chart.get("live_{s["id"]}_{m["id"]}").setVisible({is_visible}, false);')
+            js_commands.append(f'if (chart.get("ref_{s["id"]}_{m["id"]}")) chart.get("ref_{s["id"]}_{m["id"]}").setVisible({is_visible}, false);')
+            
+    js_commands.append('chart.redraw(); }')
+    ui.run_javascript('\n'.join(js_commands))
 
 def toggle_log_scale(e):
     # Sync the two switches so they stay at the same value
@@ -215,47 +295,71 @@ def toggle_log_scale(e):
 async def load_live_reference(e):
     global live_reference_df
     try:
-        live_reference_df = pd.read_csv(io.BytesIO(await e.file.read()))
-        js_commands = [f'const chart = getElement({master_chart.id}).chart;']
+        # AWAIT the read function to get the actual bytes!
+        content = await e.content.read() 
         
-        for s in SENSORS:
-            if s['name'] in live_reference_df.columns:
-                data = live_reference_df[['Seconds', s['name']]].dropna().values.tolist()
-                is_visible = str(sensor_switches[s['id']].value).lower()
-                var_name = f"old_ref_{s['id']}"
-                js_commands.append(f'const {var_name} = chart.get("ref_{s["id"]}"); if ({var_name}) {var_name}.remove(false);')
+        live_reference_df = pd.read_csv(io.BytesIO(content))
+        
+        # Wrapped in { } to prevent Javascript global scope redeclaration crashes
+        js_commands = [f'{{ const chart = getElement({master_chart.id}).chart;']
+        
+        # Build a list of all metrics to load
+        metrics_to_load = [
+            ('volt1', 'volt1', '#f59e0b', 'Solid', str(sensor_switches['volt1'].value).lower()),
+            ('volt2', 'volt2', '#d97706', 'Solid', str(sensor_switches['volt2'].value).lower())
+        ]
+        
+        for s in MOTOR_SENSORS:
+            for m in MOTORS:
+                is_vis = str(sensor_switches[s['id']].value and motor_switches[m['id']].value).lower()
+                metrics_to_load.append((
+                    f"{s['id']}_{m['id']}",   
+                    f"{m['id']}_{s['id']}",   
+                    s['color'], m['dash'], is_vis
+                ))
+                
+        for chart_id, col_name, color, dash, is_visible in metrics_to_load:
+            if col_name in live_reference_df.columns:
+                data = live_reference_df[['Seconds', col_name]].dropna().values.tolist()
+                js_commands.append(f'if (chart.get("ref_{chart_id}")) chart.get("ref_{chart_id}").remove(false);')
                 
                 js_commands.append(f'''
                     chart.addSeries({{
-                        id: "ref_{s['id']}", name: "Ref: {s['name']}", data: {data},
-                        color: "{s['color']}", dashStyle: 'ShortDash', opacity: 0.5, visible: {is_visible}
+                        id: "ref_{chart_id}", name: "Ref: {col_name}", data: {data},
+                        color: "{color}", dashStyle: "{dash}", opacity: 0.4, visible: {is_visible},
+                        marker: {{enabled: false}}
                     }}, false);
                 ''')
-        js_commands.append('chart.redraw();')
+                
+        js_commands.append('chart.redraw(); }') # Closing the Javascript block
         ui.run_javascript('\n'.join(js_commands))
         
-        # --- UI TOGGLE LOGIC ---
-        ref_pill_label.set_text(e.file.name)
-        ref_pill.classes(remove='hidden')
+        # UI Updates
+        ref_pill_label.set_text(e.name)
+        ref_pill.classes(remove='hidden') 
         btn_load_ref.classes('hidden')
         e.sender.reset() 
-        ui.notify('Reference trace loaded for Live Capture')
+        ui.notify('Reference trace loaded for Live Capture', type='positive')
     except Exception as ex:
         ui.notify(f'Error: {ex}', type='negative')
-        
+        print(f"Live Ref Error: {ex}")
+
 def unload_live_reference():
     global live_reference_df
-    live_reference_df = pd.DataFrame() # Clear the dataframe
+    live_reference_df = pd.DataFrame() 
     
-    # Remove all reference series from the chart
-    js_commands = [f'const chart = getElement({master_chart.id}).chart;']
-    for s in SENSORS:
-        var_name = f"old_ref_{s['id']}"
-        js_commands.append(f'const {var_name} = chart.get("ref_{s["id"]}"); if ({var_name}) {var_name}.remove(false);')
-    js_commands.append('chart.redraw();')
+    # Wrapped in { }
+    js_commands = [f'{{ const chart = getElement({master_chart.id}).chart;']
+    
+    # Generate all chart IDs to remove
+    ids_to_remove = ['volt1', 'volt2'] + [f"{s['id']}_{m['id']}" for s in MOTOR_SENSORS for m in MOTORS]
+    
+    for cid in ids_to_remove:
+        js_commands.append(f'if (chart.get("ref_{cid}")) chart.get("ref_{cid}").remove(false);')
+        
+    js_commands.append('chart.redraw(); }') # Closing block
     ui.run_javascript('\n'.join(js_commands))
     
-    # --- UI TOGGLE LOGIC ---
     ref_pill.classes('hidden')
     btn_load_ref.classes(remove='hidden')
     ui.notify('Reference trace unloaded')
@@ -289,16 +393,19 @@ def reset_time_window():
 async def handle_analysis_upload(e, dataset_slot):
     global analysis_df_A, analysis_df_B, using_live_for_A
     try:
-        df = pd.read_csv(io.BytesIO(await e.file.read()))
+        # AWAIT the read function
+        content = await e.content.read()
+        df = pd.read_csv(io.BytesIO(content))
+        
         if dataset_slot == 'A':
             analysis_df_A = df
             using_live_for_A = False
-            label_A_status.set_text(e.file.name)
+            label_A_status.set_text(e.name)
             label_A_status.classes(remove='text-slate-500', add='text-blue-800')
             btn_clear_A.classes(remove='hidden')
         else:
             analysis_df_B = df
-            label_B_status.set_text(e.file.name)
+            label_B_status.set_text(e.name)
             label_B_status.classes(remove='text-slate-500', add='text-slate-800')
             btn_clear_B.classes(remove='hidden')
         
@@ -309,6 +416,14 @@ async def handle_analysis_upload(e, dataset_slot):
         ui.notify(f'Loaded to Dataset {dataset_slot}', type='positive')
     except Exception as ex:
         ui.notify(f'Error: {ex}', type='negative')
+        print(f"Analysis Upload Error: {ex}")
+
+# Explicit async wrappers to completely avoid the lambda trap
+async def upload_dataset_A(e):
+    await handle_analysis_upload(e, 'A')
+
+async def upload_dataset_B(e):
+    await handle_analysis_upload(e, 'B')
 
 def set_analysis_A_to_live():
     global using_live_for_A
@@ -367,8 +482,23 @@ def toggle_analysis_log_scale(e):
     ui.run_javascript(f'getElement({analysis_chart.id}).chart.yAxis[0].update({{type: "{axis_type}"}});')
 
 def update_analysis_view():
-    selected_metrics = analysis_metric_select.value
-    if not selected_metrics: return
+    if time_range is None or analysis_sensor_select is None:
+        return
+        
+    # --- DYNAMICALLY BUILD THE ACTIVE METRICS LIST ---
+    selected_metrics = []
+    active_sensors = analysis_sensor_select.value or []
+    active_motors = analysis_motor_select.value or []
+    
+    for s_id in active_sensors:
+        if s_id in ['volt1', 'volt2']:
+            selected_metrics.append(s_id) # Voltages don't need a motor prefix
+        else:
+            for m_id in active_motors:
+                selected_metrics.append(f"{m_id}_{s_id}") # Combine them (e.g., 'fl' + 'pwm' = 'fl_pwm')
+                
+    if not selected_metrics: 
+        return # If nothing is selected, exit early
     
     df_A_raw = pd.DataFrame(global_history) if using_live_for_A else analysis_df_A
     df_B_raw = analysis_df_B
@@ -386,8 +516,17 @@ def update_analysis_view():
     
     y_type = 'logarithmic' if analysis_log_scale.value else 'linear'
     
+    # --- HELPER: Resolve color from column name ---
+    def _get_metric_color(metric_key):
+        if metric_key == 'volt1': return '#f59e0b'
+        if metric_key == 'volt2': return '#d97706'
+        for s in MOTOR_SENSORS:
+            if metric_key.endswith(f"_{s['id']}"):
+                return s['color']
+        return '#000000'
+
     for metric_name in selected_metrics:
-        color = next((s['color'] for s in SENSORS if s['name'] == metric_name), '#000000')
+        color = _get_metric_color(metric_name)
         mape_val = calculate_mape(df_A, df_B, metric_name) if not df_A.empty and not df_B.empty else "-"
         
         if not df_A.empty and metric_name in df_A.columns:
@@ -400,9 +539,9 @@ def update_analysis_view():
                 'dashStyle': 'Solid',
                 'opacity': 1.0,
                 'id': f'main_A_{metric_name}',
+                'marker': {'enabled': False}
             })
             rms_A = np.sqrt(np.mean(df_A[metric_name].dropna()**2))
-            # ADDED 'id' FIELD FOR UNIQUE ROW KEY
             stats.append({'id': f'{metric_name}_A', 'Metric': metric_name, 'Dataset': 'A (Solid)', 'Max': round(df_A[metric_name].max(), 2), 'Mean': round(df_A[metric_name].mean(), 2), 'RMS': round(rms_A, 2), 'Diff_vs_A': '-'})
             
         if not df_B.empty and metric_name in df_B.columns:
@@ -414,12 +553,11 @@ def update_analysis_view():
                 'dashStyle': 'ShortDash', 
                 'opacity': 0.5,
                 'id': f'main_B_{metric_name}',
+                'marker': {'enabled': False}
             })
             rms_B = np.sqrt(np.mean(df_B[metric_name].dropna()**2))
-            # ADDED 'id' FIELD FOR UNIQUE ROW KEY
             stats.append({'id': f'{metric_name}_B', 'Metric': metric_name, 'Dataset': 'B (Dashed)', 'Max': round(df_B[metric_name].max(), 2), 'Mean': round(df_B[metric_name].mean(), 2), 'RMS': round(rms_B, 2), 'Diff_vs_A': mape_val})
             
-        # Look for this specific block inside update_analysis_view() and replace it:
         if not df_A.empty and not df_B.empty and metric_name in df_A.columns and metric_name in df_B.columns:
             t_A = df_A['Seconds'].values
             val_A = df_A[metric_name].values
@@ -428,18 +566,14 @@ def update_analysis_view():
             
             if len(t_A) > 0 and len(t_B) > 0:
                 interp_B = np.interp(t_A, t_B, val_B)
-                
-                # --- NEW PERCENTAGE MATH ---
-                # We use a safe division array to prevent divide-by-zero errors when the motor is stopped
                 safe_A = np.where(np.abs(val_A) < 0.001, 0.001, val_A)
                 delta_vals = ((val_A - interp_B) / safe_A) * 100
-                
                 delta_data = [[float(t), float(d)] for t, d in zip(t_A, delta_vals)]
-                delta_series.append({'name': f'Δ {metric_name} (%)', 'data': delta_data, 'color': color, 'lineWidth': 2})
+                delta_series.append({'name': f'Δ {metric_name} (%)', 'data': delta_data, 'color': color, 'lineWidth': 2, 'marker': {'enabled': False}})
 
     dist_metric = dist_metric_select.value
     if dist_metric:
-        dist_color = next((s['color'] for s in SENSORS if s['name'] == dist_metric), '#000000')
+        dist_color = _get_metric_color(dist_metric)
         all_vals = []
         if not df_A.empty and dist_metric in df_A.columns: all_vals.extend(df_A[dist_metric].dropna().tolist())
         if not df_B.empty and dist_metric in df_B.columns: all_vals.extend(df_B[dist_metric].dropna().tolist())
@@ -475,14 +609,24 @@ def update_analysis_view():
         chartH.update({{series: {dist_series}}}, true, true, false);
     ''')
     
-    # ASSIGN AND FORCE UPDATE
     stats_table.rows = stats
     stats_table.update()
+
+def toggle_all_metrics():
+    # If all items are currently selected, clear them. Otherwise, select all.
+    all_keys = list(analysis_options.keys())
+    if len(analysis_metric_select.value) == len(all_keys):
+        analysis_metric_select.value = []
+    else:
+        analysis_metric_select.value = all_keys
+        
+    # NiceGUI automatically triggers the on_change event (update_analysis_view) 
+    # when you modify the .value attribute programmatically!
 
 # ==========================================
 # 4. Main UI Layout
 # ==========================================
-ui.page_title('Robotics Telemetry Hub')
+ui.page_title('Flat Rosey Test UI')
 
 # The "fixed inset-0" pins the container to the top, bottom, left, and right of the window.
 # It completely bypasses any hidden framework padding.
@@ -558,12 +702,31 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
                     switch_capture_panel = ui.switch('Logarithmic Y-Axis', on_change=toggle_log_scale).classes('mb-4 font-semibold text-blue-600')
                     ui.separator().classes('mb-4')
                     
-                    ui.label('Active Streams').classes('text-lg font-bold text-gray-800 mb-2')
-                    for s in SENSORS:
-                        sensor_switches[s['id']] = ui.switch(
-                            s['name'], value=True, 
-                            on_change=lambda e, sid=s['id']: update_visibility(sid, e.value)
-                        ).classes('mb-1')
+                    with ui.card().classes('w-full p-4 bg-white shadow-sm border'):
+                        ui.label('Active Motors').classes('text-lg font-bold text-gray-800 mb-2')
+                        with ui.column().classes('w-full gap-2'):
+                            for m in MOTORS:
+                                # Note: on_change calls our visibility matrix function
+                                motor_switches[m['id']] = ui.switch(
+                                    m['name'], 
+                                    value=True, 
+                                    on_change=update_chart_visibility
+                                ).classes('w-full')
+
+                    # --- Sensor Stream Toggles ---
+                    with ui.card().classes('w-full p-4 bg-white shadow-sm border'):
+                        ui.label('Active Sensors').classes('text-lg font-bold text-gray-800 mb-2')
+                        with ui.column().classes('w-full gap-2'):
+                            for s in MOTOR_SENSORS:
+                                sensor_switches[s['id']] = ui.switch(
+                                    s['name'], value=True, on_change=update_chart_visibility
+                                ).classes('w-full')
+                            
+                            ui.separator().classes('my-2 w-full')
+                            
+                            # Add Both Voltages separately since they don't belong to a specific motor
+                            sensor_switches['volt1'] = ui.switch("Bus Voltage 1 (V)", value=True, on_change=update_chart_visibility).classes('w-full')
+                            sensor_switches['volt2'] = ui.switch("Bus Voltage 2 (V)", value=True, on_change=update_chart_visibility).classes('w-full')
 
                 with ui.column().classes('w-3/4 flex-grow p-4 bg-white shadow-sm border rounded h-full min-w-0'):
                     with ui.card().classes('w-full h-full p-4 relative overflow-hidden flex flex-col'):
@@ -575,14 +738,30 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
 
                         # Added inner sizing div (flex-grow so it fills the h-full card)
                         with ui.element('div').classes('relative w-full flex-grow min-h-0'):
-                            initial_series = [{'id': f"live_{s['id']}", 'name': s['name'], 'data': [], 'color': s['color']} for s in SENSORS]
+                            series_list = []
+                            # Add the 16 motor streams
+                            for s in MOTOR_SENSORS:
+                                for m in MOTORS:
+                                    series_list.append({
+                                        'id': f"live_{s['id']}_{m['id']}",
+                                        'name': f"{m['name']} {s['name']}",
+                                        'data': [],
+                                        'color': s['color'],
+                                        'dashStyle': m['dash'],
+                                        'marker': {'enabled': False}
+                                    })
+
+                            # Add the 2 standalone voltage streams
+                            series_list.append({'id': 'live_volt1', 'name': 'Bus Voltage 1 (V)', 'data': [], 'color': '#f59e0b', 'marker': {'enabled': False}})
+                            series_list.append({'id': 'live_volt2', 'name': 'Bus Voltage 2 (V)', 'data': [], 'color': '#d97706', 'marker': {'enabled': False}}) # Slightly darker orange
+                            
                             master_chart = ui.highchart({
                                 'chart': {'type': 'line', 'animation': False},
                                 'title': {'text': 'Data Capture'}, # The title creates the perfect natural space!
                                 'xAxis': {'title': {'text': 'Seconds'}},
                                 'yAxis': {'type': 'linear'},
                                 'tooltip': {'shared': True, 'crosshairs': True},
-                                'series': initial_series
+                                'series': series_list
                             }).classes('absolute inset-0 w-full h-full')
 
         # --- ANALYSIS PANEL ---
@@ -595,7 +774,26 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
                     ui.label('Analysis Setup').classes('text-lg font-bold text-gray-800 mb-4')
                     
                     ui.label('1. Metrics to Plot').classes('text-xs font-bold text-gray-500 uppercase mb-1')
-                    analysis_metric_select = ui.select(sensor_names, multiple=True, value=sensor_names, on_change=update_analysis_view).classes('w-full mb-6')
+                    # The Main Line Chart Dropdowns
+                    with ui.row().classes('w-full items-start gap-4 mb-6 flex-nowrap'):
+                        
+                        # Dropdown 1: Motors
+                        analysis_motor_select = ui.select(
+                            options=analysis_motor_options,
+                            multiple=True,
+                            value=list(analysis_motor_options.keys()), # Select all by default
+                            label='Filter by Motor',
+                            on_change=update_analysis_view
+                        ).classes('flex-1 min-w-0') # flex-1 forces equal 50/50 width
+                        
+                        # Dropdown 2: Sensors
+                        analysis_sensor_select = ui.select(
+                            options=analysis_sensor_options,
+                            multiple=True,
+                            value=list(analysis_sensor_options.keys()), # Select all by default
+                            label='Filter by Sensor Type',
+                            on_change=update_analysis_view
+                        ).classes('flex-1 min-w-0') # flex-1 forces equal 50/50 width
                     
                     # --- GROUPED DATA SOURCES ---
                     with ui.column().classes('w-full p-3 bg-slate-50 rounded border border-slate-200 gap-2'):
@@ -610,7 +808,7 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
 
                         with ui.row().classes('w-full gap-2 mb-2'):
                             ui.button('Sync Live', icon='refresh', on_click=set_analysis_A_to_live).props('size=sm color=slate outline').classes('flex-none')
-                            up_A = ui.upload(auto_upload=True, on_upload=lambda e: handle_analysis_upload(e, 'A')).props('accept=".csv"').classes('hidden')
+                            up_A = ui.upload(auto_upload=True, on_upload=upload_dataset_A).props('accept=".csv"').classes('hidden')
                             ui.button('Load CSV', on_click=lambda: up_A.run_method('pickFiles')).props('size=sm color=blue').classes('flex-grow')
                         
                         ui.separator().classes('my-1')
@@ -624,7 +822,7 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
 
                         with ui.row().classes('w-full gap-2 mb-2'):
                             ui.button('Use Live Ref', icon='move_down', on_click=set_analysis_B_to_live_ref).props('size=sm color=slate outline').classes('flex-none')
-                            up_B = ui.upload(auto_upload=True, on_upload=lambda e: handle_analysis_upload(e, 'B')).props('accept=".csv"').classes('hidden')
+                            up_B = ui.upload(auto_upload=True, on_upload=upload_dataset_B).props('accept=".csv"').classes('hidden')
                             ui.button('Load CSV', on_click=lambda: up_B.run_method('pickFiles')).props('size=sm color=slate outline').classes('flex-grow')
 
                 # --- RIGHT GRAPHS (75%) ---
@@ -674,7 +872,12 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
                             with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0'):
                                 with ui.row().classes('w-full justify-between items-center mb-2'):
                                     ui.label('Data Distribution (Windowed)').classes('text-lg font-bold text-gray-800')
-                                    dist_metric_select = ui.select(sensor_names, value=sensor_names[0], on_change=update_analysis_view).classes('w-64')
+                                    # The Histogram / Distribution Dropdown (likely right below it)
+                                    dist_metric_select = ui.select(
+                                        options=analysis_options,
+                                        value='fl_rpm', # Sane default for the histogram
+                                        on_change=update_analysis_view
+                                    ).classes('w-full mb-6')
                                     
                                 with ui.element('div').classes('relative w-full h-[250px]'):
                                     dist_chart = ui.highchart({
