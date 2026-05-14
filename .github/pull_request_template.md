@@ -1,6 +1,6 @@
 ## 🛑 REQUIRED: Check your Base Branch!
 **Are you submitting a software change?** Please ensure the "base" branch is set to **`dev`**, NOT `main`. 
-*All software changes must be validated on physical hardware via the `dev` branch before being promoted to `main`.*
+*All software changes must be validated on physical hardware via the `dev` branch before being merged into `main`.*
 
 ---
 
