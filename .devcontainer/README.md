@@ -1,4 +1,4 @@
-# Devcontainer Overview
+# Dev Containers Overview
 
 This project uses VS Code Dev Containers to make setup easy for new developers. The instructions for getting setup to use this codebase are provided in the root-level `README.md`.
 

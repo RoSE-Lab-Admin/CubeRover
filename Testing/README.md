@@ -1,5 +1,34 @@
 # Hardware Testing
 
+## DAQ Gui
+
+### Setup
+
+- Install python virtual environment
+    ```bash
+    sudo apt install python3.12-venv
+    ```
+
+- Create the virtual environment at the project root.
+    ```bash
+    python3 -m venv venv
+    ```
+
+- Activate the virtual environment.
+    ```bash
+    source venv/bin/activate
+    ```
+
+- Install dependencies
+    ```bash
+    pip install -r Testing/requirements.txt
+    ``` 
+
+### Run the Test GUI
+    ```bash
+    python3 Testing/testing_gui.py
+    ```
+
 
 ## Instructions for Updating Raspberry Pi Code
 

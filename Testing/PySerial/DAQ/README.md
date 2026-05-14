@@ -1,6 +1,6 @@
 # DAQ
 
-This code pulls the data from the DAQ Teensey for display on the lab computer.
+This code runs on the DAQ Teensey, which sends data to the lab computer.
 
 ## Symlink Info Info
 

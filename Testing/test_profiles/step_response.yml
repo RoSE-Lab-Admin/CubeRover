@@ -1,0 +1,26 @@
+name: "Step Response Test"
+description: "Sets a jump in motor speed to test motor tuning."
+steps:
+  - type: set_motor_speed
+    value: 0
+    duration_sec: 2
+  - type: set_motor_speed
+    value: 1
+    duration_sec: 5
+
+pass_criteria:
+  - type: parametric
+    checks:
+      current_amps: { max: 15.0 }
+      voltage_v: { min: 11.5, max: 12.5 }
+      temp_c: { max: 85.0 }
+
+  - type: signal_metrics
+    checks:
+      overshoot_percent: { max: 10 }
+      settling_time_ms: { max: 50 }
+      rise_time_ms: { max: 20 }
+
+  - type: envelope
+    reference_profile: "golden_traces/nominal_step_response.csv"
+    allowed_deviation_percent: 5.0

@@ -1,0 +1,6 @@
+nicegui
+nicegui-highcharts
+pandas  # For handling static CSV/Excel data
+setuptools
+typeguard
+pyserial

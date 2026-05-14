@@ -1,0 +1,5 @@
+name: "Ad-Hoc Capture"
+description: "Manual control. Captures telemetry until manually stopped."
+steps:
+  - type: ad_hoc_capture
+pass_criteria: []
