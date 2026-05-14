@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Maintain GitHub Actions (Checkout, Cache, Setup-ROS, etc.)
+  # Scans .github/workflows/*.yml
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+
+  # Maintain Python dependencies for the GUI
+  # Scans specified folder for requirements.txt or setup.py
+  - package-ecosystem: "pip"
+    directory: "/Testing" 
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
