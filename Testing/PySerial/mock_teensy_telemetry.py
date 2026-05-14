@@ -1,6 +1,5 @@
 import threading
 import time
-import math
 import random
 from dataclasses import dataclass, field
 
@@ -53,10 +52,12 @@ class MockTeensyTelemetryReader:
             self._thread.join(timeout=2.0)
         print("Mock DAQ stopped")
 
-    # Mock method for simulating the ramp up
     def reset_clock(self):
         """Resets the internal timer so the data ramps from 0 again."""
         self._start_time = time.time()
+        # Reset the telemetry object so encoder counts drop back to 0
+        with self._lock:
+            self._telemetry = RoverTelemetry()
 
     @property
     def telemetry(self) -> RoverTelemetry:
@@ -79,22 +80,50 @@ class MockTeensyTelemetryReader:
 
     def _fake_read_loop(self) -> None:
         """Continuously updates the telemetry object with simulated math."""
+        last_time = time.time()
+        
         while not self._stop_event.is_set():
-            elapsed = time.time() - self._start_time
+            current_time = time.time()
+            elapsed = current_time - self._start_time
+            dt = current_time - last_time  # Calculate time delta for encoder integration
+            last_time = current_time
+            
             ramp_factor = min(elapsed / 5.0, 1.0)
             
             with self._lock:
-                # Simulating the Front Left (FL) motor
-                self._telemetry.fl.pwm = int(max(0, ramp_factor * 80.0 + random.uniform(-1, 1)) * 327.67)
-                self._telemetry.fl.velocity = int(max(0, ramp_factor * 3000.0 + random.uniform(-50, 50)))
+                # 1. Define slightly different performance modifiers for each motor
+                # so the traces don't perfectly overlap on the graph
+                motor_configs = [
+                    (self._telemetry.fl, 1.00), # 100% performance
+                    (self._telemetry.bl, 0.98), # 98% performance
+                    (self._telemetry.fr, 0.95), # 95% performance
+                    (self._telemetry.br, 0.93), # 93% performance
+                ]
                 
-                # Real hardware uses 10mA units (e.g. 15A = 1500)
-                amps = max(0.1, ramp_factor * 15.0 + random.uniform(-0.5, 0.5))
-                self._telemetry.fl.current = int(amps * 100) 
+                # 2. Update all 4 motors
+                for motor, perf_mod in motor_configs:
+                    # PWM
+                    base_pwm = max(0, ramp_factor * 80.0 * perf_mod + random.uniform(-1, 1))
+                    motor.pwm = int(base_pwm * 327.67) 
+                    
+                    # Velocity
+                    base_vel = max(0, ramp_factor * 3000.0 * perf_mod + random.uniform(-50, 50))
+                    motor.velocity = int(base_vel)
+                    
+                    # Current (10mA units)
+                    amps = max(0.1, ramp_factor * 15.0 * perf_mod + random.uniform(-0.5, 0.5))
+                    motor.current = int(amps * 100) 
+                    
+                    # Encoder (Integral of velocity over time: counts = velocity * dt)
+                    motor.encoder_count += int(base_vel * dt)
                 
-                # Real hardware uses 10mV units (e.g. 24V = 2400)
-                volts = max(0.1, 24.0 - (ramp_factor * 1.2) + random.uniform(-0.1, 0.1))
-                self._telemetry.battery_voltage_1 = int(volts * 100)
+                # 3. Update both battery voltages (10mV units)
+                volts_1 = max(0.1, 24.0 - (ramp_factor * 1.2) + random.uniform(-0.1, 0.1))
+                self._telemetry.battery_voltage_1 = int(volts_1 * 100)
+                
+                # Make battery 2 sag slightly more just for visual difference
+                volts_2 = max(0.1, 24.0 - (ramp_factor * 1.5) + random.uniform(-0.1, 0.1))
+                self._telemetry.battery_voltage_2 = int(volts_2 * 100)
                 
                 self._telemetry.timestamp = time.monotonic()
                 
