@@ -7,6 +7,7 @@ from nicegui import app, ui
 from pathlib import Path
 import asyncio
 import traceback # Add this to your imports at the top
+import json
 
 from test_engine.test_engine import TestEngine
 from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader
@@ -295,48 +296,52 @@ def toggle_log_scale(e):
 async def load_live_reference(e):
     global live_reference_df
     try:
-        # AWAIT the read function to get the actual bytes!
-        content = await e.content.read() 
-        
+        content = await e.file.read()
         live_reference_df = pd.read_csv(io.BytesIO(content))
         
-        # Wrapped in { } to prevent Javascript global scope redeclaration crashes
-        js_commands = [f'{{ const chart = getElement({master_chart.id}).chart;']
+        # 1. Declare the chart ONCE at the top of the command list
+        js_commands = [f'const chart = getElement({master_chart.id}).chart;']
         
-        # Build a list of all metrics to load
         metrics_to_load = [
-            ('volt1', 'volt1', '#f59e0b', 'Solid', str(sensor_switches['volt1'].value).lower()),
-            ('volt2', 'volt2', '#d97706', 'Solid', str(sensor_switches['volt2'].value).lower())
+            ('volt1', 'volt1', '#f59e0b', 'Solid', bool(sensor_switches['volt1'].value)),
+            ('volt2', 'volt2', '#d97706', 'Solid', bool(sensor_switches['volt2'].value))
         ]
         
         for s in MOTOR_SENSORS:
             for m in MOTORS:
-                is_vis = str(sensor_switches[s['id']].value and motor_switches[m['id']].value).lower()
+                is_vis = bool(sensor_switches[s['id']].value and motor_switches[m['id']].value)
                 metrics_to_load.append((
                     f"{s['id']}_{m['id']}",   
                     f"{m['id']}_{s['id']}",   
                     s['color'], m['dash'], is_vis
                 ))
                 
+        # 2. Add all series to the command list without executing them yet
         for chart_id, col_name, color, dash, is_visible in metrics_to_load:
             if col_name in live_reference_df.columns:
                 data = live_reference_df[['Seconds', col_name]].dropna().values.tolist()
+                
+                # We keep json.dumps() because it safely translates Python 'False' to Javascript 'false'
+                series_config = json.dumps({
+                    "id": f"ref_{chart_id}",
+                    "name": f"Ref: {col_name}",
+                    "data": data,
+                    "color": color,
+                    "dashStyle": dash,
+                    "opacity": 0.4,
+                    "visible": is_visible,
+                    "marker": {"enabled": False}
+                })
+                
                 js_commands.append(f'if (chart.get("ref_{chart_id}")) chart.get("ref_{chart_id}").remove(false);')
+                js_commands.append(f'chart.addSeries({series_config}, false);')
                 
-                js_commands.append(f'''
-                    chart.addSeries({{
-                        id: "ref_{chart_id}", name: "Ref: {col_name}", data: {data},
-                        color: "{color}", dashStyle: "{dash}", opacity: 0.4, visible: {is_visible},
-                        marker: {{enabled: false}}
-                    }}, false);
-                ''')
-                
-        js_commands.append('chart.redraw(); }') # Closing the Javascript block
+        # 3. Redraw once and execute the single Javascript string
+        js_commands.append('chart.redraw();') 
         ui.run_javascript('\n'.join(js_commands))
         
-        # UI Updates
-        ref_pill_label.set_text(e.name)
-        ref_pill.classes(remove='hidden') 
+        ref_pill_label.set_text(e.file.name)
+        ref_pill.classes(remove='hidden')
         btn_load_ref.classes('hidden')
         e.sender.reset() 
         ui.notify('Reference trace loaded for Live Capture', type='positive')
@@ -393,19 +398,19 @@ def reset_time_window():
 async def handle_analysis_upload(e, dataset_slot):
     global analysis_df_A, analysis_df_B, using_live_for_A
     try:
-        # AWAIT the read function
-        content = await e.content.read()
+        # Back to the testing_cap_analysis approach!
+        content = await e.file.read()
         df = pd.read_csv(io.BytesIO(content))
         
         if dataset_slot == 'A':
             analysis_df_A = df
             using_live_for_A = False
-            label_A_status.set_text(e.name)
+            label_A_status.set_text(e.file.name) # Old approach
             label_A_status.classes(remove='text-slate-500', add='text-blue-800')
             btn_clear_A.classes(remove='hidden')
         else:
             analysis_df_B = df
-            label_B_status.set_text(e.name)
+            label_B_status.set_text(e.file.name) # Old approach
             label_B_status.classes(remove='text-slate-500', add='text-slate-800')
             btn_clear_B.classes(remove='hidden')
         
@@ -418,7 +423,7 @@ async def handle_analysis_upload(e, dataset_slot):
         ui.notify(f'Error: {ex}', type='negative')
         print(f"Analysis Upload Error: {ex}")
 
-# Explicit async wrappers to completely avoid the lambda trap
+# REQUIRED: Explicit wrappers so NiceGUI doesn't lose the async coroutine
 async def upload_dataset_A(e):
     await handle_analysis_upload(e, 'A')
 
@@ -596,17 +601,17 @@ def update_analysis_view():
                 dist_series.append({'name': f'B: {dist_metric}', 'data': data_B, 'color': '#64748b', 'opacity': 0.7})
 
     ui.run_javascript(f'''
-        const chartM = getElement({analysis_chart.id}).chart;
-        chartM.yAxis[0].update({{ type: "{y_type}" }}, false); 
+        var chartM = getElement({analysis_chart.id}).chart;
+        chartM.yAxis[0].update({{ type: "{y_type}" }}, false);
         chartM.xAxis[0].setExtremes({t_min}, {t_max}, false);
-        chartM.update({{series: {main_series}}}, true, true, false);
+        chartM.update({{series: {json.dumps(main_series)}}}, true, true, false);
         
-        const chartD = getElement({delta_chart.id}).chart;
+        var chartD = getElement({delta_chart.id}).chart;
         chartD.xAxis[0].setExtremes({t_min}, {t_max}, false);
-        chartD.update({{series: {delta_series}}}, true, true, false);
+        chartD.update({{series: {json.dumps(delta_series)}}}, true, true, false);
         
-        const chartH = getElement({dist_chart.id}).chart;
-        chartH.update({{series: {dist_series}}}, true, true, false);
+        var chartH = getElement({dist_chart.id}).chart;
+        chartH.update({{series: {json.dumps(dist_series)}}}, true, true, false);
     ''')
     
     stats_table.rows = stats
@@ -869,15 +874,15 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
                                     }).classes('absolute inset-0 w-full h-full')
                                 
                             # --- Data Distribution Card ---
-                            with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0'):
+                            with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0'):                                
                                 with ui.row().classes('w-full justify-between items-center mb-2'):
                                     ui.label('Data Distribution (Windowed)').classes('text-lg font-bold text-gray-800')
-                                    # The Histogram / Distribution Dropdown (likely right below it)
+                                    
                                     dist_metric_select = ui.select(
                                         options=analysis_options,
-                                        value='fl_rpm', # Sane default for the histogram
+                                        value='fl_rpm', 
                                         on_change=update_analysis_view
-                                    ).classes('w-full mb-6')
+                                    ).classes('w-72 min-w-0 mb-6').props('options-dense') # FIXED: Changed w-full to w-72 min-w-0
                                     
                                 with ui.element('div').classes('relative w-full h-[250px]'):
                                     dist_chart = ui.highchart({
