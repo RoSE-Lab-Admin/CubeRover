@@ -39,7 +39,23 @@
 
 To use these scripts, connect the lab computer to the same network as the Raspberry Pi.
 
+
+### Scripts Setup
+
+- Run the following to make the `*.sh` files executable:
+    ```bash
+    chmod +x Testing/*.sh
+    ```
+
+- Install rsync (for file syncing):
+    ```bash
+    sudo apt-get update && sudo apt-get install -y rsync
+    ```
+
+
 ### Current Scripts:
+
+Run any of these scripts using `bash <script-name>.sh`.
 
 - `config.sh`: The configuration variables for the other scripts in this list.
 - `sync_and_launch.sh`: All-in-one sync, build, and launch.
