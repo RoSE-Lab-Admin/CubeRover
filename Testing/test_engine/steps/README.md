@@ -1,0 +1,2 @@
+- All `steps` must implement the [`BaseStep` interface](../interfaces.py).
+- Classes which are located in this folder and which implement the interface will be available to use in `test_profiles` yml files.

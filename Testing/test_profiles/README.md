@@ -1,4 +1,10 @@
-# Full Test Format
+# Test Profiles Information
+
+Test profiles are composed using the following fields: `name`, `description`, `steps`, `pass_criteria`.
+
+The `steps` and `pass_criteria` implementation locations are:
+* `steps`: [`Testing/test_engine/steps`](../test_engine/steps)
+* `pass_criteria`: [`Testing/test_engine/pass_criteria`](../test_engine/pass_criteria)
 
 ## Example Comprehensive Test
 
@@ -44,7 +50,7 @@ description: "Runs an external test routine."
 steps:
   - type: run_script
     target: "src/python/my_test_script.py"
-    args: ["--mode", "aggressive"]
+    args: []
     timeout_sec: 60           # Aborts script if it hangs
     capture_output: true      # Logs stdout/stderr to the test report
     expected_exit_code: 0     # Defaults to 0 (Standard Success)

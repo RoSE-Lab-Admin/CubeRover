@@ -15,7 +15,7 @@
 
 ### Run the Test GUI
     
-- The following will automatically attempt to detect the port and will provide a warning in the terminal if it is unable to find a Teensy:
+- The following will automatically attempt to detect the Teensy port and will provide a warning in the terminal if it is unable to find a Teensy:
     ```bash
     python3 Testing/test_gui.py
     ```
@@ -30,26 +30,32 @@
     python3 test_gui.py --mock
     ```
 
+### Test Profiles
 
-## Instructions for Updating Raspberry Pi Code
+- The test profile options provided in the Test GUI are populated based on `.yml` files in the [`Testing/test_profiles`](./test_profiles/) folder. 
+- Information on creating new test profiles can be found in the [`Testing/test_profiles/README.md`](./test_profiles/README.md).
 
-1. Login to the Raspberry Pi via a connected keyboard, mouse, and monitor.
-2. Connect the Raspberry Pi to the internet.
-3. Open a terminal and navigate to the codebase folder. 
-    ```bash
-    cd Cuberover
-    ```
-4. Switch to the `dev` branch.
-    ```bash
-    git switch dev
-    ```
-5. Pull the latest `dev` branch.
-    ```bash
-    git pull --all
-    ```
+## Hardware Scripts
 
+To use these scripts, connect the lab computer to the same network as the Raspberry Pi.
 
-## Instructions to Run End-to-End Test
+### Current Scripts:
+
+- `config.sh`: The configuration variables for the other scripts in this list.
+- `sync_and_launch.sh`: All-in-one sync, build, and launch.
+- `sync.sh`: Sync the current code to the Pi.
+- `launch.sh`: Build and launch the ROS hardware node on the Pi.
+- `stop.sh`: Helper script to stop the ROS nodes.
+- `clean.sh`: Helper script to assist with fixing any `colcon` build issues.
+
+### Legacy Scripts:
+
+- `end_to_end.sh`: Starts the motors. The GUI application now can do this.
+- `start_rosey.sh`: Similar to the `launch.sh`. Starts the hardware with the current code in the referenced directory without building first.
+
+## Additional How-To Instructions
+
+### Hardware Startup
 1. Connect the lab computer to the same network as the Raspberry Pi.
 2. On the lab computer, open a terminal and run the automated hardware startup script:
     i. From project root, navigate to `Testing` folder:
@@ -83,22 +89,26 @@
 
     </details>
 
-3. (Optional) On the lab computer, open a terminal and start the monitoring script.
+### Run the Motors
 
-    i. From the project root, run the script:
-    ```bash
-    python3 Testing/PySerial/tester.py
-    ```
-    ii. Enter the port (likely `ACM0` or another port indicating that it is the Teensy).
+On the lab computer, open a terminal and start the end-to-end test:
 
-4. On the lab computer, open a terminal and start the end-to-end test:
-
-    i. From project root, navigate to `Testing` folder:
+1. From project root, navigate to `Testing` folder:
     ```bash
     cd Testing
     ```
-    ii. Run test:
+2. Run test:
     ```bash
     sh end_to_end.sh
     ```
-    iii. Kill test process using `Ctrl` + `C`.
+3. Kill test process using `Ctrl` + `C`.
+
+### CLI Monitoring Script
+
+On the lab computer, open a terminal and start the monitoring script.
+
+1. From the project root, run the script:
+    ```bash
+    python3 Testing/PySerial/tester.py
+    ```
+2. Enter the port (likely `/dev/ttyACM1` or another port indicating that it is the Teensy).

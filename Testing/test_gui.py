@@ -12,7 +12,6 @@ import argparse
 import serial.tools.list_ports
 
 from test_engine.test_engine import TestEngine
-from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader
 
 # ==========================================\
 # 0. Command Line Arguments & Setup

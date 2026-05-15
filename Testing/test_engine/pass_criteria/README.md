@@ -1,0 +1,2 @@
+- All `pass_criteria` must implement the [`BasePassCriteria` interface](../interfaces.py).
+- Classes which are located in this folder and which implement the interface will be available to use in `test_profiles` yml files.
