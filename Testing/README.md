@@ -6,13 +6,28 @@
 
 - Install dependencies.
     ```bash
-    export PATH="/home/devuser/.local/bin:$PATH"
     pip install --no-cache-dir --break-system-packages -r Testing/requirements.txt
+    ```
+- Add the installation location to the path:
+    ```bash
+    export PATH="/home/devuser/.local/bin:$PATH"
     ```
 
 ### Run the Test GUI
+    
+- The following will automatically attempt to detect the port and will provide a warning in the terminal if it is unable to find a Teensy:
     ```bash
     python3 Testing/test_gui.py
+    ```
+
+- Manually specify the port:
+    ```bash
+    python3 test_gui.py --port /dev/ttyACM1
+    ```
+
+- Run the application using mock data:
+    ```bash
+    python3 test_gui.py --mock
     ```
 
 

@@ -8,9 +8,63 @@ from pathlib import Path
 import asyncio
 import traceback # Add this to your imports at the top
 import json
+import argparse
+import serial.tools.list_ports
 
 from test_engine.test_engine import TestEngine
 from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader
+
+# ==========================================\
+# 0. Command Line Arguments & Setup
+# ==========================================\
+def find_teensy_port():
+    """Attempts to auto-detect a connected Teensy microcontroller."""
+    ports = serial.tools.list_ports.comports()
+    
+    # Pass 1: Look for the official Teensy Vendor ID (16C0)
+    for p in ports:
+        if p.vid == 0x16C0:  # 16C0 is the hex Vendor ID for PJRC / Teensy
+            print(f"✅ Auto-detected Teensy on {p.device} (VID: 16C0)")
+            return p.device
+
+    # Pass 2: Look for generic USB Serial descriptions or Linux ttyACM
+    for p in ports:
+        if "USB Serial" in p.description or "ttyACM" in p.device:
+            print(f"⚠️ Guessed Teensy on {p.device} based on description ({p.description})")
+            return p.device
+            
+    return None
+    
+parser = argparse.ArgumentParser(description="Motor Telemetry DAQ GUI")
+parser.add_argument('--mock', action='store_true', help='Use mock telemetry data instead of real hardware')
+parser.add_argument('--port', type=str, default=None, help='Manually specify the COM/tty port (e.g., COM3 or /dev/ttyACM0)')
+args = parser.parse_args()
+
+# Conditionally load and initialize the DAQ
+if args.mock:
+    from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader as TelemetryReader
+    print("🚀 STARTED IN MOCK MODE: Using simulated telemetry.")
+    daq = TelemetryReader(port="MOCK", baud=115200)
+
+else:
+    from PySerial.teensy_telemetry import TeensyTelemetryReader as TelemetryReader 
+    
+    # Determine the port: Use manual arg if provided, otherwise auto-detect
+    target_port = args.port
+    if not target_port:
+        print("🔍 Scanning for Teensy microcontroller...")
+        target_port = find_teensy_port()
+        
+    if not target_port:
+        print("❌ ERROR: Could not find a Teensy or USB Serial device.")
+        print("Please plug it in, or manually specify the port using: python test_gui.py --port COM3")
+        exit(1) # Stop the program if we absolutely have no hardware and aren't mocking
+
+    print(f"🔌 STARTED IN HARDWARE MODE: Listening on {target_port}.")
+    daq = TelemetryReader(port=target_port, baud=115200)
+
+# Start the background polling thread
+daq.start()
 
 # ==========================================
 # 1. Global App State & Configuration
@@ -66,11 +120,6 @@ all_metric_keys = list(analysis_options.keys())
 
 current_dir = Path(__file__).parent.resolve()
 engine = TestEngine(hardware_interface=None, base_path=current_dir)
-
-# Initialize the DAQ (Using Mock for now)
-# (When ready for real hardware, just change the import and the port!)
-daq = MockTeensyTelemetryReader("COM3")
-daq.start() # Start the background polling thread
 
 def calculate_mape(df_A, df_B, metric):
     try:
