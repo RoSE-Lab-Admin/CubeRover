@@ -262,4 +262,4 @@ These extensions install automatically when the container launches:
 * **Ranch-Hand Robotics:** Specialized tools for this project.
 
 ### 🛠️ Container Infrastructure Maintenance
-This development environment uses a pre-built Docker image. If you are a core maintainer and need to update system-level packages or modify the underlying `Dockerfile` to create a different image, please follow the **[.devcontainer Infrastructure Guide](.devcontainer/README.md)**.
+This development environment uses a pre-built Docker image with a VS Code Dev Container. If you are a core maintainer and need to update system-level packages or modify the underlying `Dockerfile` to create a new Docker image, please review the [Dev Container Overview information](.devcontainer/README.md).
