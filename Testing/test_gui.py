@@ -39,31 +39,42 @@ parser.add_argument('--mock', action='store_true', help='Use mock telemetry data
 parser.add_argument('--port', type=str, default=None, help='Manually specify the COM/tty port (e.g., COM3 or /dev/ttyACM0)')
 args = parser.parse_args()
 
-# Conditionally load and initialize the DAQ
-if args.mock:
-    from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader as TelemetryReader
-    print("🚀 STARTED IN MOCK MODE: Using simulated telemetry.")
-    daq = TelemetryReader(port="MOCK", baud=115200)
+daq = None
 
-else:
-    from PySerial.teensy_telemetry import TeensyTelemetryReader as TelemetryReader 
+def start_daq():
+    global daq
     
-    # Determine the port: Use manual arg if provided, otherwise auto-detect
-    target_port = args.port
-    if not target_port:
-        print("🔍 Scanning for Teensy microcontroller...")
-        target_port = find_teensy_port()
+    # Conditionally load and initialize the DAQ
+    if args.mock:
+        from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader as TelemetryReader
+        print("🚀 STARTED IN MOCK MODE: Using simulated telemetry.")
+        daq = TelemetryReader(port="MOCK", baud=115200)
+
+    else:
+        from PySerial.teensy_telemetry import TeensyTelemetryReader as TelemetryReader 
         
-    if not target_port:
-        print("❌ ERROR: Could not find a Teensy or USB Serial device.")
-        print("Please plug it in, or manually specify the port using: python test_gui.py --port COM3")
-        exit(1) # Stop the program if we absolutely have no hardware and aren't mocking
+        # Determine the port: Use manual arg if provided, otherwise auto-detect
+        target_port = args.port
+        if not target_port:
+            print("🔍 Scanning for Teensy microcontroller...")
+            target_port = find_teensy_port()
+            
+        if not target_port:
+            print("❌ ERROR: Could not find a Teensy or USB Serial device.")
+            print("Please plug it in, or manually specify the port using: python test_gui.py --port COM3")
+            exit(1) # Stop the program if we absolutely have no hardware and aren't mocking
 
-    print(f"🔌 STARTED IN HARDWARE MODE: Listening on {target_port}.")
-    daq = TelemetryReader(port=target_port, baud=115200)
+        print(f"🔌 STARTED IN HARDWARE MODE: Listening on {target_port}.")
+        daq = TelemetryReader(port=target_port, baud=115200)
 
-# Start the background polling thread
-daq.start()
+    # Gracefully shutdown the DAQ when the browser window closes
+    app.on_shutdown(daq.stop)
+
+    # Start the background polling thread
+    daq.start()
+    
+# Make this only run for the application, no the hot-reloader
+app.on_startup(start_daq)
 
 # ==========================================
 # 1. Global App State & Configuration
@@ -141,7 +152,8 @@ def calculate_mape(df_A, df_B, metric):
 # 2. Live Capture Handlers
 # ==========================================
 def update_master_stream():
-    global start_time
+    global start_time, daq
+    if not daq: return
     if not is_running: return
     if start_time is None: start_time = time.time()
     
@@ -957,9 +969,6 @@ with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex
                                     ],
                                     rows=[], row_key='id'
                                 ).classes('w-full')
-
-# Gracefully shutdown the DAQ when the browser window closes
-app.on_shutdown(daq.stop)
 
 ui.timer(0.1, update_master_stream)
 ui.run()
