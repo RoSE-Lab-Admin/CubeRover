@@ -143,11 +143,11 @@ Once inside the container, you must build the workspace to generate the setup fi
 
 The RoSE Lab CubeRover is composed of several components:
 
-| Component | Hardware | Role | Code Path |
-| :--- | :--- | :--- | :--- |
-| **High-Level** | Raspberry Pi 5 | Navigation, Perception, & ROS 2 Nodes | `src/roseybot_control` |
-| **Low-Level** | Teensy 4.1 | Motor Control & Sensor Polling (Real-Time) | `Arduino_ROS` |
-| **Dev Station** | Desktop/Laptop | Simulation (RViz/Gazebo), Control, & Monitoring | `Testing` |
+| Component | Hardware | Role | Code Path | Documentation |
+| :--- | :--- | :--- | :--- | :--- |
+| **High-Level** | Raspberry Pi 5 | Navigation, Perception, & ROS 2 Nodes | `src/roseybot_control` | *See source code* |
+| **Low-Level** | Teensy 4.1 | Motor Control & Sensor Polling (Real-Time) | `Arduino_ROS` | [Arduino Setup Info](Arduino_ROS/README.md) |
+| **Dev Station** | Desktop/Laptop | Simulation (RViz/Gazebo), Control, & Monitoring | `Testing` | [Hardware Testing Info](Testing/README.md) |
 
 
 ### 🖧 Communication
@@ -207,6 +207,8 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
 
 ## 🧪 Unit Tests
 
+Additional info on automated testing frameworks and how to organize tests can be found at [src/roseybot_control/test](src/roseybot_control/test/README.md).
+
 ### ▶️ Running Tests:
 - **All:** `colcon test --event-handlers console_cohesion+`
 - **Hardware only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "hardware"`
@@ -260,3 +262,6 @@ These extensions install automatically when the container launches:
 * **C/C++:** IntelliSense configured for ROS 2 includes.
 * **XML (RedHat):** Formatting and syntax checking for `package.xml` and launch files.
 * **Ranch-Hand Robotics:** Specialized tools for this project.
+
+### 🛠️ Container Infrastructure Maintenance
+This development environment uses a pre-built Docker image. If you are a core maintainer and need to update system-level packages or modify the underlying `Dockerfile` to create a different image, please follow the **[.devcontainer Infrastructure Guide](.devcontainer/README.md)**.
