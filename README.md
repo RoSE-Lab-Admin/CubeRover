@@ -207,8 +207,6 @@ This container uses GUI forwarding (WSLg on Windows / X11 via XQuartz on macOS).
 
 ## 🧪 Unit Tests
 
-Additional info on automated testing frameworks and how to organize tests can be found at [src/roseybot_control/test](src/roseybot_control/test/README.md).
-
 ### ▶️ Running Tests:
 - **All:** `colcon test --event-handlers console_cohesion+`
 - **Hardware only:** `colcon test --event-handlers console_cohesion+ --ctest-args -R "hardware"`
