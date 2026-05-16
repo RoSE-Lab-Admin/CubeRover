@@ -10,6 +10,7 @@ import traceback # Add this to your imports at the top
 import json
 import argparse
 import serial.tools.list_ports
+import os
 
 from test_engine.test_engine import TestEngine
 
@@ -40,38 +41,49 @@ parser.add_argument('--port', type=str, default=None, help='Manually specify the
 args = parser.parse_args()
 
 daq = None
+engine = None
 
 def start_daq():
     global daq
-    
-    # Conditionally load and initialize the DAQ
-    if args.mock:
-        from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader as TelemetryReader
-        print("🚀 STARTED IN MOCK MODE: Using simulated telemetry.")
-        daq = TelemetryReader(port="MOCK", baud=115200)
+    try:
+        # Conditionally load and initialize the DAQ
+        if args.mock:
+            from PySerial.mock_teensy_telemetry import MockTeensyTelemetryReader as TelemetryReader
+            print("🚀 STARTED IN MOCK MODE: Using simulated telemetry.")
+            daq = TelemetryReader(port="MOCK", baud=115200)
 
-    else:
-        from PySerial.teensy_telemetry import TeensyTelemetryReader as TelemetryReader 
-        
-        # Determine the port: Use manual arg if provided, otherwise auto-detect
-        target_port = args.port
-        if not target_port:
-            print("🔍 Scanning for Teensy microcontroller...")
-            target_port = find_teensy_port()
+        else:
+            from PySerial.teensy_telemetry import TeensyTelemetryReader as TelemetryReader 
             
-        if not target_port:
-            print("❌ ERROR: Could not find a Teensy or USB Serial device.")
-            print("Please plug it in, or manually specify the port using: python test_gui.py --port COM3")
-            exit(1) # Stop the program if we absolutely have no hardware and aren't mocking
+            # Determine the port
+            target_port = args.port
+            if not target_port:
+                print("🔍 Scanning for Teensy microcontroller...")
+                target_port = find_teensy_port()
+                
+            if not target_port:
+                print("❌ ERROR: Could not find a Teensy or USB Serial device.")
+                print("Please plug it in, or manually specify the port using: python test_gui.py --port COM3")
+                app.shutdown() # PROPERLY kills the NiceGUI server, unlike exit(1)
+                return
 
-        print(f"🔌 STARTED IN HARDWARE MODE: Listening on {target_port}.")
-        daq = TelemetryReader(port=target_port, baud=115200)
+            print(f"🔌 STARTED IN HARDWARE MODE: Listening on {target_port}.")
+            daq = TelemetryReader(port=target_port, baud=115200)
 
-    # Gracefully shutdown the DAQ when the browser window closes
-    app.on_shutdown(daq.stop)
+        # Gracefully shutdown the DAQ when the app closes
+        app.on_shutdown(daq.stop)
 
-    # Start the background polling thread
-    daq.start()
+        # Start the background polling thread
+        daq.start()
+        print(f"✅ DAQ successfully started! [Process ID: {os.getpid()}]")
+        
+        current_dir = Path(__file__).parent.resolve()
+        engine = TestEngine(hardware_interface=None, base_path=current_dir)
+        
+    except Exception as e:
+        print(f"\n🚨 CRITICAL ERROR IN START_DAQ: {e}")
+        traceback.print_exc()
+        app.shutdown() # Kill the server so the error stays on screen!
     
 # Make this only run for the application, no the hot-reloader
 app.on_startup(start_daq)
@@ -128,9 +140,6 @@ for m in MOTORS:
         analysis_options[f"{m['id']}_{s['id']}"] = f"{m['name']} {s['name']}"
 all_metric_keys = list(analysis_options.keys())
 
-current_dir = Path(__file__).parent.resolve()
-engine = TestEngine(hardware_interface=None, base_path=current_dir)
-
 def calculate_mape(df_A, df_B, metric):
     try:
         t_A = df_A['Seconds'].values
@@ -153,7 +162,12 @@ def calculate_mape(df_A, df_B, metric):
 # ==========================================
 def update_master_stream():
     global start_time, daq
-    if not daq: return
+    if daq is None:
+        # We will only print this once per second so it doesn't flood the terminal
+        if int(time.time() * 10) % 10 == 0: 
+            print(f"⏳ Timer waiting... daq is None. [Process ID: {os.getpid()}]")
+        return
+    
     if not is_running: return
     if start_time is None: start_time = time.time()
     
