@@ -8,9 +8,12 @@ The `Testing` folder contains tools for testing the hardware and gathering data 
   - **[Profile Step Info](test_engine/steps/README.md)**: Info on adding additional step options.
   - **[Profile Pass Criteria Info](test_engine/pass_criteria/README.md)**: Info on adding additional pass criteria options.
 
-## DAQ Gui
 
-### Setup
+## Setup
+
+These setup steps should be added to the `.devcontainer/Dockerfile` in the future.
+
+### GUI Setup
 
 - Install dependencies.
     ```bash
@@ -20,33 +23,6 @@ The `Testing` folder contains tools for testing the hardware and gathering data 
     ```bash
     export PATH="/home/devuser/.local/bin:$PATH"
     ```
-
-### Run the Test GUI
-    
-- The following will automatically attempt to detect the Teensy port and will provide a warning in the terminal if it is unable to find a Teensy:
-    ```bash
-    python3 Testing/test_gui.py
-    ```
-
-- Manually specify the port:
-    ```bash
-    python3 test_gui.py --port /dev/ttyACM1
-    ```
-
-- Run the application using mock data:
-    ```bash
-    python3 test_gui.py --mock
-    ```
-
-### Test Profiles
-
-- The test profile options provided in the Test GUI are populated based on `.yml` files in the [`Testing/test_profiles`](./test_profiles/) folder. 
-- Information on creating new test profiles can be found in the [`Testing/test_profiles/README.md`](./test_profiles/README.md).
-
-## Hardware Scripts
-
-To use these scripts, connect the lab computer to the same network as the Raspberry Pi.
-
 
 ### Scripts Setup
 
@@ -61,32 +37,94 @@ To use these scripts, connect the lab computer to the same network as the Raspbe
     ```
 
 
-### Current Scripts:
+## Quickstart
 
-Run any of these scripts using `bash <script-name>.sh`.
+1. Connect the lab computer to the internet and download the latest code.
+    ```bash
+    # Pull all latest code
+    git pull -all
+
+    # Switch to the target branch (`dev` in this example)
+    git switch origin/dev
+    ```
+2. Connect the lab computer to the same network as the Raspberry Pi (e.g., `roseyhotspot`).
+3. On the lab computer, open a terminal (VS Code: `Ctrl` + `Shift` + `~`) and run the automated hardware startup script. Enter the Pi's password when prompted.
+    ```bash
+    bash Testing/hardware_start.sh
+    ```
+    - The current code in your branch will be synced to the Pi, built, and the hardware launched.
+    - The hardware successfully started when the final message is something like the following: `[INFO] [spawner-x]: process has finished cleanly [pid: xxxx]`.
+4. On the lab computer, open a terminal and run the `gui_start.py` script.
+    ```bash
+    python3 Testing/gui_start.py
+    ```
+    - The gui should open in the lab computer's browser.
+5. Select a test from the gui's drowndown test menu and click the start button to run the test.
+
+
+## DAQ Gui
+
+### Run the Test GUI
+    
+- The following will automatically attempt to detect the Teensy port and will provide a warning in the terminal if it is unable to find a Teensy:
+    ```bash
+    python3 Testing/gui_start.py
+    ```
+
+- Manually specify the port:
+    ```bash
+    python3 Testing/gui_start.py --port /dev/ttyACM1
+    ```
+
+- Run the application using mock data:
+    ```bash
+    python3 Testing/gui_start.py --mock
+    ```
+
+### Test Profiles
+
+- The test profile options provided in the Test GUI are populated based on `.yml` files in the [`Testing/test_profiles`](./test_profiles/) folder. 
+- Information on creating new test profiles can be found in the [`Testing/test_profiles/README.md`](./test_profiles/README.md).
+
+
+## Hardware Scripts
+
+To use these scripts, connect the lab computer to the same network as the Raspberry Pi. Run any of the scripts using `bash <path>/<script-name>.sh`.
+
+### Scripts:
+
+Located in the `scripts` folder:
 
 - `config.sh`: The configuration variables for the other scripts in this list.
-- `sync_and_launch.sh`: All-in-one sync, build, and launch.
-- `sync.sh`: Sync the current code to the Pi.
-- `launch.sh`: Build and launch the ROS hardware node on the Pi.
-- `stop.sh`: Helper script to stop the ROS nodes.
-- `clean.sh`: Helper script to assist with fixing any `colcon` build issues.
+    - `ssh_config`: Not an executable script! Specifies the OpenSSH configuration.
+- `sync_build_launch.sh`: All-in-one sync, build, and launch.
+    - `sync.sh`: Sync the current code to the Pi.
+    - `build.sh`: Build the synced code on the Pi.
+    - `launch.sh`: Launch the synced code as a ROS node on the Pi.
+- General helper:
+    - `stop.sh`: Helper script to stop the ROS nodes (shouldn't be needed in most cases).
+    - `clean.sh`: Helper script to assist with fixing any `colcon` build issues.
 
 ### Legacy Scripts:
 
+Located in the `scripts/legacy` folder:
+
 - `end_to_end.sh`: Starts the motors. The GUI application now can do this.
-- `start_rosey.sh`: Similar to the `launch.sh`. Starts the hardware with the current code in the referenced directory without building first.
+- `start_rosey.sh`: Similar to the `launch.sh`. Starts the hardware with the code in the referenced directory without building first.
+
 
 ## Additional How-To Instructions
 
 ### Hardware Startup
 1. Connect the lab computer to the same network as the Raspberry Pi.
 2. On the lab computer, open a terminal and run the automated hardware startup script:
-    i. From project root, navigate to `Testing` folder:
+
+    i. From project root, navigate to the folder:
     ```bash
-    cd Testing
+    cd Testing/scripts/legacy
     ```
-    ii. Start the hardware:
+    ii. Edit the file to target the desired folder on the Pi.
+    iii. Start the hardware:
     ```bash
     sh start_rosey.sh
     ```
@@ -117,9 +155,9 @@ Run any of these scripts using `bash <script-name>.sh`.
 
 On the lab computer, open a terminal and start the end-to-end test:
 
-1. From project root, navigate to `Testing` folder:
+1. From project root, navigate to the folder containing the `end-to-end.sh` test:
     ```bash
-    cd Testing
+    cd Testing/scripts/end-to-end.sh
     ```
 2. Run test:
     ```bash
@@ -135,4 +173,4 @@ On the lab computer, open a terminal and start the monitoring script.
     ```bash
     python3 Testing/PySerial/tester.py
     ```
-2. Enter the port (likely `/dev/ttyACM1` or another port indicating that it is the Teensy).
+2. Enter the Teensy's port (likely `/dev/ttyACM0` or similar).

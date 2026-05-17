@@ -4,9 +4,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/config.sh"
 
-echo "========================================"
 echo " Stopping ROS2 nodes on Raspberry Pi..."
-echo "========================================"
 
 # SSH in and kill ROS2 processes
 # -2 sends SIGINT (like pressing Ctrl+C), giving nodes a chance to shut down cleanly

@@ -2,9 +2,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/config.sh"
 
-echo "========================================"
 echo " Building workspace on Raspberry Pi..."
-echo "========================================"
 
 SCRIPT="
 cd ${REMOTE_WS_DIR};
