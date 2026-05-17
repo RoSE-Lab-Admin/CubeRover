@@ -17,4 +17,4 @@ pkill -2 -f 'ros2 launch' || true;
 pkill -2 -f 'hardware_startup.launch.py' || true;
 "
 
-ssh -t -l ${PI_USERNAME} ${PI_HOST} "${SCRIPT}"
+${SSH_CMD} -t -l ${PI_USERNAME} ${PI_HOST} "${SCRIPT}"

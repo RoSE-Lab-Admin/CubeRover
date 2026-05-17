@@ -5,15 +5,14 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/config.sh"
 
 echo "========================================"
-echo " Building and launching on Raspberry Pi..."
+echo " Scrubbing build/ and install/ on Pi..."
 echo "========================================"
 
+# SSH in and recursively remove the generated folders
 SCRIPT="
 cd ${REMOTE_WS_DIR};
-source /opt/ros/jazzy/setup.bash;
-colcon build --symlink-install;
-source install/setup.bash;
-ros2 launch roseybot_control hardware_startup.launch.py
+rm -rf build/ install/ log/;
+echo 'Workspace cleaned!';
 "
 
-ssh -t -l ${PI_USERNAME} ${PI_HOST} "${SCRIPT}"
+${SSH_CMD} -t -l ${PI_USERNAME} ${PI_HOST} "${SCRIPT}"
