@@ -3,14 +3,13 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source "${SCRIPT_DIR}/config.sh"
 
 echo "========================================"
-echo " Launching hardware on Raspberry Pi..."
+echo " Building workspace on Raspberry Pi..."
 echo "========================================"
 
 SCRIPT="
 cd ${REMOTE_WS_DIR};
 source /opt/ros/jazzy/setup.bash;
-source install/setup.bash; 
-ros2 launch roseybot_control hardware_startup.launch.py
+colcon build --symlink-install;
 "
 
 ${SSH_CMD} -t ${PI_ALIAS} "${SCRIPT}"
