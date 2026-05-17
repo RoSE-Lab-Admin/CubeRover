@@ -9,35 +9,9 @@ The `Testing` folder contains tools for testing the hardware and gathering data 
   - **[Profile Pass Criteria Info](test_engine/pass_criteria/README.md)**: Info on adding additional pass criteria options.
 
 
-## Setup
-
-These setup steps should be added to the `.devcontainer/Dockerfile` in the future.
-
-### GUI Setup
-
-- Install dependencies.
-    ```bash
-    pip install --no-cache-dir --break-system-packages -r Testing/requirements.txt
-    ```
-- Add the installation location to the path:
-    ```bash
-    export PATH="/home/devuser/.local/bin:$PATH"
-    ```
-
-### Scripts Setup
-
-- Run the following to make the `*.sh` files executable:
-    ```bash
-    chmod +x Testing/*.sh
-    ```
-
-- Install rsync (for file syncing):
-    ```bash
-    sudo apt-get update && sudo apt-get install -y rsync
-    ```
-
-
 ## Quickstart
+
+**⚠️ Note:** All commands listed below are for executing the script from the **project root directory** (not from inside the `Testing` folder) unless explicitly stated otherwise.
 
 1. Connect the lab computer to the internet and download the latest code.
     ```bash
@@ -93,7 +67,7 @@ To use these scripts, connect the lab computer to the same network as the Raspbe
 
 ### Scripts:
 
-Located in the `scripts` folder:
+Located in the `Testing/scripts` folder:
 
 - `config.sh`: The configuration variables for the other scripts in this list.
     - `ssh_config`: Not an executable script! Specifies the OpenSSH configuration.
@@ -107,7 +81,7 @@ Located in the `scripts` folder:
 
 ### Legacy Scripts:
 
-Located in the `scripts/legacy` folder:
+Located in the `Testing/scripts/legacy` folder:
 
 - `end_to_end.sh`: Starts the motors. The GUI application now can do this.
 - `start_rosey.sh`: Similar to the `launch.sh`. Starts the hardware with the code in the referenced directory without building first.
@@ -119,14 +93,11 @@ Located in the `scripts/legacy` folder:
 1. Connect the lab computer to the same network as the Raspberry Pi.
 2. On the lab computer, open a terminal and run the automated hardware startup script:
 
-    i. From project root, navigate to the folder:
+    i. From project root, edit the `Testing/scripts/legacy/start_rosey.sh` to target the desired folder on the Pi.
+    
+    ii. Start the hardware:
     ```bash
-    cd Testing/scripts/legacy
-    ```
-    ii. Edit the file to target the desired folder on the Pi.
-    iii. Start the hardware:
-    ```bash
-    sh start_rosey.sh
+    bash Testing/scripts/legacy/start_rosey.sh
     ```
 
     <details>
@@ -155,15 +126,11 @@ Located in the `scripts/legacy` folder:
 
 On the lab computer, open a terminal and start the end-to-end test:
 
-1. From project root, navigate to the folder containing the `end-to-end.sh` test:
+1. From project root, open a terminal and start the `end-to-end.sh` script:
     ```bash
-    cd Testing/scripts/end-to-end.sh
+    bash Testing/scripts/legacy/end_to_end.sh
     ```
-2. Run test:
-    ```bash
-    sh end_to_end.sh
-    ```
-3. Kill test process using `Ctrl` + `C`.
+3. Kill the script process using `Ctrl` + `C`.
 
 ### CLI Monitoring Script
 

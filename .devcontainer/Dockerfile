@@ -21,7 +21,7 @@ RUN if getent passwd ubuntu > /dev/null 2>&1; then \
 
 # Install development tools
 RUN apt-get update && apt-get install -y \
-    git \    
+    git \
     openssh-client \
     usbutils \
     python3-pip \
@@ -30,10 +30,17 @@ RUN apt-get update && apt-get install -y \
     ros-jazzy-diff-drive-controller \
     ros-jazzy-ros2-control \
     ros-jazzy-ros2-controllers \
+    rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize rosdep as root
 RUN rosdep init || true
+
+# Copy the requirements file into a temporary location first
+COPY Testing/requirements.txt /tmp/requirements.txt
+
+# Install globally with the correct flags, forcing pip to bypass the Debian Pygments package
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed Pygments -r /tmp/requirements.txt
 
 # Switch to devuser
 USER $USERNAME
