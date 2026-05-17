@@ -5,6 +5,7 @@ from test_gui import state
 from test_gui.ui_registry import UI
 from test_gui.components.chart_card import ChartCard
 from test_gui.components.data_source import DataSourceCard
+from test_gui.constants import ANALYSIS_OPTIONS, ANALYSIS_MOTOR_OPTIONS, ANALYSIS_SENSOR_OPTIONS
 
 # Import the controller logic!
 from . import analysis_logic
@@ -13,7 +14,7 @@ def build_dist_header():
     with ui.row().classes('w-full justify-between items-center mb-2'):
         ui.label('Data Distribution (Windowed)').classes('text-lg font-bold text-gray-800')
         UI.dist_metric_select = ui.select(
-            options=state.analysis_options, 
+            options=ANALYSIS_OPTIONS, 
             value='fl_rpm', 
             on_change=analysis_logic.update_analysis_view
         ).classes('w-72 min-w-0 mb-6').props('options-dense')
@@ -28,14 +29,14 @@ def build_analysis_tab():
             ui.label('1. Metrics to Plot').classes('text-xs font-bold text-gray-500 uppercase mb-1')
             with ui.row().classes('w-full items-start gap-4 mb-6 flex-nowrap'):
                 UI.analysis_motor_select = ui.select(
-                    options=state.analysis_motor_options, multiple=True, 
-                    value=list(state.analysis_motor_options.keys()), label='Filter by Motor', 
+                    options=ANALYSIS_MOTOR_OPTIONS, multiple=True, 
+                    value=list(ANALYSIS_MOTOR_OPTIONS.keys()), label='Filter by Motor', 
                     on_change=analysis_logic.update_analysis_view
                 ).classes('flex-1 min-w-0')
                 
                 UI.analysis_sensor_select = ui.select(
-                    options=state.analysis_sensor_options, multiple=True, 
-                    value=list(state.analysis_sensor_options.keys()), label='Filter by Sensor Type', 
+                    options=ANALYSIS_SENSOR_OPTIONS, multiple=True, 
+                    value=list(ANALYSIS_SENSOR_OPTIONS.keys()), label='Filter by Sensor Type', 
                     on_change=analysis_logic.update_analysis_view
                 ).classes('flex-1 min-w-0')
             

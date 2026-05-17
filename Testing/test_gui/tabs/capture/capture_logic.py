@@ -8,7 +8,7 @@ from nicegui import ui
 
 from test_gui import state
 from test_gui.ui_registry import UI
-from test_gui.constants import BATTERY_SCALE, CURRENT_SCALE, PWM_SCALE, COLORS, DEFAULT_CSV_PREFIX
+from test_gui.constants import BATTERY_SCALE, CURRENT_SCALE, PWM_SCALE, COLORS, DEFAULT_CSV_PREFIX, MOTORS, MOTOR_SENSORS, MAX_LIVE_POINTS
 from test_gui.tabs.analysis.analysis_logic import update_time_slider_limits
 
 def update_master_stream():
@@ -22,7 +22,7 @@ def update_master_stream():
     row['volt1'] = snap.battery_voltage_1 * BATTERY_SCALE
     row['volt2'] = snap.battery_voltage_2 * BATTERY_SCALE
     
-    for m in state.MOTORS:
+    for m in MOTORS:
         m_id = m['id']
         motor_data = getattr(snap, m_id) 
         row[f"{m_id}_pwm"] = motor_data.pwm * PWM_SCALE
@@ -31,15 +31,15 @@ def update_master_stream():
         row[f"{m_id}_enc"] = motor_data.encoder_count
         
     state.global_history.append(row)
-    display_history = state.global_history[-state.MAX_LIVE_POINTS:]
+    display_history = state.global_history[-MAX_LIVE_POINTS:]
     
     if UI.master_chart_card:
         data_updates = {}
         for v_id in ['volt1', 'volt2']:
             data_updates[f'live_{v_id}'] = [[r['Seconds'], r[v_id]] for r in display_history]
         
-        for s in state.MOTOR_SENSORS:
-            for m in state.MOTORS:
+        for s in MOTOR_SENSORS:
+            for m in MOTORS:
                 data_updates[f'live_{s["id"]}_{m["id"]}'] = [[r['Seconds'], r[f"{m['id']}_{s['id']}"]] for r in display_history]
                 
         UI.master_chart_card.batch_update_series_data(data_updates, redraw=True)
@@ -93,8 +93,8 @@ def reset_master_live(show_notify=True):
     
     if UI.master_chart_card:
         empty_data = {f'live_{v_id}': [] for v_id in ['volt1', 'volt2']}
-        for s in state.MOTOR_SENSORS:
-            for m in state.MOTORS: empty_data[f'live_{s["id"]}_{m["id"]}'] = []
+        for s in MOTOR_SENSORS:
+            for m in MOTORS: empty_data[f'live_{s["id"]}_{m["id"]}'] = []
         UI.master_chart_card.batch_update_series_data(empty_data, redraw=True)
         
     update_time_slider_limits()
@@ -103,7 +103,7 @@ def reset_master_live(show_notify=True):
 def download_master_csv():
     if not state.global_history: return ui.notify('No data to save!', type=COLORS['warning'])
     df = pd.DataFrame(state.global_history)
-    cols = ['Seconds', 'volt1', 'volt2'] + [f"{m['id']}_{s['id']}" for m in state.MOTORS for s in state.MOTOR_SENSORS]
+    cols = ['Seconds', 'volt1', 'volt2'] + [f"{m['id']}_{s['id']}" for m in MOTORS for s in MOTOR_SENSORS]
     csv_content = df[[c for c in cols if c in df.columns]].to_csv(index=False).encode('utf-8')
     ui.download(csv_content, filename=f'{DEFAULT_CSV_PREFIX}{datetime.now().strftime("%H-%M-%S")}.csv')
 
@@ -112,13 +112,13 @@ def update_chart_visibility():
     vis_dict = {}
     
     for v_id in ['volt1', 'volt2']:
-        v_vis = bool(state.sensor_switches[v_id].value)
+        v_vis = bool(UI.sensor_switches[v_id].value)
         vis_dict[f'live_{v_id}'] = v_vis
         vis_dict[f'ref_{v_id}'] = v_vis
     
-    for s in state.MOTOR_SENSORS:
-        for m in state.MOTORS:
-            is_vis = bool(state.sensor_switches[s['id']].value and state.motor_switches[m['id']].value)
+    for s in MOTOR_SENSORS:
+        for m in MOTORS:
+            is_vis = bool(UI.sensor_switches[s['id']].value and UI.motor_switches[m['id']].value)
             vis_dict[f'live_{s["id"]}_{m["id"]}'] = is_vis
             vis_dict[f'ref_{s["id"]}_{m["id"]}'] = is_vis
             
@@ -143,12 +143,12 @@ async def load_live_reference(e):
         
         if UI.master_chart_card:
             metrics_to_load = [
-                ('volt1', 'volt1', COLORS['volt1'], 'Solid', bool(state.sensor_switches['volt1'].value)),
-                ('volt2', 'volt2', COLORS['volt2'], 'Solid', bool(state.sensor_switches['volt2'].value))
+                ('volt1', 'volt1', COLORS['volt1'], 'Solid', bool(UI.sensor_switches['volt1'].value)),
+                ('volt2', 'volt2', COLORS['volt2'], 'Solid', bool(UI.sensor_switches['volt2'].value))
             ]
-            for s in state.MOTOR_SENSORS:
-                for m in state.MOTORS:
-                    metrics_to_load.append((f"{s['id']}_{m['id']}", f"{m['id']}_{s['id']}", s['color'], m['dash'], bool(state.sensor_switches[s['id']].value and state.motor_switches[m['id']].value)))
+            for s in MOTOR_SENSORS:
+                for m in MOTORS:
+                    metrics_to_load.append((f"{s['id']}_{m['id']}", f"{m['id']}_{s['id']}", s['color'], m['dash'], bool(UI.sensor_switches[s['id']].value and UI.motor_switches[m['id']].value)))
                     
             for chart_id, col_name, color, dash, is_visible in metrics_to_load:
                 if col_name in state.live_reference_df.columns:
@@ -174,7 +174,7 @@ async def load_live_reference(e):
 def unload_live_reference():
     state.live_reference_df = pd.DataFrame() 
     if UI.master_chart_card:
-        ids = ['volt1', 'volt2'] + [f"{s['id']}_{m['id']}" for s in state.MOTOR_SENSORS for m in state.MOTORS]
+        ids = ['volt1', 'volt2'] + [f"{s['id']}_{m['id']}" for s in MOTOR_SENSORS for m in MOTORS]
         for cid in ids: UI.master_chart_card.remove_series(f"ref_{cid}")
         UI.master_chart_card.redraw()
 

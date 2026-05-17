@@ -6,7 +6,24 @@ from nicegui import ui
 
 from test_gui import state
 from test_gui.ui_registry import UI
-from test_gui.constants import COLORS
+from test_gui.constants import COLORS, MOTOR_SENSORS
+
+def calculate_mape(df_A, df_B, metric):
+    try:
+        t_A = df_A['Seconds'].values
+        val_A = df_A[metric].values
+        t_B = df_B['Seconds'].values
+        val_B = df_B[metric].values
+        
+        if len(t_A) == 0 or len(t_B) == 0: return "N/A"
+        
+        interp_B = np.interp(t_A, t_B, val_B)
+        safe_A = np.where(np.abs(val_A) < 0.001, 0.001, val_A) 
+        
+        mape = np.mean(np.abs((val_A - interp_B) / safe_A)) * 100
+        return f"{mape:.1f}%"
+    except Exception:
+        return "N/A"
 
 def update_time_slider_limits():
     max_t = 0.0
@@ -99,13 +116,13 @@ def update_analysis_view():
     def _get_metric_color(metric_key):
         if metric_key == 'volt1': return COLORS['volt1']
         if metric_key == 'volt2': return COLORS['volt2']
-        for s in state.MOTOR_SENSORS:
+        for s in MOTOR_SENSORS:
             if metric_key.endswith(f"_{s['id']}"): return s['color']
         return '#000000'
 
     for metric_name in selected_metrics:
         color = _get_metric_color(metric_name)
-        mape_val = state.calculate_mape(df_A, df_B, metric_name) if not df_A.empty and not df_B.empty else "-"
+        mape_val = calculate_mape(df_A, df_B, metric_name) if not df_A.empty and not df_B.empty else "-"
         
         if not df_A.empty and metric_name in df_A.columns:
             main_series.append({'name': f'A: {metric_name}', 'data': df_A[['Seconds', metric_name]].dropna().values.tolist(), 'color': color, 'lineWidth': 2, 'type': 'line', 'dashStyle': 'Solid', 'opacity': 1.0, 'id': f'main_A_{metric_name}', 'marker': {'enabled': False}})

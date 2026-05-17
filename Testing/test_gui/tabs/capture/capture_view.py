@@ -3,6 +3,7 @@ from test_gui import state
 from test_gui.ui_registry import UI
 from test_gui.constants import COLORS
 from test_gui.components.chart_card import ChartCard
+from test_gui.constants import MOTORS, MOTOR_SENSORS
 
 # Import the controller logic!
 from . import capture_logic
@@ -56,25 +57,25 @@ def build_capture_tab():
             with ui.card().classes('w-full p-4 bg-white shadow-sm border mb-4'):
                 ui.label('Active Motors').classes('text-lg font-bold text-gray-800 mb-2')
                 with ui.column().classes('w-full gap-2'):
-                    for m in state.MOTORS: 
-                        state.motor_switches[m['id']] = ui.switch(m['name'], value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
+                    for m in MOTORS: 
+                        UI.motor_switches[m['id']] = ui.switch(m['name'], value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
 
             with ui.card().classes('w-full p-4 bg-white shadow-sm border'):
                 ui.label('Active Sensors').classes('text-lg font-bold text-gray-800 mb-2')
                 with ui.column().classes('w-full gap-2'):
-                    for s in state.MOTOR_SENSORS: 
-                        state.sensor_switches[s['id']] = ui.switch(s['name'], value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
+                    for s in MOTOR_SENSORS:
+                        UI.sensor_switches[s['id']] = ui.switch(s['name'], value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
                     ui.separator().classes('my-2 w-full')
-                    state.sensor_switches['volt1'] = ui.switch("Bus Voltage 1 (V)", value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
-                    state.sensor_switches['volt2'] = ui.switch("Bus Voltage 2 (V)", value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
+                    UI.sensor_switches['volt1'] = ui.switch("Bus Voltage 1 (V)", value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
+                    UI.sensor_switches['volt2'] = ui.switch("Bus Voltage 2 (V)", value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
 
         # Right Area: The Highcharts Canvas
         with ui.column().classes('w-3/4 flex-grow h-full min-w-0'):
             
             # Setup Series config (No Y-Axis index necessary for single scale)
             series_list = []
-            for s in state.MOTOR_SENSORS:
-                for m in state.MOTORS: 
+            for s in MOTOR_SENSORS:
+                for m in MOTORS: 
                     series_list.append({'id': f"live_{s['id']}_{m['id']}", 'name': f"{m['name']} {s['name']}", 'data': [], 'color': s['color'], 'dashStyle': m['dash'], 'marker': {'enabled': False}})
             
             series_list.append({'id': 'live_volt1', 'name': 'Bus Voltage 1 (V)', 'data': [], 'color': COLORS['volt1'], 'marker': {'enabled': False}})

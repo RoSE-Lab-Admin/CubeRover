@@ -30,3 +30,6 @@ class UI:
     dist_chart_card: ChartCard | None = None
     dataset_a_card: DataSourceCard | None = None
     dataset_b_card: DataSourceCard | None = None
+    
+    motor_switches: dict[str, ui.switch] = {}
+    sensor_switches: dict[str, ui.switch] = {}
