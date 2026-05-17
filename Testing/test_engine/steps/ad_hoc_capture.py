@@ -16,7 +16,7 @@ class AdHocCaptureStep(BaseStep):
             # Loop continuously until stop() is called or the task is cancelled
             while self._is_capturing:
                 # IMPORTANT: await asyncio.sleep() hands control back to the NiceGUI 
-                # event loop so your charts and UI can continue to update!
+                # event loop so the charts and UI can continue to update!
                 await asyncio.sleep(0.5)
                 
         except asyncio.CancelledError:
@@ -32,7 +32,3 @@ class AdHocCaptureStep(BaseStep):
         print("--- STEP ABORT: Stopping Ad-Hoc Capture ---")
         # Flipping this flag gracefully breaks the while loop in execute()
         self._is_capturing = False
-        
-        # TODO: If you have hardware, you might want to command 0 RPM here
-        # await self.hardware.set_manual_mode(False)
-#         # await self.hardware.set_speed(0)
