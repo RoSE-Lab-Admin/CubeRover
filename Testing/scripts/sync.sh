@@ -8,6 +8,13 @@ source "${SCRIPT_DIR}/config.sh"
 LOCAL_WS_DIR="${SCRIPT_DIR}/../../"
 
 echo "========================================"
+echo " Preparing remote directory..."
+echo "========================================"
+
+# Tell the Pi to create the nested folders via the SSH alias
+ssh ${PI_ALIAS} "mkdir -p ${REMOTE_WS_DIR}"
+
+echo "========================================"
 echo " Syncing workspace to Raspberry Pi..."
 echo "========================================"
 
