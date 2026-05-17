@@ -1,0 +1,7 @@
+Host entry_pi
+    HostName 10.42.0.1
+    User rosey
+    # The magic lines:
+    ControlMaster auto
+    ControlPath /tmp/ssh_mux_%h_%p_%r
+    ControlPersist 10m
