@@ -5,5 +5,9 @@ steps:
     value: 1.5          # Linear X velocity
     duration_sec: 10    # Optional, defaults to running until stopped
     pub_rate: 10        # Optional, defaults to 10
+    
+  - type: set_motor_speed
+    value: 0.0          # Linear X velocity
+    duration_sec: 5    # Optional, defaults to running until stopped
 
 pass_criteria: []
