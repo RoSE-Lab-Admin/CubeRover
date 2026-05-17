@@ -1,18 +1,21 @@
 from nicegui import ui
 
-from test_gui.tabs.capture_tab import build_capture_tab, update_master_stream
-from test_gui.tabs.analysis_tab import build_analysis_tab
+from test_gui.tabs.capture.capture_view import build_capture_tab
+from test_gui.tabs.capture.capture_logic import update_master_stream
+from test_gui.tabs.analysis.analysis_view import build_analysis_tab
+
+from test_gui.constants import GUI_TITLE
 
 @ui.page('/')
 def index():
-    ui.page_title('Flat Rosey Test UI')
+    ui.page_title(GUI_TITLE)
 
     with ui.column().classes('fixed inset-0 p-4 w-full max-w-screen-2xl mx-auto flex-nowrap overflow-hidden'):
         
         # --- HEADER ROW ---
         with ui.row().classes('w-full items-end border-b-2 border-slate-300 pb-1 mb-2 flex-nowrap'):
             with ui.row().classes('flex-1 justify-start'):
-                ui.label("Hardware Validation Hub").classes('text-2xl font-extrabold text-gray-800')
+                ui.label(GUI_TITLE).classes('text-2xl font-extrabold text-gray-800')
             
             with ui.row().classes('flex-none justify-center'):
                 with ui.tabs() as tabs:
