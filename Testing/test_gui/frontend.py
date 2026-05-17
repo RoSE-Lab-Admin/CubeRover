@@ -663,7 +663,7 @@ def index():
                             UI.btn_load_ref = ui.button('Load Ref Ghost', icon='upload', on_click=lambda: ref_uploader.run_method('pickFiles')).props('color=slate outline')
                             
                             # THE LIVE CAPTURE PILL
-                            with ui.row().classes('bg-slate-200 text-slate-800 rounded-full pl-3 pr-1 py-1 items-center gap-2 hidden flex-nowrap') as ref_pill:
+                            with ui.row().classes('bg-slate-200 text-slate-800 rounded-full pl-3 pr-1 py-1 items-center gap-2 hidden flex-nowrap') as UI.ref_pill:
                                 ui.icon('description', size='sm')
                                 UI.ref_pill_label = ui.label('filename.csv').classes('text-sm font-semibold truncate max-w-[200px]')
                                 ui.button(icon='close', on_click=unload_live_reference).props('flat round size=sm padding=none text-color=slate')
