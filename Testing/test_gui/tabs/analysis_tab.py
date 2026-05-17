@@ -1,168 +1,100 @@
 import pandas as pd
 import numpy as np
 import io
-import json
 from nicegui import ui
 
 from test_gui import state
 from test_gui.ui_registry import UI
+from test_gui.components.chart_card import ChartCard
+from test_gui.components.data_source import DataSourceCard
 
 def update_time_slider_limits():
     max_t = 0.0
-    if state.using_live_for_A and state.global_history: 
-        max_t = max(max_t, state.global_history[-1]['Seconds'])
-    elif not state.using_live_for_A and not state.analysis_df_A.empty: 
-        max_t = max(max_t, state.analysis_df_A['Seconds'].max())
-        
-    if not state.analysis_df_B.empty: 
-        max_t = max(max_t, state.analysis_df_B['Seconds'].max())
+    if state.using_live_for_A and state.global_history: max_t = max(max_t, state.global_history[-1]['Seconds'])
+    elif not state.using_live_for_A and not state.analysis_df_A.empty: max_t = max(max_t, state.analysis_df_A['Seconds'].max())
+    if not state.analysis_df_B.empty: max_t = max(max_t, state.analysis_df_B['Seconds'].max())
     
     max_t = max(10.0, max_t) 
-    
     if UI.time_range and UI.time_range.max != max_t:
         old_max = UI.time_range.max 
         UI.time_range.max = float(max_t)
-        
         if UI.time_range.value['max'] >= (old_max - 1): # type: ignore
             UI.time_range.value = {'min': UI.time_range.value['min'], 'max': float(max_t)} # type: ignore
-            
         UI.time_range.update()
 
 def reset_time_window():
-    if UI.time_range:
-        UI.time_range.value = {'min': 0, 'max': float(UI.time_range.max)}
+    if UI.time_range: UI.time_range.value = {'min': 0, 'max': float(UI.time_range.max)}
     update_analysis_view()
-    ui.notify('Time window reset to full view')
 
 async def handle_analysis_upload(e, dataset_slot):
     try:
-        content = await e.file.read()
-        df = pd.read_csv(io.BytesIO(content))
-        
+        df = pd.read_csv(io.BytesIO(await e.file.read()))
         if dataset_slot == 'A':
-            state.analysis_df_A = df
-            state.using_live_for_A = False
-            if UI.label_A_status:
-                UI.label_A_status.set_text(e.file.name)
-                UI.label_A_status.classes(remove='text-slate-500', add='text-blue-800')
-            if UI.btn_clear_A:
-                UI.btn_clear_A.classes(remove='hidden')
+            state.analysis_df_A, state.using_live_for_A = df, False
+            if UI.dataset_a_card: UI.dataset_a_card.set_status(e.file.name, True)
         else:
             state.analysis_df_B = df
-            if UI.label_B_status:
-                UI.label_B_status.set_text(e.file.name)
-                UI.label_B_status.classes(remove='text-slate-500', add='text-slate-800')
-            if UI.btn_clear_B:
-                UI.btn_clear_B.classes(remove='hidden')
+            if UI.dataset_b_card: UI.dataset_b_card.set_status(e.file.name, True)
         
         update_time_slider_limits()
-        if UI.time_range:
-            UI.time_range.value = {'min': 0, 'max': UI.time_range.max}
+        if UI.time_range: UI.time_range.value = {'min': 0, 'max': UI.time_range.max}
         update_analysis_view()
         e.sender.reset()
-        ui.notify(f'Loaded to Dataset {dataset_slot}', type='positive')
     except Exception as ex:
         ui.notify(f'Error: {ex}', type='negative')
-        print(f"Analysis Upload Error: {ex}")
-
-async def upload_dataset_A(e):
-    await handle_analysis_upload(e, 'A')
-
-async def upload_dataset_B(e):
-    await handle_analysis_upload(e, 'B')
 
 def set_analysis_A_to_live():
-    if not state.global_history:
-        ui.notify('No Live Capture data exists yet!', type='warning')
-        return
-    
+    if not state.global_history: return ui.notify('No Live Capture data exists yet!', type='warning')
     state.using_live_for_A = True
-    if UI.label_A_status:
-        UI.label_A_status.set_text('Current Live Run')
-        UI.label_A_status.classes(remove='text-slate-500', add='text-blue-800')
-    if UI.btn_clear_A:
-        UI.btn_clear_A.classes(remove='hidden')
-    
+    if UI.dataset_a_card: UI.dataset_a_card.set_status('Current Live Run', True)
     update_time_slider_limits()
-    if UI.time_range:
-        UI.time_range.value = {'min': 0, 'max': UI.time_range.max}
-    
+    if UI.time_range: UI.time_range.value = {'min': 0, 'max': UI.time_range.max}
     update_analysis_view()
-    ui.notify('Dataset A set to Current Live Run')
     
 def set_analysis_B_to_live_ref():
-    if state.live_reference_df.empty:
-        ui.notify('No Reference Ghost loaded in Live Capture!', type='warning')
-        return
-        
+    if state.live_reference_df.empty: return ui.notify('No Reference Ghost loaded in Live Capture!', type='warning')
     state.analysis_df_B = state.live_reference_df.copy()
-    if UI.label_B_status:
-        UI.label_B_status.set_text('Live Capture Reference')
-        UI.label_B_status.classes(remove='text-slate-500')
-    if UI.btn_clear_B:
-        UI.btn_clear_B.classes(remove='hidden')
-    
+    if UI.dataset_b_card: UI.dataset_b_card.set_status('Live Capture Reference', True)
     update_time_slider_limits()
-    if UI.time_range:
-        UI.time_range.value = {'min': 0, 'max': UI.time_range.max}    
-    
+    if UI.time_range: UI.time_range.value = {'min': 0, 'max': UI.time_range.max}    
     update_analysis_view()
-    ui.notify('Dataset B set to Live Capture Reference')
     
 def unload_analysis_dataset(slot):
     if slot == 'A':
-        state.analysis_df_A = pd.DataFrame()
-        state.using_live_for_A = False
-        if UI.label_A_status:
-            UI.label_A_status.set_text('None Loaded')
-            UI.label_A_status.classes(remove='text-blue-800', add='text-slate-500')
-        if UI.btn_clear_A:
-            UI.btn_clear_A.classes('hidden')
+        state.analysis_df_A, state.using_live_for_A = pd.DataFrame(), False
+        if UI.dataset_a_card: UI.dataset_a_card.set_status('None Loaded', False)
     else:
         state.analysis_df_B = pd.DataFrame()
-        if UI.label_B_status:
-            UI.label_B_status.set_text('None Loaded')
-            UI.label_B_status.classes(remove='text-slate-800', add='text-slate-500')
-        if UI.btn_clear_B:
-            UI.btn_clear_B.classes('hidden')
-        
+        if UI.dataset_b_card: UI.dataset_b_card.set_status('None Loaded', False)
     update_time_slider_limits()
     update_analysis_view()
-    ui.notify(f'Dataset {slot} unloaded')
 
 def toggle_analysis_log_scale(e):
-    axis_type = "logarithmic" if e.value else "linear"
-    ui.run_javascript(f'getElement({UI.analysis_chart.id}).chart.yAxis[0].update({{type: "{axis_type}"}});') if UI.analysis_chart else None
+    if UI.analysis_chart_card: UI.analysis_chart_card.update_chart(is_log=e.value)
 
 def update_analysis_view():
-    if UI.time_range is None or UI.analysis_sensor_select is None:
-        return
+    if UI.time_range is None or UI.analysis_sensor_select is None: return
         
     selected_metrics = []
     active_sensors = UI.analysis_sensor_select.value or []
     active_motors = UI.analysis_motor_select.value or [] if UI.analysis_motor_select else []
     
     for s_id in active_sensors:
-        if s_id in ['volt1', 'volt2']:
-            selected_metrics.append(s_id)
+        if s_id in ['volt1', 'volt2']: selected_metrics.append(s_id)
         else:
-            for m_id in active_motors:
-                selected_metrics.append(f"{m_id}_{s_id}")
+            for m_id in active_motors: selected_metrics.append(f"{m_id}_{s_id}")
                 
-    if not selected_metrics: 
-        return
+    if not selected_metrics: return
     
     df_A_raw = pd.DataFrame(state.global_history) if state.using_live_for_A else state.analysis_df_A
     df_B_raw = state.analysis_df_B
     
-    t_min = UI.time_range.value['min'] # type: ignore
-    t_max = UI.time_range.value['max'] # type: ignore
-    
+    t_min, t_max = UI.time_range.value['min'], UI.time_range.value['max'] # type: ignore
     df_A = df_A_raw[(df_A_raw['Seconds'] >= t_min) & (df_A_raw['Seconds'] <= t_max)] if not df_A_raw.empty else df_A_raw
     df_B = df_B_raw[(df_B_raw['Seconds'] >= t_min) & (df_B_raw['Seconds'] <= t_max)] if not df_B_raw.empty else df_B_raw
     
     main_series, delta_series, dist_series, stats = [], [], [], []
-    y_type = 'logarithmic' if UI.analysis_log_scale and UI.analysis_log_scale.value else 'linear'
+    y_type = 'logarithmic' if UI.analysis_chart_card and hasattr(UI.analysis_chart_card, 'log_switch') and UI.analysis_chart_card.log_switch.value else 'linear'
     
     def _get_metric_color(metric_key):
         if metric_key == 'volt1': return '#f59e0b'
@@ -176,35 +108,23 @@ def update_analysis_view():
         mape_val = state.calculate_mape(df_A, df_B, metric_name) if not df_A.empty and not df_B.empty else "-"
         
         if not df_A.empty and metric_name in df_A.columns:
-            main_series.append({
-                'name': f'A: {metric_name}',
-                'data': df_A[['Seconds', metric_name]].dropna().values.tolist(),
-                'color': color, 'lineWidth': 2, 'type': 'line', 'dashStyle': 'Solid',
-                'opacity': 1.0, 'id': f'main_A_{metric_name}', 'marker': {'enabled': False}
-            })
+            main_series.append({'name': f'A: {metric_name}', 'data': df_A[['Seconds', metric_name]].dropna().values.tolist(), 'color': color, 'lineWidth': 2, 'type': 'line', 'dashStyle': 'Solid', 'opacity': 1.0, 'id': f'main_A_{metric_name}', 'marker': {'enabled': False}})
             rms_A = np.sqrt(np.mean(df_A[metric_name].dropna()**2))
             stats.append({'id': f'{metric_name}_A', 'Metric': metric_name, 'Dataset': 'A (Solid)', 'Max': round(df_A[metric_name].max(), 2), 'Mean': round(df_A[metric_name].mean(), 2), 'RMS': round(rms_A, 2), 'Diff_vs_A': '-'})
             
         if not df_B.empty and metric_name in df_B.columns:
-            main_series.append({
-                'name': f'B: {metric_name}',
-                'data': df_B[['Seconds', metric_name]].dropna().values.tolist(),
-                'color': color, 'lineWidth': 2, 'dashStyle': 'ShortDash', 
-                'opacity': 0.5, 'id': f'main_B_{metric_name}', 'marker': {'enabled': False}
-            })
+            main_series.append({'name': f'B: {metric_name}', 'data': df_B[['Seconds', metric_name]].dropna().values.tolist(), 'color': color, 'lineWidth': 2, 'dashStyle': 'ShortDash', 'opacity': 0.5, 'id': f'main_B_{metric_name}', 'marker': {'enabled': False}})
             rms_B = np.sqrt(np.mean(df_B[metric_name].dropna()**2))
             stats.append({'id': f'{metric_name}_B', 'Metric': metric_name, 'Dataset': 'B (Dashed)', 'Max': round(df_B[metric_name].max(), 2), 'Mean': round(df_B[metric_name].mean(), 2), 'RMS': round(rms_B, 2), 'Diff_vs_A': mape_val})
             
         if not df_A.empty and not df_B.empty and metric_name in df_A.columns and metric_name in df_B.columns:
             t_A, val_A = df_A['Seconds'].values, df_A[metric_name].values
             t_B, val_B = df_B['Seconds'].values, df_B[metric_name].values
-            
             if len(t_A) > 0 and len(t_B) > 0:
                 interp_B = np.interp(t_A, t_B, val_B) # type: ignore
                 safe_A = np.where(np.abs(val_A) < 0.001, 0.001, val_A)
                 delta_vals = ((val_A - interp_B) / safe_A) * 100
-                delta_data = [[float(t), float(d)] for t, d in zip(t_A, delta_vals)]
-                delta_series.append({'name': f'Δ {metric_name} (%)', 'data': delta_data, 'color': color, 'lineWidth': 2, 'marker': {'enabled': False}})
+                delta_series.append({'name': f'Δ {metric_name} (%)', 'data': [[float(t), float(d)] for t, d in zip(t_A, delta_vals)], 'color': color, 'lineWidth': 2, 'marker': {'enabled': False}})
 
     dist_metric = UI.dist_metric_select.value if UI.dist_metric_select else None
     if dist_metric:
@@ -220,37 +140,27 @@ def update_analysis_view():
             
             if not df_A.empty and dist_metric in df_A.columns:
                 counts_A, _ = np.histogram(df_A[dist_metric].dropna(), bins=global_bins)
-                bin_centers = (global_bins[:-1] + global_bins[1:]) / 2
-                data_A = [[float(x), int(y)] for x, y in zip(bin_centers, counts_A)]
-                dist_series.append({'name': f'A: {dist_metric}', 'data': data_A, 'color': dist_color, 'opacity': 0.7})
+                dist_series.append({'name': f'A: {dist_metric}', 'data': [[float(x), int(y)] for x, y in zip((global_bins[:-1] + global_bins[1:]) / 2, counts_A)], 'color': dist_color, 'opacity': 0.7})
                 
             if not df_B.empty and dist_metric in df_B.columns:
                 counts_B, _ = np.histogram(df_B[dist_metric].dropna(), bins=global_bins)
-                bin_centers = (global_bins[:-1] + global_bins[1:]) / 2
-                data_B = [[float(x), int(y)] for x, y in zip(bin_centers, counts_B)]
-                dist_series.append({'name': f'B: {dist_metric}', 'data': data_B, 'color': '#64748b', 'opacity': 0.7})
+                dist_series.append({'name': f'B: {dist_metric}', 'data': [[float(x), int(y)] for x, y in zip((global_bins[:-1] + global_bins[1:]) / 2, counts_B)], 'color': '#64748b', 'opacity': 0.7})
 
-    if UI.analysis_chart and UI.delta_chart and UI.dist_chart:
-        ui.run_javascript(f'''
-            var chartM = getElement({UI.analysis_chart.id}).chart;
-            chartM.yAxis[0].update({{ type: "{y_type}" }}, false);
-            chartM.xAxis[0].setExtremes({t_min}, {t_max}, false);
-            chartM.update({{series: {json.dumps(main_series)}}}, true, true, false);
-            
-            var chartD = getElement({UI.delta_chart.id}).chart;
-            chartD.xAxis[0].setExtremes({t_min}, {t_max}, false);
-            chartD.update({{series: {json.dumps(delta_series)}}}, true, true, false);
-            
-            var chartH = getElement({UI.dist_chart.id}).chart;
-            chartH.update({{series: {json.dumps(dist_series)}}}, true, true, false);
-        ''')
+    # --- Calling Python Component Methods instead of injecting JS ---
+    if UI.analysis_chart_card: UI.analysis_chart_card.update_chart(series_data=main_series, x_min=t_min, x_max=t_max, is_log=(y_type=='logarithmic'))
+    if UI.delta_chart_card: UI.delta_chart_card.update_chart(series_data=delta_series, x_min=t_min, x_max=t_max)
+    if UI.dist_chart_card: UI.dist_chart_card.update_chart(series_data=dist_series)
     
     if UI.stats_table:
         UI.stats_table.rows = stats
         UI.stats_table.update()
 
+def build_dist_header():
+    with ui.row().classes('w-full justify-between items-center mb-2'):
+        ui.label('Data Distribution (Windowed)').classes('text-lg font-bold text-gray-800')
+        UI.dist_metric_select = ui.select(options=state.analysis_options, value='fl_rpm', on_change=update_analysis_view).classes('w-72 min-w-0 mb-6').props('options-dense')
+
 def build_analysis_tab():
-    """Builds the UI elements for the Analysis Tab."""
     with ui.row().classes('w-full gap-6 flex-nowrap items-start h-full min-w-0'):
         # --- LEFT MENU ---
         with ui.column().classes('w-1/4 min-w-[250px] p-4 bg-white shadow-sm border rounded h-full overflow-y-auto'):
@@ -258,45 +168,21 @@ def build_analysis_tab():
             
             ui.label('1. Metrics to Plot').classes('text-xs font-bold text-gray-500 uppercase mb-1')
             with ui.row().classes('w-full items-start gap-4 mb-6 flex-nowrap'):
-                UI.analysis_motor_select = ui.select(
-                    options=state.analysis_motor_options, multiple=True,
-                    value=list(state.analysis_motor_options.keys()), label='Filter by Motor',
-                    on_change=update_analysis_view
-                ).classes('flex-1 min-w-0')
-                
-                UI.analysis_sensor_select = ui.select(
-                    options=state.analysis_sensor_options, multiple=True,
-                    value=list(state.analysis_sensor_options.keys()), label='Filter by Sensor Type',
-                    on_change=update_analysis_view
-                ).classes('flex-1 min-w-0')
+                UI.analysis_motor_select = ui.select(options=state.analysis_motor_options, multiple=True, value=list(state.analysis_motor_options.keys()), label='Filter by Motor', on_change=update_analysis_view).classes('flex-1 min-w-0')
+                UI.analysis_sensor_select = ui.select(options=state.analysis_sensor_options, multiple=True, value=list(state.analysis_sensor_options.keys()), label='Filter by Sensor Type', on_change=update_analysis_view).classes('flex-1 min-w-0')
             
-            # --- GROUPED DATA SOURCES ---
-            with ui.column().classes('w-full p-3 bg-slate-50 rounded border border-slate-200 gap-2'):
-                ui.label('2. Data Sources').classes('text-xs font-bold text-slate-500 uppercase mb-2')
-                
-                ui.label('Dataset A (Solid)').classes('text-[10px] font-bold text-blue-500 uppercase tracking-wider')
-                with ui.row().classes('bg-blue-100 text-blue-800 rounded-full pl-3 pr-1 py-1 items-center gap-1 w-full flex-nowrap'):
-                    ui.icon('timeline', size='xs')
-                    UI.label_A_status = ui.label('None Loaded').classes('text-[11px] font-bold flex-grow truncate text-slate-500')
-                    UI.btn_clear_A = ui.button(icon='close', on_click=lambda: unload_analysis_dataset('A')).props('flat round size=xs padding=none text-color=blue').classes('hidden')
-
-                with ui.row().classes('w-full gap-2 mb-2'):
-                    ui.button('Sync Live', icon='refresh', on_click=set_analysis_A_to_live).props('size=sm color=slate outline').classes('flex-none')
-                    up_A = ui.upload(auto_upload=True, on_upload=upload_dataset_A).props('accept=".csv"').classes('hidden')
-                    ui.button('Load CSV', on_click=lambda: up_A.run_method('pickFiles')).props('size=sm color=blue').classes('flex-grow')
-                
-                ui.separator().classes('my-1')
-
-                ui.label('Dataset B (Dashed)').classes('text-[10px] font-bold text-slate-500 uppercase tracking-wider')
-                with ui.row().classes('bg-slate-200 text-slate-800 rounded-full pl-3 pr-1 py-1 items-center gap-1 w-full flex-nowrap'):
-                    ui.icon('show_chart', size='xs')
-                    UI.label_B_status = ui.label('None Loaded').classes('text-[11px] font-bold flex-grow truncate text-slate-500')
-                    UI.btn_clear_B = ui.button(icon='close', on_click=lambda: unload_analysis_dataset('B')).props('flat round size=xs padding=none text-color=slate').classes('hidden')
-
-                with ui.row().classes('w-full gap-2 mb-2'):
-                    ui.button('Use Live Ref', icon='move_down', on_click=set_analysis_B_to_live_ref).props('size=sm color=slate outline').classes('flex-none')
-                    up_B = ui.upload(auto_upload=True, on_upload=upload_dataset_B).props('accept=".csv"').classes('hidden')
-                    ui.button('Load CSV', on_click=lambda: up_B.run_method('pickFiles')).props('size=sm color=slate outline').classes('flex-grow')
+            # --- DATA SOURCES (Replaced with Custom Components) ---
+            ui.label('2. Data Sources').classes('text-xs font-bold text-slate-500 uppercase mb-2')
+            UI.dataset_a_card = DataSourceCard(
+                title='Dataset A (Solid)', theme_color='blue', bg_color='blue', icon_name='timeline', 
+                live_btn_text='Sync Live', live_btn_icon='refresh', 
+                on_live_click=set_analysis_A_to_live, on_upload=lambda e: handle_analysis_upload(e, 'A'), on_clear=lambda: unload_analysis_dataset('A')
+            )
+            UI.dataset_b_card = DataSourceCard(
+                title='Dataset B (Dashed)', theme_color='slate', bg_color='slate', icon_name='show_chart', 
+                live_btn_text='Use Live Ref', live_btn_icon='move_down', 
+                on_live_click=set_analysis_B_to_live_ref, on_upload=lambda e: handle_analysis_upload(e, 'B'), on_clear=lambda: unload_analysis_dataset('B')
+            )
 
         # --- RIGHT GRAPHS ---
         with ui.column().classes('w-3/4 flex-grow h-full gap-0 bg-white border shadow-sm rounded min-w-0'):
@@ -308,35 +194,22 @@ def build_analysis_tab():
             
             with ui.element('div').classes('w-full flex-grow overflow-y-auto overflow-x-hidden'):
                 with ui.column().classes('w-full items-stretch gap-4 min-w-0 p-4 overflow-x-hidden'):
-                    with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0 relative'):
-                        with ui.row().classes('absolute top-2 right-4 z-10 items-center bg-white/80 backdrop-blur rounded pl-2 border shadow-sm'):
-                            ui.label('Log Y').classes('text-[10px] font-bold text-slate-500 uppercase')
-                            UI.analysis_log_scale = ui.switch(on_change=update_analysis_view).props('size=sm')
-                        with ui.element('div').classes('relative w-full h-[400px]'):
-                            UI.analysis_chart = ui.highchart({
-                                'chart': {'type': 'line'}, 'title': {'text': 'Comparison Overlay'},
-                                'xAxis': {'title': {'text': 'Seconds'}}, 'yAxis': {'type': 'linear'},
-                                'tooltip': {'shared': True, 'crosshairs': True}, 'series': []
-                            }).classes('absolute inset-0 w-full h-full')
                     
-                    with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0'):
-                        with ui.element('div').classes('relative w-full h-[250px]'):
-                            UI.delta_chart = ui.highchart({
-                                'chart': {'type': 'line'}, 'title': {'text': 'Relative Error (Dataset A vs B)'},
-                                'xAxis': {'title': {'text': 'Seconds'}}, 'yAxis': {'title': {'text': '% Difference'}},
-                                'tooltip': {'shared': True, 'crosshairs': True, 'valueSuffix': '%'}, 'series': []
-                            }).classes('absolute inset-0 w-full h-full')
-                        
-                    with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0'):                                
-                        with ui.row().classes('w-full justify-between items-center mb-2'):
-                            ui.label('Data Distribution (Windowed)').classes('text-lg font-bold text-gray-800')
-                            UI.dist_metric_select = ui.select(options=state.analysis_options, value='fl_rpm', on_change=update_analysis_view).classes('w-72 min-w-0 mb-6').props('options-dense')
-                        with ui.element('div').classes('relative w-full h-[250px]'):
-                            UI.dist_chart = ui.highchart({
-                                'chart': {'type': 'column'}, 'title': {'text': ''}, 
-                                'xAxis': {'title': {'text': 'Metric Value'}}, 'yAxis': {'title': {'text': 'Frequency (Points)'}},
-                                'tooltip': {'shared': True}, 'plotOptions': {'column': {'pointPadding': 0, 'groupPadding': 0.1, 'borderWidth': 0}}, 'series': []
-                            }).classes('absolute inset-0 w-full h-full')
+                    # --- CHART CARDS (Replaced with Custom Components) ---
+                    UI.analysis_chart_card = ChartCard(
+                        options={'chart': {'type': 'line'}, 'title': {'text': 'Comparison Overlay'}, 'xAxis': {'title': {'text': 'Seconds'}}, 'yAxis': {'type': 'linear'}, 'tooltip': {'shared': True, 'crosshairs': True}, 'series': []}, 
+                        height_px=400, show_log_toggle=True, on_log_toggle=toggle_analysis_log_scale
+                    )
+                    
+                    UI.delta_chart_card = ChartCard(
+                        options={'chart': {'type': 'line'}, 'title': {'text': 'Relative Error (Dataset A vs B)'}, 'xAxis': {'title': {'text': 'Seconds'}}, 'yAxis': {'title': {'text': '% Difference'}}, 'tooltip': {'shared': True, 'crosshairs': True, 'valueSuffix': '%'}, 'series': []}, 
+                        height_px=250
+                    )
+                    
+                    UI.dist_chart_card = ChartCard(
+                        options={'chart': {'type': 'column'}, 'title': {'text': ''}, 'xAxis': {'title': {'text': 'Metric Value'}}, 'yAxis': {'title': {'text': 'Frequency (Points)'}}, 'tooltip': {'shared': True}, 'plotOptions': {'column': {'pointPadding': 0, 'groupPadding': 0.1, 'borderWidth': 0}}, 'series': []}, 
+                        height_px=250, header_elements=build_dist_header
+                    )
                     
                     with ui.card().classes('w-full p-4 bg-white shadow-sm border min-w-0'):
                         ui.label('Comparison Statistics (Windowed)').classes('text-lg font-bold text-gray-800 mb-2')
