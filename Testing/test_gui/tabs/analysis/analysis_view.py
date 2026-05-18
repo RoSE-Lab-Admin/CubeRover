@@ -81,7 +81,7 @@ def build_analysis_tab():
                 with ui.row().classes('w-full justify-start items-center mb-1 gap-4'):
                     ui.label('Global Time Window (Seconds)').classes('text-sm font-bold text-gray-800')
                     ui.button('Reset', icon='restart_alt', on_click=analysis_logic.reset_time_window).props('outline size=sm color=slate padding=xs')
-                UI.time_range = ui.range(min=0, max=10, value={'min': 0, 'max': 10}, on_change=analysis_logic.update_analysis_view).props('label-always color=blue').classes('w-full px-4')
+                UI.time_range = ui.range(min=0, max=10, step=0.1, value={'min': 0, 'max': 10}, on_change=analysis_logic.update_analysis_view).props('label-always color=blue').classes('w-full px-4')
             
             # Scrollable Graphs Container: Houses the main plots and data tables
             with ui.element('div').classes('w-full flex-grow overflow-y-auto overflow-x-hidden'):
