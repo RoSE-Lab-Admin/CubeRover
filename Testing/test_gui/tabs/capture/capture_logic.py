@@ -9,6 +9,8 @@ from nicegui import ui
 from nicegui.client import Client
 from nicegui.events import UploadEventArguments, ValueChangeEventArguments
 from nicegui.elements.upload import Upload
+from test_gui.custom_types import Row
+import json
 
 from test_gui import state
 from test_gui.ui_registry import UI
@@ -29,7 +31,7 @@ def update_master_stream() -> None:
         state.start_time = time.time()
     
     elapsed = round(time.time() - state.start_time, 2)
-    row: Dict[str, Union[float, int]] = {'Seconds': elapsed}
+    row: Row = cast(Row, {'Seconds': elapsed})
     
     snap = state.daq.telemetry 
     row['volt1'] = snap.battery_voltage_1 * BATTERY_SCALE
@@ -76,11 +78,24 @@ async def run_test_engine(profile_filename: Optional[str], client: Client) -> No
         if not df.empty:
             df = df[df['Seconds'] >= test_start_seconds]
             final_report = state.engine.evaluate_current_profile(df)
+            
             with client:
                 if final_report['passed']: 
                     ui.notify("✅ Test Passed!", type=COLORS['positive'])
                 else: 
-                    ui.notify("❌ Test Failed! Check console.", type=COLORS['negative'])
+                    ui.notify("❌ Test Failed!", type=COLORS['negative'])
+                
+                # Pop up the report in the UI!
+                with ui.dialog() as report_dialog, ui.card().classes('w-full max-w-2xl'):
+                    ui.label('Test Evaluation Report').classes('text-xl font-bold mb-2')
+                    
+                    # ui.code automatically adds syntax highlighting and a "copy" button
+                    report_str = json.dumps(final_report, indent=4, default=str)
+                    ui.code(report_str, language='json').classes('w-full')
+                    
+                    ui.button('Close', on_click=report_dialog.close).classes('w-full mt-4')
+                
+                report_dialog.open()
         else:
             with client: 
                 ui.notify("Cannot evaluate: No data was captured.", type=COLORS['warning'])

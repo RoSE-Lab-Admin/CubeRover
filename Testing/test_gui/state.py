@@ -3,13 +3,15 @@ import pandas as pd
 from pathlib import Path
 from test_engine.test_engine import TestEngine
 
+from test_gui.custom_types import GlobalHistory
+
 # --- Hardware / DAQ Pointers ---
 daq = None
 is_running = False
 start_time = None
 
 # --- Live Data ---
-global_history = [] 
+global_history: GlobalHistory = [] 
 live_reference_df = pd.DataFrame()
 
 # --- Analysis Data ---

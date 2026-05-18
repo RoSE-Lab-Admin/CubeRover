@@ -1,15 +1,13 @@
 import pandas as pd
 import numpy as np
 import io
-from typing import Dict, List
+from typing import Dict, List, Union, Literal, TypedDict, cast
 from nicegui import ui
 from nicegui.events import UploadEventArguments, ValueChangeEventArguments
 
 from test_gui import state
 from test_gui.ui_registry import UI
 from test_gui.constants import COLORS, MOTOR_SENSORS
-
-from typing import List, Dict, Union, Literal, TypedDict, cast
 
 # Structural shape for a standard [timestamp, value] data point coordinate
 DataPoint = List[Union[float, int]]

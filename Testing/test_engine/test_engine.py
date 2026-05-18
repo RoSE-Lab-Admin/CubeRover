@@ -20,7 +20,7 @@ class TestEngine:
         pass_criteria (Dict[str, BasePassCriteria]): Registry of loaded criteria plugins.
     """
     
-    def __init__(self, hardware_interface: Optional[Any] = None, base_path: Optional[str] = None) -> None:
+    def __init__(self, hardware_interface: Optional[Any] = None, base_path: Optional[str | Path] = None) -> None:
         self.hardware = hardware_interface
         self.root = Path(base_path).resolve() if base_path else Path.cwd()
         self.profiles_dir = self.root / 'test_profiles'

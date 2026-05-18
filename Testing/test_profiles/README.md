@@ -2,9 +2,20 @@
 
 Test profiles are composed using the following fields: `name`, `description`, `steps`, `pass_criteria`.
 
-The `steps` and `pass_criteria` implementation locations are:
+## TestEngine `step` / `pass_criteria` Registration
+
+New `step` and `pass_criteria` scripts can be created by adding new class definitions to the following locations (see the `README.md` in each location for details):
 * `steps`: [`Testing/test_engine/steps`](../test_engine/steps)
 * `pass_criteria`: [`Testing/test_engine/pass_criteria`](../test_engine/pass_criteria)
+
+**Note:** Use a `NAME` attribute at the top of a `step` / `pass_criteria` class to specify a custom name for use with the `TestEngine`. Otherwise, the `TestEngine` defaults to using the filename. Using a custom name enables adding more than one class per file. Each class definition must have a unique name.
+
+```python
+# Location: my_module.py --> TestEngine defaults to registering the class as "my_module"
+class MyClass():
+    NAME = "my_custom_name" # Changes class name to "my_custom_name"
+    ...
+```
 
 ## Example Comprehensive Test
 
@@ -17,6 +28,7 @@ steps:
   - type: set_motor_speed
     value: 0
     duration_sec: 2
+
   - type: set_motor_speed
     value: 1.0         # Linear X velocity
     duration_sec: 5    # Optional, defaults to running until stopped
@@ -25,9 +37,9 @@ steps:
 pass_criteria:
   - type: parametric
     checks:
-      current_amps: { max: 15.0 }
-      voltage_v: { min: 11.5, max: 12.5 }
-      temp_c: { max: 85.0 }
+      '*_curr': { max: 15.0 }             # Applies to fl_curr, fr_curr, bl_curr, br_curr
+      'volt*': { min: 11.5, max: 12.5 }   # Applies to volt1, volt2
+      '*_rpm': { max: 5000 }              # Applies to all motor speeds
 
   - type: signal_metrics
     checks:
@@ -38,22 +50,6 @@ pass_criteria:
   - type: envelope
     reference_profile: "golden_traces/nominal_step_response.csv"
     allowed_deviation_percent: 5.0
-```
-
-## Example Custom Script Test
-
-For complex logic that cannot be defined by standard steps, use an external Python script.
-
-```yml
-name: "My Custom Script Test"
-description: "Runs an external test routine."
-steps:
-  - type: run_script
-    target: "src/python/my_test_script.py"
-    args: []
-    timeout_sec: 60           # Aborts script if it hangs
-    capture_output: true      # Logs stdout/stderr to the test report
-    expected_exit_code: 0     # Defaults to 0 (Standard Success)
 ```
 
 
@@ -69,9 +65,9 @@ Validates that physical sensor values (Current, Voltage, Temperature) remained w
 pass_criteria:
   - type: parametric
     checks:
-      current_amps: { max: 15.0 }
-      voltage_v: { min: 11.5, max: 12.5 }
-      temp_c: { max: 85.0 }
+      '*_curr': { max: 15.0 }             # Applies to fl_curr, fr_curr, bl_curr, br_curr
+      'volt*': { min: 11.5, max: 12.5 }   # Applies to volt1, volt2
+      '*_rpm': { max: 5000 }              # Applies to all motor speeds
 ```
 
 ## Signal Metrics

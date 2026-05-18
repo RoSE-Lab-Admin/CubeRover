@@ -1,3 +1,4 @@
+import pandas as pd
 from abc import ABC, abstractmethod
 
 class BaseStep(ABC):
@@ -13,7 +14,7 @@ class BaseStep(ABC):
 
 class BasePassCriteria(ABC):
     @abstractmethod
-    def evaluate(self, criteria_config: dict, test_data) -> dict:
+    def evaluate(self, criteria_config: dict, test_data: pd.DataFrame) -> dict:
         """
         Evaluates the data against the config.
         Should return a dictionary with at least {'passed': bool, 'details': str}
