@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Union, Awaitable
 from nicegui import ui
 from nicegui.events import UploadEventArguments
 
@@ -12,7 +12,7 @@ class DataSourceCard(ui.column):
             live_btn_text: str, 
             live_btn_icon: str,
             on_live_click: Callable[[], None], 
-            on_upload: Callable[[UploadEventArguments], None], 
+            on_upload: Callable[[UploadEventArguments], Union[None, Awaitable[None]]], 
             on_clear: Callable[[], None]
         ):
         """

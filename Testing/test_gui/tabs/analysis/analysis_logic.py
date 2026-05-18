@@ -160,7 +160,8 @@ async def handle_analysis_upload(e: UploadEventArguments, dataset_slot: str) -> 
         if UI.time_range: 
             UI.time_range.value = {'min': 0, 'max': UI.time_range.max}
         update_analysis_view()
-        e.sender.reset()  # Reset NiceGUI uploader element state
+        # Invokes the reset method dynamically
+        e.sender.run_method('reset')  # Reset NiceGUI uploader element state
     except Exception as ex:
         ui.notify(f'Error: {ex}', type=COLORS['negative'])
 
