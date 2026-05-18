@@ -4,7 +4,7 @@ The `Testing` folder contains tools for testing the hardware and gathering data 
 
 ### Testing Components Documentation
 * **[PySerial DAQ](PySerial/DAQ/README.md)**: Info on Arduino setup and the symlink in the DAQ folder.
-* **[Profile Configurations](test_profiles/README.md)**: Info on adding test profile configuration files using the "Step" and "Pass Critera" classes.
+* **[Profile Configurations](test_profiles/README.md)**: Info on adding test profile configuration files using the "Step" and "Pass Criteria" specifications.
   - **[Profile Step Info](test_engine/steps/README.md)**: Info on adding additional step options.
   - **[Profile Pass Criteria Info](test_engine/pass_criteria/README.md)**: Info on adding additional pass criteria options.
 

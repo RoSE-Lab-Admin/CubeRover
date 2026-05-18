@@ -23,16 +23,15 @@ This format combines hardware commands with several types of validation logic.
 
 ```yml
 name: "Step Response Test"
-description: "Commands a sudden jump in RPM to test motor tuning."
+description: "Sets a jump in motor speed to test motor tuning."
 steps:
   - type: set_motor_speed
     value: 0
     duration_sec: 2
 
   - type: set_motor_speed
-    value: 1.0         # Linear X velocity
-    duration_sec: 5    # Optional, defaults to running until stopped
-    pub_rate: 10       # Optional, defaults to 10
+    value: 1
+    duration_sec: 5
 
 pass_criteria:
   - type: parametric
@@ -72,6 +71,8 @@ pass_criteria:
 
 ## Signal Metrics
 
+> ⚠️ **TODO:** Requires Implementation
+
 **Focus:** Performance and Tuning.
 
 Calculates high-level behavior characteristics from a time-series signal, such as how quickly a motor reaches its target and how much it oscillates.
@@ -85,7 +86,9 @@ pass_criteria:
       rise_time_ms: { max: 20 }
 ```
 
-## Envelope
+## Envelope 
+
+> ⚠️ **TODO:** Requires Implementation
 
 **Focus:** Repeatability and "Golden" Comparison.
 
