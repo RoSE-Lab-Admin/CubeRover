@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, Optional
 from nicegui import ui
 from test_gui import state
 from test_gui.ui_registry import UI
@@ -8,17 +9,27 @@ from test_gui.constants import MOTORS, MOTOR_SENSORS
 # Import the controller logic!
 from . import capture_logic
 
-def build_capture_tab():
-    """Builds the UI elements for the Capture Tab."""
+def build_capture_tab() -> None:
+    """
+    Builds the UI elements for the Capture Tab.
+    
+    Layout Structure:
+      - Top Control Bar: Test profile selection dropdown, start/stop/reset controls, 
+        CSV export trigger, and reference 'ghost' dataset loader.
+      - Main Content Area (Split-pane):
+        ├─ Left Sidebar: Master toggles for logarithmic scaling, active motors, 
+        │                and individual sensor data streams.
+        └─ Right Area: The primary live Highcharts canvas rendering the telemetry stream.
+    """
     
     # --- TOP CONTROL BAR ---
     with ui.card().classes('w-full mb-4 p-4 bg-slate-50 shadow border border-slate-200 flex-nowrap'):
         with ui.row().classes('w-full justify-between items-center'):
             
-            # Left Group: Test Engine Controls
+            # Left Group: Test Engine Controls (Select tests and control hardware capture)
             with ui.row().classes('gap-4 items-center'):
-                available_tests = state.engine.get_available_tests()
-                first_test_key = list(available_tests.keys())[0] if available_tests else None
+                available_tests: Dict[str, Any] = state.engine.get_available_tests()
+                first_test_key: Optional[str] = list(available_tests.keys())[0] if available_tests else None
                 
                 with ui.column().classes('gap-1'):
                     UI.capture_mode = ui.select(
@@ -31,10 +42,11 @@ def build_capture_tab():
                 UI.btn_start = ui.button('Start Capture', on_click=capture_logic.toggle_master).props('color=green icon=play_arrow')
                 ui.button('Reset', on_click=capture_logic.reset_master_live).props('color=grey icon=refresh outline')
             
-            # Right Group: File IO
+            # Right Group: File IO (Export captures and load reference datasets)
             with ui.row().classes('gap-4 items-center'):
                 ui.button('Save Run CSV', icon='save', on_click=capture_logic.download_master_csv).props('color=blue')
                 
+                # The standard uploader is hidden, and triggered programmatically by the custom 'Load Ref Ghost' button
                 ref_uploader = ui.upload(auto_upload=True, on_upload=capture_logic.load_live_reference).props('accept=".csv"').classes('hidden')
                 UI.btn_load_ref = ui.button('Load Ref Ghost', icon='upload', on_click=lambda: ref_uploader.run_method('pickFiles')).props('color=slate outline')
                 
@@ -46,7 +58,7 @@ def build_capture_tab():
     # --- MAIN CONTENT AREA ---
     with ui.row().classes('w-full flex-grow min-h-0 gap-6 flex-nowrap min-w-0'):
         
-        # Left Sidebar: Visibility Switches
+        # Left Sidebar: Visibility Switches (Toggle data streams on/off)
         with ui.column().classes('w-1/4 min-w-[250px] p-4 bg-white shadow-sm border rounded h-full overflow-y-auto'):
             ui.label('Chart Settings').classes('text-lg font-bold text-gray-800 mb-2')
             
@@ -69,11 +81,11 @@ def build_capture_tab():
                     UI.sensor_switches['volt1'] = ui.switch("Bus Voltage 1 (V)", value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
                     UI.sensor_switches['volt2'] = ui.switch("Bus Voltage 2 (V)", value=True, on_change=capture_logic.update_chart_visibility).classes('w-full')
 
-        # Right Area: The Highcharts Canvas
+        # Right Area: The Highcharts Canvas (Live Telemetry Render)
         with ui.column().classes('w-3/4 flex-grow h-full min-w-0'):
             
             # Setup Series config (No Y-Axis index necessary for single scale)
-            series_list = []
+            series_list: List[Dict[str, Any]] = []
             for s in MOTOR_SENSORS:
                 for m in MOTORS: 
                     series_list.append({'id': f"live_{s['id']}_{m['id']}", 'name': f"{m['name']} {s['name']}", 'data': [], 'color': s['color'], 'dashStyle': m['dash'], 'marker': {'enabled': False}})

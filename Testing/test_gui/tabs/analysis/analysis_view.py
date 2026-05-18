@@ -1,6 +1,5 @@
 from nicegui import ui
 
-from test_gui import state
 from test_gui.ui_registry import UI
 from test_gui.components.chart_card import ChartCard
 from test_gui.components.data_source import DataSourceCard
