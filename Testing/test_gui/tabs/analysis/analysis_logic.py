@@ -246,9 +246,6 @@ def update_analysis_view() -> None:
         else:
             for m_id in active_motors: 
                 selected_metrics.append(f"{m_id}_{s_id}") # e.g., "fl_rpm"
-                
-    if not selected_metrics: 
-        return
     
     # --- Step 2: Fetch Base Core DataFrames ---
     df_A_raw = pd.DataFrame(state.global_history) if state.using_live_for_A else state.analysis_df_A
