@@ -28,12 +28,17 @@ def build_capture_tab() -> None:
             
             # Left Group: Test Engine Controls (Select tests and control hardware capture)
             with ui.row().classes('gap-4 items-center'):
-                available_tests: Dict[str, Any] = state.engine.get_available_tests()
-                first_test_key: Optional[str] = list(available_tests.keys())[0] if available_tests else None
+                available_tests = state.engine.get_available_tests()
+                # Sort the dictionary items alphabetically by the 'name' field
+                sorted_test_options = {
+                    key: value['name'] 
+                    for key, value in sorted(available_tests.items(), key=lambda item: item[1]['name'])
+                }
+                first_test_key: Optional[str] = list(sorted_test_options.keys())[0] if available_tests else None
                 
                 with ui.column().classes('gap-1'):
                     UI.capture_mode = ui.select(
-                        options={key: value['name'] for key, value in available_tests.items()},
+                        options=sorted_test_options,
                         value=first_test_key, label='Test Profile',
                         on_change=lambda e: desc_label.set_text(available_tests[e.value]['description'])
                     ).classes('w-48').props('dense outlined bg-color=white')

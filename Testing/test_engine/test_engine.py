@@ -5,6 +5,7 @@ import inspect
 from typing import Any, Dict, List, Optional, Type
 
 from .interfaces import BaseStep, BasePassCriteria
+from .custom_types import TestProfile
 
 class TestEngine:    
     """
@@ -112,15 +113,15 @@ class TestEngine:
         with open(profile_path, 'r') as f:
             return yaml.safe_load(f)
 
-    def get_available_tests(self) -> Dict[str, Dict[str, Any]]:
+    def get_available_tests(self) -> Dict[str, TestProfile]:
         """
         Finds and loads all available test YAMLs from the profiles directory.
         Used by the UI to populate the test selection dropdown.
         
         Returns:
-            Dict[str, Dict[str, Any]]: A mapping of filenames to their parsed YAML contents.
+            Dict[str, TestProfile]: A mapping of filenames to their parsed YAML contents.
         """
-        tests: Dict[str, Dict[str, Any]] = {}
+        tests: Dict[str, TestProfile] = {}
         profiles_dir = self.profiles_dir
         
         if not profiles_dir.exists():

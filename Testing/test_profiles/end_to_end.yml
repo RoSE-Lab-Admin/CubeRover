@@ -1,5 +1,5 @@
-name: "End-to-End Test"
-description: "Runs the motors for 10 seconds."
+name: "0. End-to-End Test"
+description: "Run the motors for 10 seconds."
 steps:
   - type: set_motor_speed
     value: 1.0          # Linear X velocity
