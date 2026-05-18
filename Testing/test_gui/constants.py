@@ -1,4 +1,4 @@
-from typing import TypedDict, Literal
+from typing import TypedDict, Literal, List, Dict
 
 # --- Types ---
 NotifyType = Literal['positive', 'negative', 'warning', 'info', 'ongoing']
@@ -11,13 +11,23 @@ class ColorDict(TypedDict):
     negative: NotifyType
     warning: NotifyType
 
-# --- Hardware Scaling Factors ---
-BATTERY_SCALE = 0.1
-CURRENT_SCALE = 0.01
-PWM_SCALE = 1 / 327.67
+class MotorDef(TypedDict):
+    id: str
+    name: str
+    dash: str
 
-# --- Global UI Colors ---
-# 3. Apply the type hint to your dictionary
+class SensorDef(TypedDict):
+    id: str
+    name: str
+    color: str
+
+# --- Hardware Scaling Factors ---
+# Used to convert raw integer telemetry from the DAQ into standard physical units.
+BATTERY_SCALE: float = 0.1         # Converts raw to Volts
+CURRENT_SCALE: float = 0.01        # Converts raw to Amps
+PWM_SCALE: float = 1 / 327.67      # Maps 16-bit int (-32767 to 32767) to a percentage (-100 to 100)
+
+# --- Global UI Configuration ---
 COLORS: ColorDict = {
     'volt1': '#f59e0b',        # Amber
     'volt2': '#d97706',        # Dark Amber
@@ -27,40 +37,46 @@ COLORS: ColorDict = {
     'warning': 'warning'       # NiceGUI standard yellow
 }
 
-DEFAULT_CSV_PREFIX = "robot_run_"
-GUI_TITLE = "Flat Rosey Test UI"
+DEFAULT_CSV_PREFIX: str = "robot_run_"
+GUI_TITLE: str = "Flat Rosey Test UI"
 
-MOTORS = [
+# Maximum number of data points kept in memory for the live scrolling chart
+MAX_LIVE_POINTS: int = 600 
+
+# --- Hardware Definitions ---
+MOTORS: List[MotorDef] = [
     {"id": "fl", "name": "Front Left", "dash": "Solid"},
     {"id": "fr", "name": "Front Right", "dash": "Dash"},
     {"id": "bl", "name": "Back Left", "dash": "Dot"},
     {"id": "br", "name": "Back Right", "dash": "DashDot"}
 ]
 
-MOTOR_SENSORS = [
+MOTOR_SENSORS: List[SensorDef] = [
     {"id": "pwm", "name": "Motor PWM (%)", "color": "#ef4444"},   # Red
     {"id": "rpm", "name": "Motor Speed (RPM)", "color": "#10b981"}, # Green
     {"id": "curr", "name": "Motor Current (A)", "color": "#3b82f6"},# Blue
-    {"id": "enc", "name": "Encoder Count", "color": "#8b5cf6"}      # Purple (New!)
+    {"id": "enc", "name": "Encoder Count", "color": "#8b5cf6"}      # Purple
 ]
 
-MAX_LIVE_POINTS = 600
+# --- Analysis Dropdown Configurations ---
 
 # Create separate dictionaries for the Analysis Dropdowns
-ANALYSIS_MOTOR_OPTIONS = {m['id']: m['name'] for m in MOTORS}
+ANALYSIS_MOTOR_OPTIONS: Dict[str, str] = {m['id']: m['name'] for m in MOTORS}
 
 # Add motor sensors, plus the two global voltages
-ANALYSIS_SENSOR_OPTIONS = {s['id']: s['name'] for s in MOTOR_SENSORS}
+ANALYSIS_SENSOR_OPTIONS: Dict[str, str] = {s['id']: s['name'] for s in MOTOR_SENSORS}
 ANALYSIS_SENSOR_OPTIONS['volt1'] = 'Bus Voltage 1 (V)'
 ANALYSIS_SENSOR_OPTIONS['volt2'] = 'Bus Voltage 2 (V)'
 
-# Build a dictionary mapping DataFrame columns to pretty UI labels
-ANALYSIS_OPTIONS = {
+# Build a master dictionary mapping underlying DataFrame columns to pretty UI labels
+ANALYSIS_OPTIONS: Dict[str, str] = {
     'volt1': 'Bus Voltage 1 (V)',
     'volt2': 'Bus Voltage 2 (V)'
 }
+
 for m in MOTORS:
     for s in MOTOR_SENSORS:
-        # e.g., 'fl_pwm': 'Front Left Motor PWM (%)'
+        # Generates keys like 'fl_pwm' mapped to 'Front Left Motor PWM (%)'
         ANALYSIS_OPTIONS[f"{m['id']}_{s['id']}"] = f"{m['name']} {s['name']}"
-all_metric_keys = list(ANALYSIS_OPTIONS.keys())
+
+all_metric_keys: List[str] = list(ANALYSIS_OPTIONS.keys())
