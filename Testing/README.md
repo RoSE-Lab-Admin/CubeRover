@@ -38,6 +38,8 @@ The `Testing` folder contains tools for testing the hardware and gathering data 
 
 ## DAQ Gui
 
+The DAQ Gui is built using NiceGui, which is a python web gui framework. **Using the Chrome is recommended** since performance seems to be slightly better on Chrome in comparison to Firefox.
+
 ### Run the Test GUI
     
 - The following will automatically attempt to detect the Teensy port and will provide a warning in the terminal if it is unable to find a Teensy:
