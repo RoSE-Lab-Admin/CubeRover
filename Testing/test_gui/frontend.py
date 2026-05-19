@@ -21,9 +21,6 @@ def index() -> None:
     Additionally, this function launches the high-frequency UI timer responsible 
     for polling the hardware DAQ for live telemetry updates.
     """
-    # Tell the browser to fetch the file from the web URL route
-    ui.add_head_html('<script src="/static/boost.js"></script>')
-    
     ui.page_title(GUI_TITLE)
 
     # Global wrapper ensuring the app spans the viewport and handles inner overflow correctly

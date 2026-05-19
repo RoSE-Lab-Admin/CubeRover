@@ -21,15 +21,6 @@ class ChartCard(ui.card):
         super().__init__()
         self.classes('w-full p-4 bg-white shadow-sm border min-w-0 relative flex flex-col')
         
-        # Inject Boost Configuration
-        options.setdefault('boost', {}).update({
-            'useGPUTranslations': True,
-            'usePreAllocated': True
-        })
-        plot_options = options.setdefault('plotOptions', {})
-        series_options = plot_options.setdefault('series', {})
-        series_options.setdefault('boostThreshold', 2000)
-        
         with self:
             if header_elements:
                 header_elements() # Execute lambda to build dynamic headers (like the Dropdowns in Analysis)
