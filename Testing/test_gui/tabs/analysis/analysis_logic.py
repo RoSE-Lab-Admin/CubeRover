@@ -252,9 +252,26 @@ def update_analysis_view() -> None:
     df_B_raw = state.analysis_df_B
     
     # --- Step 3: Apply Slicing Filters via Global Window Constraints ---
+    # --- Step 3: Apply Slicing Filters via Global Window Constraints ---
     t_min, t_max = UI.time_range.value['min'], UI.time_range.value['max'] # type: ignore
-    df_A = df_A_raw[(df_A_raw['Seconds'] >= t_min) & (df_A_raw['Seconds'] <= t_max)] if not df_A_raw.empty else df_A_raw
-    df_B = df_B_raw[(df_B_raw['Seconds'] >= t_min) & (df_B_raw['Seconds'] <= t_max)] if not df_B_raw.empty else df_B_raw
+    
+    def slice_with_buffer(df: pd.DataFrame, t_min: float, t_max: float) -> pd.DataFrame:
+        """Slices dataframe by time while preserving 1 point outside bounds for rendering."""
+        if df.empty or 'Seconds' not in df.columns:
+            return df
+            
+        # O(log N) search for boundary indices
+        start_idx = df['Seconds'].searchsorted(t_min, side='left')
+        end_idx = df['Seconds'].searchsorted(t_max, side='right')
+        
+        # Expand by 1 index on each side to give Highcharts anchor points
+        start_idx = max(0, start_idx - 1)
+        end_idx = min(len(df), end_idx + 1)
+        
+        return df.iloc[start_idx:end_idx]
+
+    df_A = slice_with_buffer(df_A_raw, t_min, t_max) if not df_A_raw.empty else df_A_raw
+    df_B = slice_with_buffer(df_B_raw, t_min, t_max) if not df_B_raw.empty else df_B_raw
     
     # Storage targets matching Highcharts configurations
     main_series: List[HighchartsLineSeries] = []
@@ -305,15 +322,23 @@ def update_analysis_view() -> None:
         if not df_A.empty and not df_B.empty and metric_name in df_A.columns and metric_name in df_B.columns:
             t_A, val_A = df_A['Seconds'].values, df_A[metric_name].values
             t_B, val_B = df_B['Seconds'].values, df_B[metric_name].values
+            
             if len(t_A) > 0 and len(t_B) > 0:
-                interp_B = np.interp(t_A, t_B, val_B) # type: ignore
-                safe_A = np.where(np.abs(val_A) < 0.001, 0.001, val_A)
-                delta_vals = ((val_A - interp_B) / safe_A) * 100
-                delta_series.append({
-                    'name': f'Δ {metric_name} (%)', 
-                    'data': [[float(t), float(d)] for t, d in zip(t_A, delta_vals)], 
-                    'color': color, 'lineWidth': 2, 'marker': {'enabled': False}
-                })
+                # NEW: Create a mask so we ONLY calculate deltas where the timestamps overlap
+                mask = (t_A >= t_B[0]) & (t_A <= t_B[-1])
+                t_A_overlap = t_A[mask]
+                val_A_overlap = val_A[mask]
+                
+                if len(t_A_overlap) > 0:
+                    interp_B = np.interp(t_A_overlap, t_B, val_B) # type: ignore
+                    safe_A = np.where(np.abs(val_A_overlap) < 0.001, 0.001, val_A_overlap)
+                    delta_vals = ((val_A_overlap - interp_B) / safe_A) * 100
+                    
+                    delta_series.append({
+                        'name': f'Δ {metric_name} (%)', 
+                        'data': [[float(t), float(d)] for t, d in zip(t_A_overlap, delta_vals)], 
+                        'color': color, 'lineWidth': 2, 'marker': {'enabled': False}
+                    })
 
     # --- Step 5: Process Distribution Data Histograms ---
     dist_metric = UI.dist_metric_select.value if UI.dist_metric_select else None
