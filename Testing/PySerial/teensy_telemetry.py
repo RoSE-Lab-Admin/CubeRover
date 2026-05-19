@@ -14,6 +14,7 @@ class MotorTelemetry:
     encoder_count: int = 0
     velocity: int = 0 # encoder counts/sec
     current: int = 0 # 10mA units
+    pwm: int = 0 # pwm ratio
 
 
 @dataclass
@@ -34,20 +35,22 @@ class TeensyTelemetryReader:
     latest values as a RoverTelemetry instance.
 
     Frame format:
-        e <enc1> <enc2> <enc3> <enc4>
+        t <enc1> <enc2> <enc3> <enc4>
           <spd1> <spd2> <spd3> <spd4>
           <cur1> <cur2> <cur3> <cur4>
-          <vbat1> <vbat2>
+          <vbat1> <vbat2> 
+          <pwm1> <pwm2> <pwm3> <pwm4>
 
     Motor index mapping matches the RoSEy Teensy get_telemetry() order:
         [0] FL enc   [1] BL enc   [2] FR enc   [3] BR enc
         [4] FL spd   [5] BL spd   [6] FR spd   [7] BR spd
         [8] FL cur   [9] BL cur   [10] FR cur  [11] BR cur
         [12] vbat1   [13] vbat2
+        [14] FL pwm  [15] BL pwm  [16] FR pwm  [17] BR pwm
     """
 
-    FRAME_TOKEN = 'e'
-    EXPECTED_FIELDS = 14
+    FRAME_TOKEN = 't'
+    EXPECTED_FIELDS = 18
 
     def __init__(self, port: str, baud: int = 115200, timeout: float = 1.0):
         self._port = port
@@ -154,16 +157,16 @@ class TeensyTelemetryReader:
         with self._lock:
             self._last_error = ""   # clear error on successful parse
             self._telemetry.fl = MotorTelemetry(
-                encoder_count=d[0], velocity=d[4], current=d[8]
+                encoder_count=d[0], velocity=d[4], current=d[8], pwm=d[14]
             )
             self._telemetry.bl = MotorTelemetry(
-                encoder_count=d[1], velocity=d[5], current=d[9]
+                encoder_count=d[1], velocity=d[5], current=d[9], pwm=d[15]
             )
             self._telemetry.fr = MotorTelemetry(
-                encoder_count=d[2], velocity=d[6], current=d[10]
+                encoder_count=d[2], velocity=d[6], current=d[10], pwm=d[16]
             )
             self._telemetry.br = MotorTelemetry(
-                encoder_count=d[3], velocity=d[7], current=d[11]
+                encoder_count=d[3], velocity=d[7], current=d[11], pwm=d[17]
             )
             self._telemetry.battery_voltage_1 = d[12]
             self._telemetry.battery_voltage_2 = d[13]

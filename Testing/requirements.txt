@@ -1,0 +1,5 @@
+nicegui[highcharts]>=1.4.0
+pandas
+setuptools
+typeguard
+pyserial

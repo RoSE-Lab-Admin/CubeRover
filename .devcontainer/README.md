@@ -1,4 +1,4 @@
-# Devcontainer Overview
+# Dev Containers Overview
 
 This project uses VS Code Dev Containers to make setup easy for new developers. The instructions for getting setup to use this codebase are provided in the root-level `README.md`.
 
@@ -39,10 +39,10 @@ This README provides information for the development team on the current Docker 
   docker buildx create --use
   ```
 
-3. **Build and Push the Image:** Navigate to the folder containing the `Dockerfile` and run the build command. (Note: Because this is a multi-platform build, the `--push` flag is required. Docker will build and upload the image simultaneously).
+3. **Build and Push the Image:** From the root directory (not the folder containing the `Dockerfile`), run the build command. (Note: Because this is a multi-platform build, the `--push` flag is required. Docker will build and upload the image simultaneously).
   ```bash
   # Make sure to replace 'yourusername' with your actual Docker Hub username
-  docker buildx build --platform linux/amd64,linux/arm64 -t yourusername/cuberover-dev-jazzy:latest --push .
+  docker buildx build --platform linux/amd64,linux/arm64 -t yourusername/cuberover-dev-jazzy:latest -f .devcontainer/Dockerfile . --push
   ```
 
 4. **Verify it is "Clean" (Optional):** Because you used the Docker CLI, the image is safe. However, if you want to verify no VS Code metadata was accidentally baked in, pull the freshly pushed image and inspect it. The following command should return NO output:

@@ -5,6 +5,7 @@ import time
 
 BATTERY_SCALE = 0.1   # Roboclaw reports in 10mV units
 CURRENT_SCALE = 0.01  # Roboclaw reports in 10mA units
+PWM_SCALE = 1 / 327.67 # See wheel.hpp for details
 
 def clear():
     # Move cursor to top-left without clearing
@@ -19,8 +20,9 @@ def print_motor(label, motor, col_width=30):
     enc   = f"{motor.encoder_count:>10,}"
     vel   = f"{motor.velocity:>8} cnt/s"
     cur   = f"{motor.current * CURRENT_SCALE:>6.2f} A"
+    pwm   = f"{motor.pwm * PWM_SCALE:6.2f}%"
     cur_bar = bar(abs(motor.current * CURRENT_SCALE), 10.0, width=15)
-    print(f"  {label:<6} enc: {enc}  vel: {vel}  cur: {cur} {cur_bar}")
+    print(f"  {label:<6} enc: {enc}  vel: {vel}  pwm: {pwm}  cur: {cur} {cur_bar}")
 
 def print_telemetry(t, error: str = ""):
     clear()
