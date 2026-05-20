@@ -52,6 +52,8 @@ class PathFollower(Node):
         self.started = False
         self.finished = False
         self.rec_pose = False
+        self.calc_orien = False
+        self.got_orien = False
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -59,7 +61,16 @@ class PathFollower(Node):
 
     def waypoint_callback(self, trajectory):
         # path message with list of posestamped waypoints
-        self.waypoints = trajectory.poses
+        self.point_path = trajectory.poses
+        # self.waypoints = trajectory.poses
+
+        if not self.calc_orien:
+            self.orientation_calc()
+
+    def orientation_calc(self):
+        # calc orientation here
+        # reassign final point orientation in point_path
+        self.waypoints = self.point_path
 
     # callback for if opti mode is being used
     def opti_callback(self, msg):
@@ -85,6 +96,9 @@ class PathFollower(Node):
         odom.header.frame_id = 'odom'
         odom.child_frame_id = 'CubeRover_V1'
         odom.pose.pose = msg.pose
+
+        if not self.got_orien:
+            self.first_orien = msg.pose.orientation # gives you a quaternion
 
         # calculate a rough linear and angular velocity
         if len(self.prev_poses) < 5:
