@@ -64,13 +64,54 @@ class PathFollower(Node):
         self.point_path = trajectory.poses
         # self.waypoints = trajectory.poses
 
-        if not self.calc_orien:
+        if not self.calc_orien and self.got_orien:
             self.orientation_calc()
+            self.calc_orien = True
+
+    def arc_arrival_heading(self, x0, y0, theta0, x1, y1):
+        # find the unique circular arc from (x0,y0,theta0) through (x1,y1)
+        # and return the tangent heading at the goal
+        dx, dy = x1 - x0, y1 - y0
+        denom = dx * np.sin(theta0) - dy * np.cos(theta0)
+
+        if abs(denom) < 1e-6:  # already aligned: straight line
+            return np.arctan2(dy, dx)
+
+        r  = -(dx**2 + dy**2) / (2.0 * denom)
+        Cx = x0 - r * np.sin(theta0)
+        Cy = y0 + r * np.cos(theta0)
+
+        rx, ry = x1 - Cx, y1 - Cy
+        if r > 0:  # CCW: tangent = radial rotated +90°
+            return np.arctan2(rx, -ry)
+        else:      # CW:  tangent = radial rotated -90°
+            return np.arctan2(-rx, ry)
 
     def orientation_calc(self):
-        # calc orientation here
-        # reassign final point orientation in point_path
-        self.waypoints = self.point_path
+        poses = self.point_path
+        n = len(poses)
+
+        # chain of positions: rover start followed by each waypoint
+        pos_x = [self.first_pos.x] + [p.pose.position.x for p in poses]
+        pos_y = [self.first_pos.y] + [p.pose.position.y for p in poses]
+
+        # initial heading from stored quaternion
+        q0 = self.first_orien
+        theta = R.from_quat([q0.x, q0.y, q0.z, q0.w]).as_euler('xyz')[2]
+
+        for i in range(n):
+            # arc from pos[i] (heading theta) to pos[i+1]
+            theta = self.arc_arrival_heading(
+                pos_x[i], pos_y[i], theta,
+                pos_x[i + 1], pos_y[i + 1]
+            )
+            q = R.from_euler('z', theta).as_quat()  # [x, y, z, w]
+            poses[i].pose.orientation.x = q[0]
+            poses[i].pose.orientation.y = q[1]
+            poses[i].pose.orientation.z = q[2]
+            poses[i].pose.orientation.w = q[3]
+
+        self.waypoints = poses
 
     # callback for if opti mode is being used
     def opti_callback(self, msg):
@@ -98,7 +139,9 @@ class PathFollower(Node):
         odom.pose.pose = msg.pose
 
         if not self.got_orien:
-            self.first_orien = msg.pose.orientation # gives you a quaternion
+            self.first_orien = msg.pose.orientation
+            self.first_pos = msg.pose.position
+            self.got_orien = True
 
         # calculate a rough linear and angular velocity
         if len(self.prev_poses) < 5:
