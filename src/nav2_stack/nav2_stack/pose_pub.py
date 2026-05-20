@@ -46,7 +46,7 @@ class PosePub(Node):
 
                     pose.pose.position.x = float(row[0])
                     pose.pose.position.y = float(row[1])
-                    # pose.pose.orientation.w = 1.0
+                    pose.pose.orientation.w = 1.0
 
                     poses.append(pose)
 
