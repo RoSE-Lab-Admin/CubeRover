@@ -133,7 +133,6 @@ def generate_launch_description():
         map_server,
         planner,
         controller,
-        smoother,
         behavior,
         bt_nav,
         waypoint,
