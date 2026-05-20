@@ -44,7 +44,7 @@ def generate_launch_description():
             'use_sim_time': False,
             'autostart': True,
             'node_names': ['map_server', 'planner_server', 'controller_server',
-                           'smoother_server', 'behavior_server', 'bt_navigator',
+                            'behavior_server', 'bt_navigator',
                            'waypoint_follower']
         }]
     )
@@ -69,15 +69,15 @@ def generate_launch_description():
         }]
     )
 
-    smoother = Node(
-        package='nav2_smoother',
-        executable='smoother_server',
-        name='smoother_server',
-        output='screen',
-        parameters=[nav2_config, {
-            'use_sim_time': False
-        }]
-    )
+    # smoother = Node(
+    #     package='nav2_smoother',
+    #     executable='smoother_server',
+    #     name='smoother_server',
+    #     output='screen',
+    #     parameters=[nav2_config, {
+    #         'use_sim_time': False
+    #     }]
+    # )
     
     behavior = Node(
         package='nav2_behaviors',
