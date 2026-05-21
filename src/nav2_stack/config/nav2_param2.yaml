@@ -47,7 +47,8 @@ controller_server:
 
     goal_checker:
       plugin: "nav2_controller::PositionGoalChecker"
-      xy_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.5
+      yaw_goal_tolerance: 6.28
       stateful: true
       
     FollowPath:
@@ -83,7 +84,7 @@ controller_server:
         cost_weight: 4.0 # weight to apply to term
         cost_power: 1 # power order to apply to term
       GoalCritic: # incentivizes navigating towards goal when in reasonable proximity
-        enabled: false
+        enabled: true
         cost_power: 1
         cost_weight: 5.0
         threshold_to_consider: 0.8 # min distance to robot and goal where goal cost considered, should be same as predeiction horizon
@@ -117,7 +118,7 @@ controller_server:
         offset_from_furthest: 20 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
       PreferForwardCritic: # incentivizes moving in forwards direction
         enabled: true
-        cost_weight: 5.0
+        cost_weight: 3.0
         cost_power: 1
         threshold_to_consider: 0.5 # distance between robot and goal to stop preferring forward and allow goal critic to take over
       VelocityDeadbandCritic: # penalizes velocities that fall below deadband threshold
@@ -143,7 +144,7 @@ planner_server:
       analytic_expansion_max_length: 3.0 # if the length is too far reject the expansion
       analytic_expansion_max_cost: 200.0 # for hybrid/lattice nodes: max cost for any part of an analytic expansion to contain and be considered valid
       analytic_expansion_max_cost_ovveride: false # for hybrid/lattice nodes: whether or not to overrid max cost setting if w/i critical dist to goaL
-      minimum_turning_radius: 0.15 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
+      minimum_turning_radius: 0.40 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
       motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 2.5 # heuristic penalty to apply to SE2 node if searching in a non straight direction
       cost_penalty: 2.0 # heuristic penalty to apply to SE2 node for cost at pose
@@ -183,7 +184,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.58 #maybe try 3.0
-        inflation_radius: 0.1 #see if this works instead of 0.1
+        inflation_radius: 0.50 # make robot length/2
       transform_tolerance: 1.0
       always_send_full_costmap: false
       track_unknown_space: false
@@ -206,7 +207,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.58
-        inflation_radius: .25
+        inflation_radius: 0.50
       always_send_full_costmap: false
 
 behavior_server:
