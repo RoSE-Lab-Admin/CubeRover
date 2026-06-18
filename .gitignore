@@ -8,3 +8,6 @@ src/nav2_stack/test/
 sim_data/11172025
 src/roseybot_control/test
 docs/
+scripts/costmap_preview.png
+frames_*.pdf
+frames_*.gv

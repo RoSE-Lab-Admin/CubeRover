@@ -78,7 +78,7 @@ controller_server:
         plugin: "mppi::DefaultOptimalTrajectoryValidator"
         collision_lookahead_time: 2.0
         consider_footprint: false
-      critics: ["ConstraintCritic", "GoalCritic", "ObstaclesCritic", "CostCritic", "PathFollowCritic", "PreferForwardCritic", "VelocityDeadbandCritic"]
+      critics: ["ConstraintCritic", "GoalCritic", "ObstaclesCritic", "CostCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "VelocityDeadbandCritic"]
       ConstraintCritic: # Penalizes paths outside of set dynamics or kinematic constraints
         enabled: true
         cost_weight: 4.0 # weight to apply to term
@@ -116,6 +116,14 @@ controller_server:
         cost_power: 1
         threshold_to_consider: 0.3 # distance between robot and goal to stop considering path following and let goal critic take over
         offset_from_furthest: 20 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
+      PathAngleCritic: # penalizes heading misalignment with the planned path to reduce S-curves
+        enabled: true
+        cost_weight: 2.0
+        cost_power: 1
+        threshold_to_consider: 0.5 # only active when further than this distance from goal (m)
+        offset_from_furthest: 4    # path points ahead of furthest reached point to measure angle from
+        max_angle_to_furthest: 1.2 # max allowed heading error before full penalty (~70 degrees)
+        mode: 0                    # 0 = use path heading at reference point
       PreferForwardCritic: # incentivizes moving in forwards direction
         enabled: true
         cost_weight: 3.0
