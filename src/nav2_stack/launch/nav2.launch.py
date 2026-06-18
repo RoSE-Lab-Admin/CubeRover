@@ -1,10 +1,13 @@
 from launch import LaunchDescription
-from launch.substitutions import PathJoinSubstitution
+from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-def generate_launch_description():
+
+def launch_setup(context):
+    robot_frame = LaunchConfiguration('robot_frame').perform(context)
 
     bt_xml = PathJoinSubstitution([
         FindPackageShare('nav2_stack'),
@@ -32,7 +35,7 @@ def generate_launch_description():
         parameters=[{
             'yaml_filename': map_config,
             'use_sim_time': False
-            }]
+        }]
     )
 
     lifecycle_mgr = Node(
@@ -44,7 +47,7 @@ def generate_launch_description():
             'use_sim_time': False,
             'autostart': True,
             'node_names': ['map_server', 'planner_server', 'controller_server',
-                            'behavior_server', 'bt_navigator',
+                           'behavior_server', 'bt_navigator',
                            'waypoint_follower']
         }]
     )
@@ -55,7 +58,8 @@ def generate_launch_description():
         name='planner_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False
+            'use_sim_time': False,
+            'robot_base_frame': robot_frame,
         }]
     )
 
@@ -65,30 +69,22 @@ def generate_launch_description():
         name='controller_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False
+            'use_sim_time': False,
+            'robot_base_frame': robot_frame,
         }]
     )
 
-    # smoother = Node(
-    #     package='nav2_smoother',
-    #     executable='smoother_server',
-    #     name='smoother_server',
-    #     output='screen',
-    #     parameters=[nav2_config, {
-    #         'use_sim_time': False
-    #     }]
-    # )
-    
     behavior = Node(
         package='nav2_behaviors',
         executable='behavior_server',
         name='behavior_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False
+            'use_sim_time': False,
+            'robot_base_frame': robot_frame,
         }]
     )
-    
+
     bt_nav = Node(
         package='nav2_bt_navigator',
         executable='bt_navigator',
@@ -96,21 +92,22 @@ def generate_launch_description():
         output='screen',
         parameters=[nav2_config, {
             'use_sim_time': False,
+            'robot_base_frame': robot_frame,
             'default_nav_to_pose_bt_xml': bt_xml,
             'default_nav_through_poses_bt_xml': bt_xml
         }]
     )
-    
+
     waypoint = Node(
         package='nav2_waypoint_follower',
         executable='waypoint_follower',
         name='waypoint_follower',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False
+            'use_sim_time': False,
         }]
     )
-    
+
     # Static map->odom transform (identity). Assumes robot starts at map origin.
     # Replace with AMCL or SLAM if relocalization is needed.
     map_to_odom_tf = Node(
@@ -127,7 +124,7 @@ def generate_launch_description():
         arguments=['0', '0', '0', '0', '0', '0', 'world', 'map']
     )
 
-    return LaunchDescription([
+    return [
         map_to_odom_tf,
         world_to_map_tf,
         map_server,
@@ -137,4 +134,11 @@ def generate_launch_description():
         bt_nav,
         waypoint,
         lifecycle_mgr,
+    ]
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument('robot_frame', default_value='CubeRover_V1'),
+        OpaqueFunction(function=launch_setup),
     ])

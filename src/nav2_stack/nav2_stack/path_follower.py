@@ -22,7 +22,11 @@ class PathFollower(Node):
 
         # parameters
         self.declare_parameter('use_opti', True)
-        self.use_opti = self.get_parameter('use_opti').value
+        self.declare_parameter('opti_topic', '/CubeRover_V1/pose')
+        self.declare_parameter('robot_frame', 'CubeRover_V1')
+        self.use_opti    = self.get_parameter('use_opti').value
+        self.opti_topic  = self.get_parameter('opti_topic').value
+        self.robot_frame = self.get_parameter('robot_frame').value
 
         # create callback group so it can execute while nav2 blocks
         self.opti_group = ReentrantCallbackGroup()
@@ -32,7 +36,7 @@ class PathFollower(Node):
         self.path_sub = self.create_subscription(Path, '/sim_waypoints', self.waypoint_callback, qos)
         # subscribe to ground truth
         if self.use_opti:
-            self.opti_sub = self.create_subscription(PoseStamped, '/CubeRover_V1/pose', self.opti_callback, 10, callback_group=self.opti_group)
+            self.opti_sub = self.create_subscription(PoseStamped, self.opti_topic, self.opti_callback, 10, callback_group=self.opti_group)
             self.odom_trans = TransformBroadcaster(self)
             self.odom_pub = self.create_publisher(Odometry, '/odometry/filtered', 10)
             # create previous poses list
@@ -135,7 +139,7 @@ class PathFollower(Node):
         odom = Odometry()
         odom.header.stamp = stamp
         odom.header.frame_id = 'odom'
-        odom.child_frame_id = 'CubeRover_V1'
+        odom.child_frame_id = self.robot_frame
         odom.pose.pose = msg.pose
 
         if not self.got_orien:

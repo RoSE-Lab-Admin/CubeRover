@@ -9,13 +9,33 @@ from launch_ros.substitutions import FindPackageShare
 from ament_index_python.packages import get_package_share_directory
 import os
 
-#csv use:
-#ros2 launch nav2 stack waypoint.launch.py pose_csv:=/path/to/pose.csv
-def launch_setup(context):
-    use_opti = LaunchConfiguration('use_opti').perform(context)
-    pose_csv = LaunchConfiguration('pose_csv').perform(context)
+# ---------------------------------------------------------------------------
+# rover_type selects which OptiTrack asset publishes the rover pose.
+#
+#   old_rosey  — original CubeRover hardware  (/CubeRover_V1/pose)
+#   fit_rosey  — new FitRosey hardware        (/FitRosey_V1/pose)
+#
+# Usage:
+#   ros2 launch nav2_stack waypoint.launch.py rover_type:=fit_rosey
+# ---------------------------------------------------------------------------
+ROVER_CONFIGS = {
+    'old_rosey': {'opti_topic': '/CubeRover_V1/pose', 'robot_frame': 'CubeRover_V1'},
+    'fit_rosey': {'opti_topic': '/FitRosey_V1/pose',  'robot_frame': 'FitRosey_V1'},
+}
 
-    is_opti = use_opti.lower() == 'true'
+# csv use:
+# ros2 launch nav2_stack waypoint.launch.py pose_csv:=/path/to/pose.csv
+def launch_setup(context):
+    use_opti   = LaunchConfiguration('use_opti').perform(context)
+    pose_csv   = LaunchConfiguration('pose_csv').perform(context)
+    rover_type = LaunchConfiguration('rover_type').perform(context)
+
+    if rover_type not in ROVER_CONFIGS:
+        raise ValueError(f"Unknown rover_type '{rover_type}'. Choose from: {list(ROVER_CONFIGS)}")
+
+    opti_topic   = ROVER_CONFIGS[rover_type]['opti_topic']
+    robot_frame  = ROVER_CONFIGS[rover_type]['robot_frame']
+    is_opti      = use_opti.lower() == 'true'
 
     if not os.path.isabs(pose_csv):
         pkg_path = get_package_share_directory('nav2_stack')
@@ -36,11 +56,26 @@ def launch_setup(context):
     path_follower_node = Node(
         package='nav2_stack',
         executable='path_follower',
-        parameters=[{'use_sim_time': False},
-                    {'use_opti': is_opti}]
+        parameters=[{
+            'use_sim_time': False,
+            'use_opti':     is_opti,
+            'opti_topic':   opti_topic,
+            'robot_frame':  robot_frame,
+        }]
     )
 
-    nodes = [pose_pub_node, path_follower_node]
+    nav2_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare('nav2_stack'),
+                'launch',
+                'nav2.launch.py'
+            ])
+        ),
+        launch_arguments={'robot_frame': robot_frame}.items()
+    )
+
+    nodes = [pose_pub_node, path_follower_node, nav2_launch]
 
     # only run EKF when not using ground truth
     if not is_opti:
@@ -56,26 +91,13 @@ def launch_setup(context):
         )
         nodes.append(robot_localization_node)
 
-
     return nodes
 
 
 def generate_launch_description():
-
-    nav2_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([
-                FindPackageShare('nav2_stack'),
-                'launch',
-                'nav2.launch.py'
-            ])
-        )
-    )
-
     return LaunchDescription([
-        DeclareLaunchArgument('use_opti', default_value='true'),
-        DeclareLaunchArgument('pose_csv', default_value='pose.csv'),
+        DeclareLaunchArgument('use_opti',    default_value='true'),
+        DeclareLaunchArgument('pose_csv',    default_value='pose.csv'),
+        DeclareLaunchArgument('rover_type',  default_value='fit_rosey'),
         OpaqueFunction(function=launch_setup),
-        nav2_launch,
     ])
-
