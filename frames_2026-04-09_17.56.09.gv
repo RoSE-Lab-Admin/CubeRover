@@ -1,0 +1,8 @@
+digraph G {
+"map" -> "odom"[label=" Broadcaster: default_authority\nAverage rate: 10000.0\nBuffer length: 0.0\nMost recent transform: 0.0\nOldest transform: 0.0\n"];
+"world" -> "CubeRover_V1"[label=" Broadcaster: default_authority\nAverage rate: 119.599\nBuffer length: 5.017\nMost recent transform: 1775778969.128595\nOldest transform: 1775778964.111841\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1775778969.1358004"[ shape=plaintext ] ;
+}->"world";
+}
