@@ -49,7 +49,7 @@ def launch_setup(context):
         parameters=[{
             'csv_file': csv_file,
             'num_waypoints': 100.0,
-            'use_sim_time': False
+            'use_sim_time': True
         }]
     )
 
@@ -57,7 +57,7 @@ def launch_setup(context):
         package='nav2_stack',
         executable='path_follower',
         parameters=[{
-            'use_sim_time': False,
+            'use_sim_time': True,
             'use_opti':     is_opti,
             'opti_topic':   opti_topic,
             'robot_frame':  robot_frame,
@@ -87,7 +87,7 @@ def launch_setup(context):
             executable='ekf_node',
             name='ekf_filter_node',
             output='screen',
-            parameters=[ekf_params, {'use_sim_time': False}],
+            parameters=[ekf_params, {'use_sim_time': True}],
         )
         nodes.append(robot_localization_node)
 

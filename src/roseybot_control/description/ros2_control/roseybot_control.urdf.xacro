@@ -12,21 +12,27 @@
         </joint>
     </xacro:macro>
 
+    <!-- Already set by roseybot_sim.urdf.xacro (true) when building for Gazebo;
+         defaults to false here so real-hardware builds keep using the Teensy plugin. -->
+    <xacro:arg name="use_sim" default="false"/>
+
     <ros2_control name="roseybot_teensy" type="system">
 
-        <hardware>
-          <plugin>roseybot_arduino/RoseyBotSystemHardware</plugin>
-          <param name="baud">115200</param>
-          <param name="timeout_ms">150</param>
-          <param name="device">/dev/ttyTeensy</param>
-          <param name="enc/rev">5281.1</param>
-        </hardware>
+        <xacro:if value="$(arg use_sim)">
+          <hardware>
+            <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+          </hardware>
+        </xacro:if>
+        <xacro:unless value="$(arg use_sim)">
+          <hardware>
+            <plugin>roseybot_arduino/RoseyBotSystemHardware</plugin>
+            <param name="baud">115200</param>
+            <param name="timeout_ms">150</param>
+            <param name="device">/dev/ttyTeensy</param>
+            <param name="enc/rev">5281.1</param>
+          </hardware>
+        </xacro:unless>
 
-        <!-- <hardware>
-          <plugin>mock_components/GenericSystem</plugin>
-          <param name="calculate_dynamics">true</param>
-        </hardware> -->
-      
         <xacro:connect_joint prefix="front_left"/>
         <xacro:connect_joint prefix="back_left"/>
         <xacro:connect_joint prefix="front_right"/>

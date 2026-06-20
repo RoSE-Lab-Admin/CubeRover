@@ -34,7 +34,7 @@ def launch_setup(context):
         output='screen',
         parameters=[{
             'yaml_filename': map_config,
-            'use_sim_time': False
+            'use_sim_time': True
         }]
     )
 
@@ -44,7 +44,7 @@ def launch_setup(context):
         name='lifecycle_manager_navigation',
         output='screen',
         parameters=[{
-            'use_sim_time': False,
+            'use_sim_time': True,
             'autostart': True,
             'node_names': ['map_server', 'planner_server', 'controller_server',
                            'behavior_server', 'bt_navigator',
@@ -58,7 +58,7 @@ def launch_setup(context):
         name='planner_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False,
+            'use_sim_time': True,
             'robot_base_frame': robot_frame,
         }]
     )
@@ -69,7 +69,7 @@ def launch_setup(context):
         name='controller_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False,
+            'use_sim_time': True,
             'robot_base_frame': robot_frame,
         }]
     )
@@ -80,7 +80,7 @@ def launch_setup(context):
         name='behavior_server',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False,
+            'use_sim_time': True,
             'robot_base_frame': robot_frame,
         }]
     )
@@ -91,7 +91,7 @@ def launch_setup(context):
         name='bt_navigator',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False,
+            'use_sim_time': True,
             'robot_base_frame': robot_frame,
             'default_nav_to_pose_bt_xml': bt_xml,
             'default_nav_through_poses_bt_xml': bt_xml
@@ -104,7 +104,7 @@ def launch_setup(context):
         name='waypoint_follower',
         output='screen',
         parameters=[nav2_config, {
-            'use_sim_time': False,
+            'use_sim_time': True,
         }]
     )
 
@@ -114,14 +114,16 @@ def launch_setup(context):
         package='tf2_ros',
         executable='static_transform_publisher',
         name='map_to_odom_tf',
-        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
+        arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom'],
+        parameters=[{'use_sim_time': True}]
     )
 
     world_to_map_tf = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='world_to_map_tf',
-        arguments=['0', '0', '0', '0', '0', '0', 'world', 'map']
+        arguments=['0', '0', '0', '0', '0', '0', 'world', 'map'],
+        parameters=[{'use_sim_time': True}]
     )
 
     return [
