@@ -20,7 +20,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: false
-    controller_frequency: 20.0 # previously 10
+    controller_frequency: 15.0 # previously 10
     costmap_update_timeout: 0.3 # timeout value for costmap to be updated
     use_realtime_priority: false # adds real time prioritization to controller server, will set as higher priority
     publish_zero_velocity: true # whether to publish zero vel command on goal exit
@@ -54,13 +54,13 @@ controller_server:
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
       time_steps: 56
-      model_dt: 0.05 # should match roseybot_control frequency # previously 0.1 when roseybot_control frequency = 10 (hz)
-      batch_size: 2000
+      model_dt: 0.0666666666666667 # should match roseybot_control frequency # previously 0.1 when roseybot_control frequency = 10 (hz)
+      batch_size: 10000
       vx_std: 0.35 # speed standard deviations
       wz_std: 0.5
       vx_max: 0.25 # max/min speeds # previously 0.4
       vx_min: -0.25 # previously -0.4
-      wz_max: 2.0 # # previously 5
+      wz_max: 5.0 # # previously 5
       ax_max: 2.0 # max/min accelerations
       ax_min: -2.0
       az_max: 7.0
@@ -118,7 +118,7 @@ controller_server:
         offset_from_furthest: 20 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
       PathAngleCritic: # penalizes heading misalignment with the planned path to reduce S-curves
         enabled: true
-        cost_weight: 2.0
+        cost_weight: 10.0
         cost_power: 1
         threshold_to_consider: 0.5 # only active when further than this distance from goal (m)
         offset_from_furthest: 4    # path points ahead of furthest reached point to measure angle from
