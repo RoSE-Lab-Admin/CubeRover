@@ -57,10 +57,10 @@ controller_server:
       model_dt: 0.0666666666666667 # should match roseybot_control frequency # previously 0.1 when roseybot_control frequency = 10 (hz)
       batch_size: 10000
       vx_std: 0.35 # speed standard deviations
-      wz_std: 0.5
+      wz_std: 0.3
       vx_max: 0.25 # max/min speeds # previously 0.4
       vx_min: -0.25 # previously -0.4
-      wz_max: 5.0 # # previously 5
+      wz_max: 0.635 # # previously 5
       ax_max: 2.0 # max/min accelerations
       ax_min: -2.0
       az_max: 7.0
