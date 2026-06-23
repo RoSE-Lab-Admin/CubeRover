@@ -56,8 +56,6 @@ class PathFollower(Node):
         self.started = False
         self.finished = False
         self.rec_pose = False
-        self.calc_orien = False
-        self.got_orien = False
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -66,11 +64,7 @@ class PathFollower(Node):
     def waypoint_callback(self, trajectory):
         # path message with list of posestamped waypoints
         self.point_path = trajectory.poses
-        # self.waypoints = trajectory.poses
-
-        if not self.calc_orien and self.got_orien:
-            self.orientation_calc()
-            self.calc_orien = True
+        self.waypoints = trajectory.poses
 
     def arc_arrival_heading(self, x0, y0, theta0, x1, y1):
         # find the unique circular arc from (x0,y0,theta0) through (x1,y1)
@@ -141,11 +135,6 @@ class PathFollower(Node):
         odom.header.frame_id = 'odom'
         odom.child_frame_id = self.robot_frame
         odom.pose.pose = msg.pose
-
-        if not self.got_orien:
-            self.first_orien = msg.pose.orientation
-            self.first_pos = msg.pose.position
-            self.got_orien = True
 
         # calculate a rough linear and angular velocity
         if len(self.prev_poses) < 5:
