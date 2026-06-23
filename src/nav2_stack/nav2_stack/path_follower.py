@@ -51,6 +51,7 @@ class PathFollower(Node):
         self.nav = BasicNavigator()
 
         self.waypoints = []
+        self.point_path = []
 
         # state trackers
         self.nav2_ready = False
