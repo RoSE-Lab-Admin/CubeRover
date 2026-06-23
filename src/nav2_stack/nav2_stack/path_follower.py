@@ -11,6 +11,7 @@ from tf2_ros import TransformBroadcaster
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
 from collections import deque
+import copy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import time, signal
@@ -56,6 +57,9 @@ class PathFollower(Node):
         self.started = False
         self.finished = False
         self.rec_pose = False
+        self.current_wp_idx = 0
+        self.last_goal_time = None
+        self.goal_replan_interval = 2.0  # seconds between goal orientation updates
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -226,16 +230,36 @@ class PathFollower(Node):
         self.nav._waitForNodeToActivate('bt_navigator')
         self.nav2_ready = True
 
+    def _issue_goal(self):
+        wp = copy.deepcopy(self.point_path[self.current_wp_idx])
+
+        if self.use_opti and len(self.prev_poses) > 0:
+            cur = self.prev_poses[-1]
+            q = cur.pose.orientation
+            theta = R.from_quat([q.x, q.y, q.z, q.w]).as_euler('xyz')[2]
+            heading = self.arc_arrival_heading(
+                cur.pose.position.x, cur.pose.position.y, theta,
+                wp.pose.position.x, wp.pose.position.y
+            )
+            q_new = R.from_euler('z', heading).as_quat()
+            wp.pose.orientation.x = float(q_new[0])
+            wp.pose.orientation.y = float(q_new[1])
+            wp.pose.orientation.z = float(q_new[2])
+            wp.pose.orientation.w = float(q_new[3])
+
+        self.last_goal_time = self.get_clock().now()
+        self.nav.goToPose(wp)
+
     def follow_waypoints(self):
 
         # if no path received yet
-        if len(self.waypoints) == 0:
+        if len(self.point_path) == 0:
             return
 
         # wait for nav2 to initialize
         if not self.nav2_ready:
             return
-        
+
         if self.finished:
             return
 
@@ -244,28 +268,38 @@ class PathFollower(Node):
             if self.use_opti and not self.rec_pose:
                 self.get_logger().info("waiting to receive OptiTrack pose before beginning trajectory")
                 return
-            self.nav.followWaypoints(self.waypoints)
+            self.current_wp_idx = 0
+            self._issue_goal()
             self.started = True
             return
 
-        # check to see if task has completed
+        # periodically re-issue goal with orientation recomputed from current pose
         if not self.nav.isTaskComplete():
+            now = self.get_clock().now()
+            elapsed = (now - self.last_goal_time).nanoseconds / 1e9
+            if elapsed > self.goal_replan_interval:
+                self._issue_goal()
             return
 
         result = self.nav.getResult()
 
-        # reset 
-        self.started = False
-
-        if result == TaskResult.SUCCEEDED:
-            self.get_logger().info("trajectory completed")
-
-        elif result == TaskResult.CANCELED:
+        if result == TaskResult.CANCELED:
             self.get_logger().info("trajectory cancelled")
+            self.started = False
+            self.finished = True
+            self.stop_nav()
+            return
 
-        self.finished = True
+        # advance to next waypoint
+        self.current_wp_idx += 1
+        if self.current_wp_idx >= len(self.point_path):
+            self.get_logger().info("trajectory completed")
+            self.started = False
+            self.finished = True
+            self.stop_nav()
+            return
 
-        self.stop_nav()
+        self._issue_goal()
 
 
     def stop_nav(self):
