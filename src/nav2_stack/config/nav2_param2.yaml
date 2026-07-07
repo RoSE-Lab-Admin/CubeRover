@@ -1,6 +1,6 @@
 bt_navigator:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     global_frame: world
     robot_base_frame: CubeRover_V1
     odom_topic: /odometry/filtered
@@ -154,7 +154,7 @@ planner_server:
       analytic_expansion_max_cost_ovveride: false # for hybrid/lattice nodes: whether or not to overrid max cost setting if w/i critical dist to goaL
       minimum_turning_radius: 0.40 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
       motion_model_for_search: "REEDS_SHEPP"
-      non_straight_penalty: 2.5 # heuristic penalty to apply to SE2 node if searching in a non straight direction
+      non_straight_penalty: 4.0 # heuristic penalty to apply to SE2 node if searching in a non straight direction
       cost_penalty: 5.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality
       lookup_table_size: 20.0
