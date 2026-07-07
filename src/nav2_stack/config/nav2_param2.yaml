@@ -98,7 +98,7 @@ controller_server:
         collision_margin_distance: 0.10 # margin distance from collision to apply severe penality
         near_goal_distance: 0.50 # distance near goal to stop applying preferential obstacle term
         cost_scaling_factor: 10.0 # exponential decay factor across inflation radius
-        inflation_radius: 0.55 # radius to inflate costmap around lethal obstacles
+        inflation_radius: 0.75 # radius to inflate costmap around lethal obstacles
         inflation_layer_name: ""
       CostCritic: # incentivizes navigating away from obstacles using costmap values
         enabled: true
@@ -191,8 +191,8 @@ local_costmap:
         map_subscribe_transient_local: true
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.58 #maybe try 3.0
-        inflation_radius: 0.50 # make robot length/2
+        cost_scaling_factor: 2.58
+        inflation_radius: 0.75
       transform_tolerance: 1.0
       always_send_full_costmap: false
       track_unknown_space: false
@@ -215,7 +215,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 2.58
-        inflation_radius: 0.50
+        inflation_radius: 0.75
       always_send_full_costmap: false
 
 behavior_server:
