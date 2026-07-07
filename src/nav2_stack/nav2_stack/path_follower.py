@@ -60,7 +60,9 @@ class PathFollower(Node):
         self.rec_pose = False
         self.current_wp_idx = 0
         self.last_goal_time = None
-        self.goal_replan_interval = 2.0  # seconds between goal orientation updates
+        self.last_issued_heading = None
+        self.goal_replan_interval = 2.0      # seconds between orientation checks
+        self.heading_update_threshold = 0.26  # ~15 degrees: only re-issue if heading changed more than this
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -231,23 +233,28 @@ class PathFollower(Node):
         self.nav._waitForNodeToActivate('bt_navigator')
         self.nav2_ready = True
 
+    def _arc_heading(self):
+        if not self.use_opti or len(self.prev_poses) == 0:
+            return None
+        wp = self.point_path[self.current_wp_idx]
+        cur = self.prev_poses[-1]
+        q = cur.pose.orientation
+        theta = R.from_quat([q.x, q.y, q.z, q.w]).as_euler('xyz')[2]
+        return self.arc_arrival_heading(
+            cur.pose.position.x, cur.pose.position.y, theta,
+            wp.pose.position.x, wp.pose.position.y
+        )
+
     def _issue_goal(self):
         wp = copy.deepcopy(self.point_path[self.current_wp_idx])
-
-        if self.use_opti and len(self.prev_poses) > 0:
-            cur = self.prev_poses[-1]
-            q = cur.pose.orientation
-            theta = R.from_quat([q.x, q.y, q.z, q.w]).as_euler('xyz')[2]
-            heading = self.arc_arrival_heading(
-                cur.pose.position.x, cur.pose.position.y, theta,
-                wp.pose.position.x, wp.pose.position.y
-            )
+        heading = self._arc_heading()
+        if heading is not None:
             q_new = R.from_euler('z', heading).as_quat()
             wp.pose.orientation.x = float(q_new[0])
             wp.pose.orientation.y = float(q_new[1])
             wp.pose.orientation.z = float(q_new[2])
             wp.pose.orientation.w = float(q_new[3])
-
+        self.last_issued_heading = heading
         self.last_goal_time = self.get_clock().now()
         self.nav.goToPose(wp)
 
@@ -274,12 +281,21 @@ class PathFollower(Node):
             self.started = True
             return
 
-        # periodically re-issue goal with orientation recomputed from current pose
         if not self.nav.isTaskComplete():
             now = self.get_clock().now()
             elapsed = (now - self.last_goal_time).nanoseconds / 1e9
             if elapsed > self.goal_replan_interval:
-                self._issue_goal()
+                # only re-issue if the arc heading has shifted significantly
+                new_heading = self._arc_heading()
+                if new_heading is not None and self.last_issued_heading is not None:
+                    diff = abs(np.arctan2(np.sin(new_heading - self.last_issued_heading),
+                                         np.cos(new_heading - self.last_issued_heading)))
+                    if diff > self.heading_update_threshold:
+                        self._issue_goal()
+                    else:
+                        self.last_goal_time = self.get_clock().now()  # reset timer, skip re-issue
+                else:
+                    self._issue_goal()
             return
 
         result = self.nav.getResult()
