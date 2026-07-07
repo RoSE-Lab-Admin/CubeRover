@@ -150,12 +150,12 @@ planner_server:
       max_planning_time: 5.0 # max planning time in seconds
       analytic_expansion_ratio:  3.5 # planner will attempt to complete an analytic expansions in a frequency proportional to this value and the min heuristic
       analytic_expansion_max_length: 3.0 # if the length is too far reject the expansion
-      analytic_expansion_max_cost: 200.0 # for hybrid/lattice nodes: max cost for any part of an analytic expansion to contain and be considered valid
+      analytic_expansion_max_cost: 50.0 # for hybrid/lattice nodes: max cost for any part of an analytic expansion to contain and be considered valid
       analytic_expansion_max_cost_ovveride: false # for hybrid/lattice nodes: whether or not to overrid max cost setting if w/i critical dist to goaL
       minimum_turning_radius: 0.40 # min turning radius of path in m (must be >= vx_max/wz_max = 0.3/0.635 ≈ 0.47)
       motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 2.5 # heuristic penalty to apply to SE2 node if searching in a non straight direction
-      cost_penalty: 2.0 # heuristic penalty to apply to SE2 node for cost at pose
+      cost_penalty: 5.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality
       lookup_table_size: 20.0
       debug_visualizations: true # whether to publish expansions on the /expansions topic as an array of poses and the paths footprints on the /planned_footprints
