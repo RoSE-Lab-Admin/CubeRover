@@ -48,7 +48,7 @@ PLANNER_ID   = 'GridBased'
 POSE_TOPIC    = '/FitRosey_V1/pose'
 N_REF_POINTS  = 150   # uniform reference grid used for Cohn ALC integration
 MAX_PATH_PTS  = 80    # downsample long paths to this count before ALC
-MAX_TRAIN_PTS = 8000  # cap training set size for GP speed
+DOWNSAMPLE_FACTOR = 100  # keep every Nth pose sample from bags
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,12 +89,9 @@ def load_bags(bag_dir: Path):
     X = np.array(X_list, dtype=float)
     z = np.array(z_list, dtype=float)
 
-    if len(X) > MAX_TRAIN_PTS:
-        idx = np.random.choice(len(X), MAX_TRAIN_PTS, replace=False)
-        X, z = X[idx], z[idx]
-        print(f'  subsampled to {MAX_TRAIN_PTS} points')
-
-    print(f'  {len(X)} training points total')
+    idx = np.arange(0, len(X), DOWNSAMPLE_FACTOR)
+    X, z = X[idx], z[idx]
+    print(f'  downsampled by {DOWNSAMPLE_FACTOR}x → {len(X)} training points total')
     return X, z
 
 
