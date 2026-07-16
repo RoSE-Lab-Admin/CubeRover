@@ -23,8 +23,8 @@ class PathFollower(Node):
 
         # parameters
         self.declare_parameter('use_opti', True)
-        self.declare_parameter('opti_topic', '/CubeRover_V1/pose')
-        self.declare_parameter('robot_frame', 'CubeRover_V1')
+        self.declare_parameter('opti_topic', '/FitRosey_V1/pose')
+        self.declare_parameter('robot_frame', 'FitRosey_V1')
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
