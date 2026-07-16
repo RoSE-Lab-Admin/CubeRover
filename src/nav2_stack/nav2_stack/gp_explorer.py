@@ -48,7 +48,7 @@ PLANNER_ID   = 'GridBased'
 POSE_TOPIC    = '/FitRosey_V1/pose'
 N_REF_POINTS  = 150   # uniform reference grid used for Cohn ALC integration
 MAX_PATH_PTS  = 80    # downsample long paths to this count before ALC
-DOWNSAMPLE_FACTOR = 100  # keep every Nth pose sample from bags
+DOWNSAMPLE_FACTOR = 20  # keep every Nth pose sample from bags
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -333,6 +333,9 @@ def main():
 
     node.destroy_node()
     rclpy.shutdown()
+
+    # ── 4. ALC summary ────────────────────────────────────────────────────────
+    print(f'\n[4/5] Cohn ALC evaluated for {len(goals)} of {len(candidates)} paths.')
 
     # ── 5. Report ─────────────────────────────────────────────────────────────
     if not goals:
