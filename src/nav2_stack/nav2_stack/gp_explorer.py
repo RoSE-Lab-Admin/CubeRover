@@ -178,15 +178,15 @@ def read_pgm(path: Path) -> np.ndarray:
     return data
 
 
-def build_free_mask(pgm_path: Path) -> np.ndarray:
+def build_free_mask(pgm_path: Path, clearance_m: float = INFLATION) -> np.ndarray:
     """
-    Return boolean (H,W) mask: True = navigable (free AND outside inflation zone).
-    Pixel < 128 = occupied; inflate by INFLATION metres via distance transform.
+    Return boolean (H,W) mask: True = cells at least clearance_m from any obstacle.
+    Pixel < 128 = occupied.
     """
     img      = read_pgm(pgm_path)
     occupied = img < 128
     dist_px  = distance_transform_edt(~occupied)
-    return dist_px >= (INFLATION / MAP_RES)
+    return dist_px >= (clearance_m / MAP_RES)
 
 
 def pixel_to_world(col: int, row: int, H: int):
@@ -345,11 +345,21 @@ def main():
     parser.add_argument('--map',
                         default=Path(__file__).resolve().parent.parent / 'maps' / 'map.pgm',
                         type=Path, help='Path to map.pgm')
-    parser.add_argument('--n-samples', default=500, type=int,
+    parser.add_argument('--n-samples',     default=500,  type=int,
                         help='Number of candidate goals to evaluate')
-    parser.add_argument('--min-dist',  default=2.5, type=float,
+    parser.add_argument('--min-dist',      default=2.5,  type=float,
                         help='Minimum distance from current pose to any candidate (m)')
+    parser.add_argument('--min-clearance', default=1.0,  type=float,
+                        help='Minimum clearance from any obstacle for candidate goals (m); '
+                             'must be >= inflation_radius (0.75 m)')
+    parser.add_argument('--name',          required=True, type=str,
+                        help='Run name — saved as <bag-dir>/<name>_path.csv')
     args = parser.parse_args()
+
+    if args.min_clearance < INFLATION:
+        print(f'[warn] --min-clearance {args.min_clearance} m is less than '
+              f'inflation_radius {INFLATION} m; raising to {INFLATION} m')
+        args.min_clearance = INFLATION
 
     # ── 1. Train GP ───────────────────────────────────────────────────────────
     print('\n[1/5] Loading bags and training GP …')
@@ -363,16 +373,17 @@ def main():
     cx, cy, cyaw = node.get_current_pose()
     current_xy = np.array([cx, cy])
 
-    free_mask  = build_free_mask(args.map)
-    candidates = sample_candidates(free_mask, current_xy, cyaw,
-                                   args.n_samples, args.min_dist)
-    X_ref = reference_grid(free_mask, N_REF_POINTS)
+    sample_mask = build_free_mask(args.map, args.min_clearance)
+    ref_mask    = build_free_mask(args.map, INFLATION)
+    candidates  = sample_candidates(sample_mask, current_xy, cyaw,
+                                    args.n_samples, args.min_dist)
+    X_ref = reference_grid(ref_mask, N_REF_POINTS)
     print(f'  {len(candidates)} candidates, {len(X_ref)} reference points')
 
     # ── 3. Plan paths ─────────────────────────────────────────────────────────
     print('\n[3/5] Planning paths via Nav2 …')
 
-    scores, goals = [], []
+    scores, goals, paths = [], [], []
 
     for i, (gx, gy) in enumerate(candidates):
         pts = node.compute_path(cx, cy, gx, gy)
@@ -394,6 +405,7 @@ def main():
         score = alc / length
         scores.append(score)
         goals.append((gx, gy))
+        paths.append(pts)          # store full path for later saving
 
         if (i + 1) % 20 == 0 or i == len(candidates) - 1:
             print(f'  [{i+1}/{len(candidates)}]  valid paths: {len(goals)}'
@@ -411,14 +423,23 @@ def main():
         print('\n[5/5] No valid path found for any candidate.')
         sys.exit(1)
 
-    best  = int(np.argmax(scores))
+    best   = int(np.argmax(scores))
     bx, by = goals[best]
+
+    # save best planned path as CSV
+    out_path = args.bag_dir / f'{args.name}_path.csv'
+    best_pts = paths[best]
+    with open(out_path, 'w') as f:
+        f.write('x,y\n')
+        for px, py in best_pts:
+            f.write(f'{px:.6f},{py:.6f}\n')
 
     print(f'\n[5/5] Best exploration goal:')
     print(f'  x = {bx:.4f}')
     print(f'  y = {by:.4f}')
     print(f'  ALC / distance score = {scores[best]:.6f}')
     print(f'  ({len(goals)} of {len(candidates)} candidates had valid paths)')
+    print(f'  planned path saved → {out_path}')
 
 
 if __name__ == '__main__':
