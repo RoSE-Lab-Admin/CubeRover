@@ -51,7 +51,7 @@ POSE_TOPIC         = '/FitRosey_V1/pose'
 N_REF_POINTS       = 200   # uniform reference grid used for Cohn ALC integration
 MAX_PATH_PTS       = 100   # downsample long paths to this count before ALC
 DOWNSAMPLE_FACTOR  = 20    # keep every Nth pose sample from bags
-STATIONARY_THRESH  = 0.01  # metres — step displacement below this = stationary
+STATIONARY_THRESH  = 0.001  # metres — step displacement below this = stationary
 
 
 # ─────────────────────────────────────────────────────────────────────────────
