@@ -216,7 +216,9 @@ def sample_candidates(free_mask: np.ndarray, current_xy: np.ndarray,
         direction = np.arctan2(wy - current_xy[1], wx - current_xy[0])
         angle_diff = abs(np.arctan2(np.sin(direction - current_yaw),
                                     np.cos(direction - current_yaw)))
-        if angle_diff > np.pi / 2:
+        # reject goals in the side zones (60°–120°) where sharp turns are needed;
+        # accept forward cone (≤60°) and backward cone (≥120°)
+        if np.deg2rad(60) < angle_diff < np.deg2rad(120):
             continue
         out.append([wx, wy])
         if len(out) == n:
