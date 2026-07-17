@@ -46,8 +46,8 @@ PLANNER_ID   = 'GridBased'
 
 # ── Internal constants ────────────────────────────────────────────────────────
 POSE_TOPIC    = '/FitRosey_V1/pose'
-N_REF_POINTS  = 150   # uniform reference grid used for Cohn ALC integration
-MAX_PATH_PTS  = 80    # downsample long paths to this count before ALC
+N_REF_POINTS  = 200   # uniform reference grid used for Cohn ALC integration
+MAX_PATH_PTS  = 100    # downsample long paths to this count before ALC
 DOWNSAMPLE_FACTOR = 20  # keep every Nth pose sample from bags
 
 
@@ -277,9 +277,9 @@ def main():
     parser.add_argument('--map',
                         default=Path(__file__).resolve().parent.parent / 'maps' / 'map.pgm',
                         type=Path, help='Path to map.pgm')
-    parser.add_argument('--n-samples', default=200, type=int,
+    parser.add_argument('--n-samples', default=500, type=int,
                         help='Number of candidate goals to evaluate')
-    parser.add_argument('--min-dist',  default=1.0, type=float,
+    parser.add_argument('--min-dist',  default=2.5, type=float,
                         help='Minimum distance from current pose to any candidate (m)')
     args = parser.parse_args()
 
