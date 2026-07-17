@@ -26,8 +26,10 @@ import numpy as np
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import ComputePathToPose
 from scipy.ndimage import distance_transform_edt
+from scipy.spatial.transform import Rotation
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, WhiteKernel
 from rosbags.rosbag2 import Reader
@@ -45,20 +47,42 @@ GLOBAL_FRAME = 'world'
 PLANNER_ID   = 'GridBased'
 
 # ── Internal constants ────────────────────────────────────────────────────────
-POSE_TOPIC    = '/FitRosey_V1/pose'
-N_REF_POINTS  = 200   # uniform reference grid used for Cohn ALC integration
-MAX_PATH_PTS  = 100    # downsample long paths to this count before ALC
-DOWNSAMPLE_FACTOR = 20  # keep every Nth pose sample from bags
+POSE_TOPIC         = '/FitRosey_V1/pose'
+N_REF_POINTS       = 200   # uniform reference grid used for Cohn ALC integration
+MAX_PATH_PTS       = 100   # downsample long paths to this count before ALC
+DOWNSAMPLE_FACTOR  = 20    # keep every Nth pose sample from bags
+STATIONARY_THRESH  = 0.01  # metres — step displacement below this = stationary
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Bag loading
 # ─────────────────────────────────────────────────────────────────────────────
 
+def trim_stationary(X: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Remove leading and trailing samples where the rover is not moving.
+    A sample is considered stationary if its displacement from the next sample
+    is below STATIONARY_THRESH. Trimming stops as soon as movement is detected.
+    """
+    if len(X) < 2:
+        return X, z
+
+    disp = np.linalg.norm(np.diff(X, axis=0), axis=1)  # (N-1,) step displacements
+    moving = np.where(disp > STATIONARY_THRESH)[0]
+
+    if len(moving) == 0:
+        return X[:0], z[:0]  # entire sequence stationary — discard
+
+    start = moving[0]
+    end   = moving[-1] + 1  # disp[i] is between X[i] and X[i+1], so include X[i+1]
+    return X[start:end + 1], z[start:end + 1]
+
+
 def load_bags(bag_dir: Path):
     """
     Read all ros2 bag directories under bag_dir and return
     X (N,2) array of (x,y) and z (N,) from /FitRosey_V1/pose.
+    Trims stationary periods at the start and end of each bag before combining.
     """
     try:
         typestore = get_typestore(Stores.ROS2_JAZZY)
@@ -73,6 +97,7 @@ def load_bags(bag_dir: Path):
     X_list, z_list = [], []
     for bag in bag_dirs:
         print(f'  reading {bag.name} …', flush=True)
+        bag_X, bag_z = [], []
         with Reader(bag) as reader:
             if POSE_TOPIC not in reader.topics:
                 print(f'    skipping — {POSE_TOPIC!r} not present')
@@ -80,14 +105,31 @@ def load_bags(bag_dir: Path):
             conns = [c for c in reader.connections if c.topic == POSE_TOPIC]
             for conn, _, rawdata in reader.messages(connections=conns):
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
-                X_list.append([msg.pose.position.x, msg.pose.position.y])
-                z_list.append(msg.pose.position.z)
+                bag_X.append([msg.pose.position.x, msg.pose.position.y])
+                bag_z.append(msg.pose.position.z)
+
+        if not bag_X:
+            continue
+
+        bag_X = np.array(bag_X, dtype=float)
+        bag_z = np.array(bag_z, dtype=float)
+
+        n_raw = len(bag_X)
+        bag_X, bag_z = trim_stationary(bag_X, bag_z)
+        print(f'    {n_raw} raw → {len(bag_X)} after trimming stationary ends')
+
+        if len(bag_X) == 0:
+            print(f'    skipping — no movement detected')
+            continue
+
+        X_list.append(bag_X)
+        z_list.append(bag_z)
 
     if not X_list:
         sys.exit('[error] No pose data parsed from any bag')
 
-    X = np.array(X_list, dtype=float)
-    z = np.array(z_list, dtype=float)
+    X = np.concatenate(X_list)
+    z = np.concatenate(z_list)
 
     idx = np.arange(0, len(X), DOWNSAMPLE_FACTOR)
     X, z = X[idx], z[idx]
@@ -155,20 +197,32 @@ def pixel_to_world(col: int, row: int, H: int):
 
 
 def sample_candidates(free_mask: np.ndarray, current_xy: np.ndarray,
-                      n: int, min_dist: float) -> np.ndarray:
-    """Sample up to n world (x,y) candidates that are free and >= min_dist away."""
+                      current_yaw: float, n: int, min_dist: float) -> np.ndarray:
+    """
+    Sample up to n world (x,y) candidates that are:
+      - free (outside inflation zone)
+      - at least min_dist metres from current position
+      - within 90° of current heading (forward half-plane, for Dubins compatibility)
+    current_yaw is in radians.
+    """
     H, W = free_mask.shape
     rows, cols = np.where(free_mask)
     perm = np.random.permutation(len(rows))
     out = []
     for i in perm:
         wx, wy = pixel_to_world(cols[i], rows[i], H)
-        if np.hypot(wx - current_xy[0], wy - current_xy[1]) >= min_dist:
-            out.append([wx, wy])
-            if len(out) == n:
-                break
+        if np.hypot(wx - current_xy[0], wy - current_xy[1]) < min_dist:
+            continue
+        direction = np.arctan2(wy - current_xy[1], wx - current_xy[0])
+        angle_diff = abs(np.arctan2(np.sin(direction - current_yaw),
+                                    np.cos(direction - current_yaw)))
+        if angle_diff > np.pi / 2:
+            continue
+        out.append([wx, wy])
+        if len(out) == n:
+            break
     if not out:
-        sys.exit('[error] No valid candidates — check map path and --min-dist')
+        sys.exit('[error] No valid candidates — check map path, --min-dist, and --current-yaw')
     return np.array(out)
 
 
@@ -221,6 +275,22 @@ class GPExplorer(Node):
     def __init__(self):
         super().__init__('gp_explorer')
         self._ac = ActionClient(self, ComputePathToPose, 'compute_path_to_pose')
+        self._pose = None
+        self.create_subscription(PoseStamped, POSE_TOPIC, self._pose_cb, 10)
+
+    def _pose_cb(self, msg: PoseStamped):
+        self._pose = msg
+
+    def get_current_pose(self) -> tuple[float, float, float]:
+        """Block until one pose message arrives. Returns (x, y, yaw_rad)."""
+        print(f'  waiting for pose on {POSE_TOPIC} …', flush=True)
+        while self._pose is None:
+            rclpy.spin_once(self, timeout_sec=0.1)
+        p = self._pose.pose
+        q = p.orientation
+        yaw = Rotation.from_quat([q.x, q.y, q.z, q.w]).as_euler('xyz')[2]
+        print(f'  pose received: x={p.position.x:.3f}  y={p.position.y:.3f}  yaw={np.rad2deg(yaw):.1f}°')
+        return p.position.x, p.position.y, yaw
 
     def compute_path(self, sx: float, sy: float,
                      gx: float, gy: float) -> np.ndarray | None:
@@ -270,10 +340,6 @@ def main():
         description='Select the most informative exploration goal using GP + Cohn ALC')
     parser.add_argument('--bag-dir',   required=True, type=Path,
                         help='Directory containing ros2 bag subdirectories')
-    parser.add_argument('--current-x', required=True, type=float,
-                        help='Current rover x position (world frame)')
-    parser.add_argument('--current-y', required=True, type=float,
-                        help='Current rover y position (world frame)')
     parser.add_argument('--map',
                         default=Path(__file__).resolve().parent.parent / 'maps' / 'map.pgm',
                         type=Path, help='Path to map.pgm')
@@ -283,30 +349,31 @@ def main():
                         help='Minimum distance from current pose to any candidate (m)')
     args = parser.parse_args()
 
-    current_xy = np.array([args.current_x, args.current_y])
-
     # ── 1. Train GP ───────────────────────────────────────────────────────────
     print('\n[1/5] Loading bags and training GP …')
     X_train, z_train = load_bags(args.bag_dir)
     gp = train_gp(X_train, z_train)
 
-    # ── 2. Sample candidates ──────────────────────────────────────────────────
-    print('\n[2/5] Sampling candidate goals …')
+    # ── 2. Get current pose and sample candidates ─────────────────────────────
+    print('\n[2/5] Getting current pose and sampling candidate goals …')
+    rclpy.init()
+    node = GPExplorer()
+    cx, cy, cyaw = node.get_current_pose()
+    current_xy = np.array([cx, cy])
+
     free_mask  = build_free_mask(args.map)
-    candidates = sample_candidates(free_mask, current_xy,
+    candidates = sample_candidates(free_mask, current_xy, cyaw,
                                    args.n_samples, args.min_dist)
     X_ref = reference_grid(free_mask, N_REF_POINTS)
     print(f'  {len(candidates)} candidates, {len(X_ref)} reference points')
 
     # ── 3. Plan paths ─────────────────────────────────────────────────────────
     print('\n[3/5] Planning paths via Nav2 …')
-    rclpy.init()
-    node = GPExplorer()
 
     scores, goals = [], []
 
     for i, (gx, gy) in enumerate(candidates):
-        pts = node.compute_path(args.current_x, args.current_y, gx, gy)
+        pts = node.compute_path(cx, cy, gx, gy)
         if pts is None or len(pts) < 2:
             continue
 
