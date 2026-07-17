@@ -48,8 +48,7 @@ source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 source ~/gp_env/bin/activate
 python3 src/nav2_stack/nav2_stack/gp_explorer.py \
-    --bag-dir ~/bags \
-    --current-x <x> --current-y <y>
+    --bag-dir ~/bags
 deactivate
 ```
 
