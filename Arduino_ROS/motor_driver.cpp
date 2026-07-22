@@ -1,11 +1,12 @@
-#include <RoboClaw.h>
-#include <EEPROM.h>
 #include "motor_driver.h"
 
-#define qpps 3400     // quadrature pulses per second at max rpm
+#define MAX_QPPS 3400     // quadrature pulses per second at max rpm
 #define ADDRESS 0x80  // default roboclaw address - 128
 
-
+// Define as global variables with default fallback values
+int32_t  noise_floor_percent = 2;
+uint32_t opposite_dir_threshold_ms = 500;
+int32_t  max_velocity_percent = 75;
 
 // pointers to store reference to roboclaws on init
 extern RoboClaw *ROBOCLAW_1;
@@ -14,119 +15,167 @@ extern RoboClaw *ROBOCLAW_2;
 
 // define wheel classes to store relevant wheel info
 Wheel FL;
-Wheel BL;
 Wheel FR;
+Wheel BL;
 Wheel BR;
+
+MotorTimer FL_timer;
+MotorTimer FR_timer;
+MotorTimer BL_timer;
+MotorTimer BR_timer;
+
+// At the top of your file
+const char* FL_name = "front left";
+const char* BL_name = "back left";
+const char* FR_name = "front right";
+const char* BR_name = "back right";
+
+// Hidden internal state variables
+static bool _is_faulted = false;
+static MessageCode _current_error_code;
+static String _current_error_message;
+static uint32_t _blink_interval = 500;
+static uint32_t _last_blink_time = 0;
+static bool _led_state = false;
 
 
 // start custom function implementations
-void set_motor_speed(int motorIndex, uint32_t speed) {
-  if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(speed), speed);
-  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(speed), speed);
-  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(speed), speed);
-  else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(speed), speed);
+void set_motor_speed(int32_t motorIndex, int32_t speed) {
+  if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
+  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(speed), speed);
+  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(speed), speed);
+  else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(ADDRESS, BR.calcAccel(speed), speed);
 }
 
 
-void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed) {
+void set_motor_speeds(int32_t lSpeed, int32_t rSpeed) {
 
-  ROBOCLAW_1->SpeedM1M2(0x80, lSpeed, lSpeed);
-  ROBOCLAW_2->SpeedM1M2(0x80, rSpeed, rSpeed);
+  ROBOCLAW_1->SpeedM1M2(ADDRESS, lSpeed, rSpeed);
+  ROBOCLAW_2->SpeedM1M2(ADDRESS, lSpeed, rSpeed);
 
-  // ROBOCLAW_1->SpeedAccelM1M2(0x80, FL.calcAccel(lSpeed), lSpeed, lSpeed);
-  // ROBOCLAW_1->SpeedAccelM1M2(0x80, FR.calcAccel(rSpeed), rSpeed, rSpeed);
+  // ROBOCLAW_1->SpeedAccelM1M2(ADDRESS, FL.calcAccel(lSpeed), lSpeed, lSpeed);
+  // ROBOCLAW_1->SpeedAccelM1M2(ADDRESS, FR.calcAccel(rSpeed), rSpeed, rSpeed);
   //Serial.println(BL.calcAccel(lSpeed)); // print out accel
   FL.calcAccel(lSpeed);
   FR.calcAccel(rSpeed);
   BL.calcAccel(lSpeed);
   BR.calcAccel(rSpeed);
-  // ROBOCLAW_1->SpeedAccelM1(0x80, FL.calcAccel(lSpeed), lSpeed);
-  // ROBOCLAW_1->SpeedAccelM2(0x80, BL.calcAccel(lSpeed), lSpeed);
-  // ROBOCLAW_2->SpeedAccelM1(0x80, FR.calcAccel(rSpeed), rSpeed); 
-  // ROBOCLAW_2->SpeedAccelM2(0x80, BR.calcAccel(rSpeed), rSpeed);
+  // ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(lSpeed), lSpeed);
+  // ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(lSpeed), lSpeed);
+  // ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(rSpeed), rSpeed); 
+  // ROBOCLAW_2->SpeedAccelM2(ADDRESS, BR.calcAccel(rSpeed), rSpeed);
 
   return;
 }
 
 
 String get_telemetry() {
+  const uint16_t TELEMETRY_DATA_SIZE = 18; // IMPORTANT: If this changes, search for this variable name in other files and update there too!!
+  const uint16_t CAPTURE_ATTEMPTS = 3;
+
   // uint32_t start = millis();
-  int32_t telemetryData[14];
+
+  // Zero-initialize the entire array. If a sensor fails all attempts, 
+  // it safely reports '0' instead of random memory garbage.
+  int32_t telemetryData[TELEMETRY_DATA_SIZE] = {0};
 
   // Retrieve Encoder counts
-  uint32_t count1=0, count2=0, count3=0, count4=0;
-  for (int i = 0; i < 3; i ++) {
-    bool v1,v2; //v3,v4;
-    // uint8_t s1,s2,s3,s4;
-    // count1 = ROBOCLAW_1->ReadEncM1(0x80, &s1, &v1);
-    // count2 = ROBOCLAW_1->ReadEncM2(0x80, &s2, &v2);
-    // count3 = ROBOCLAW_2->ReadEncM1(0x80, &s3, &v3);
-    // count4 = ROBOCLAW_2->ReadEncM2(0x80, &s4, &v4);
-    v1 = ROBOCLAW_1->ReadEncoders(0x80, count1, count2);
-    v2 = ROBOCLAW_2->ReadEncoders(0x80, count3, count4);
-    if (v1 && v2) break;
+  uint32_t count1 = 0, count2 = 0, count3 = 0, count4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
+      bool v1, v2;
+      v1 = ROBOCLAW_1->ReadEncoders(ADDRESS, count1, count2);
+      v2 = ROBOCLAW_2->ReadEncoders(ADDRESS, count3, count4);
+      if (v1 && v2) break;
   }
 
-  telemetryData[0] = (int32_t)count1;
-  telemetryData[1] = (int32_t)count2;
-  telemetryData[2] = (int32_t)count3;
-  telemetryData[3] = (int32_t)count4;
+  // Note: Technically, this is an unsafe typecast. However, for 
+  // this to be an issue, the motors would need to run for a very long time
+  telemetryData[0] = (int32_t) count1;
+  telemetryData[1] = (int32_t) count2;
+  telemetryData[2] = (int32_t) count3;
+  telemetryData[3] = (int32_t) count4;
 
 
   // Retrieve Encoder velocities
-  uint32_t speed1=0, speed2=0, speed3=0, speed4=0;
-  for (int i = 0; i < 3; i++) {
-    uint8_t status5,status6,status7,status8;
+  uint32_t speed1 = 0, speed2 = 0, speed3 = 0, speed4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
+    uint8_t status5, status6, status7, status8;
     bool v1, v2, v3, v4;
-    speed1 = ROBOCLAW_1->ReadSpeedM1(0x80, &status5, &v1);
-    speed2 = ROBOCLAW_1->ReadSpeedM2(0x80, &status6, &v2);
-    speed3 = ROBOCLAW_2->ReadSpeedM1(0x80, &status7, &v3);
-    speed4 = ROBOCLAW_2->ReadSpeedM2(0x80, &status8, &v4);
+    speed1 = ROBOCLAW_1->ReadSpeedM1(ADDRESS, &status5, &v1);
+    speed2 = ROBOCLAW_1->ReadSpeedM2(ADDRESS, &status6, &v2);
+    speed3 = ROBOCLAW_2->ReadSpeedM1(ADDRESS, &status7, &v3);
+    speed4 = ROBOCLAW_2->ReadSpeedM2(ADDRESS, &status8, &v4);
     if (v1 && v2 && v3 && v4) break;
   }
 
-  safety_check(FL.velocity(), speed1);
-  safety_check(BL.velocity(), speed2);
-  safety_check(FR.velocity(), speed3);
-  safety_check(BR.velocity(), speed4);
+  // Note: Technically, an unsafe typecast
+  // Speed should always always be below the max value for a signed integer though (~2 billion).
+  int32_t FL_speed = (int32_t) speed1;
+  int32_t BL_speed = (int32_t) speed2;
+  int32_t FR_speed = (int32_t) speed3;
+  int32_t BR_speed = (int32_t) speed4;
 
-  telemetryData[4] = (int32_t)speed1;
-  telemetryData[5] = (int32_t)speed2;
-  telemetryData[6] = (int32_t)speed3;
-  telemetryData[7] = (int32_t)speed4;
+  safety_check(FL.velocity(), FL_speed, FL_timer, FL_name);
+  safety_check(BL.velocity(), BL_speed, BL_timer, BL_name);
+  safety_check(FR.velocity(), FR_speed, FR_timer, FR_name);
+  safety_check(BR.velocity(), BR_speed, BR_timer, BR_name);
+
+  telemetryData[4] = FL_speed;
+  telemetryData[5] = BL_speed;
+  telemetryData[6] = FR_speed;
+  telemetryData[7] = BR_speed;
 
 
   // Read Currents
-  int16_t c1, c2, c3, c4;
-  for (size_t i = 0; i < 3; i++) {
+  int16_t c1 = 0, c2 = 0, c3 = 0, c4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool rc1cval, rc2cval;
-    rc1cval = ROBOCLAW_1->ReadCurrents(0x80, c1, c2);
-    rc2cval = ROBOCLAW_2->ReadCurrents(0x80, c3, c4);
+    rc1cval = ROBOCLAW_1->ReadCurrents(ADDRESS, c1, c2);
+    rc2cval = ROBOCLAW_2->ReadCurrents(ADDRESS, c3, c4);
     if (rc1cval && rc2cval) break;
   }
-  telemetryData[8] = (int32_t)c1;
-  telemetryData[9] = (int32_t)c2;
-  telemetryData[10] = (int32_t)c3;
-  telemetryData[11] = (int32_t)c4;
+  telemetryData[8] = (int32_t) c1;
+  telemetryData[9] = (int32_t) c2;
+  telemetryData[10] = (int32_t) c3;
+  telemetryData[11] = (int32_t) c4;
+
 
   // Read battery voltages
   uint16_t v1 = 0, v2 = 0;
-  for (size_t i = 0; i < 3; i++) {
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
     bool v1val, v2val;
-    v1 = ROBOCLAW_1->ReadMainBatteryVoltage(0x80, &v1val);
-    v2 = ROBOCLAW_2->ReadMainBatteryVoltage(0x80, &v2val);
+    v1 = ROBOCLAW_1->ReadMainBatteryVoltage(ADDRESS, &v1val);
+    v2 = ROBOCLAW_2->ReadMainBatteryVoltage(ADDRESS, &v2val);
     if (v1val && v2val) break;
   }
+  telemetryData[12] = (int32_t) v1;
+  telemetryData[13] = (int32_t) v2;
 
-  telemetryData[12] = (int32_t)v1;
-  telemetryData[13] = (int32_t)v2;
+
+  // Read PWM values
+  int16_t pwm1 = 0, pwm2 = 0, pwm3 = 0, pwm4 = 0;
+  for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
+    bool pwms1val, pwms2val;
+    pwms1val = ROBOCLAW_1->ReadPWMs(ADDRESS, pwm1, pwm2);
+    pwms2val = ROBOCLAW_2->ReadPWMs(ADDRESS, pwm3, pwm4);
+    if (pwms1val && pwms2val) break;
+  }
+  telemetryData[14] = (int32_t) pwm1;
+  telemetryData[15] = (int32_t) pwm2;
+  telemetryData[16] = (int32_t) pwm3;
+  telemetryData[17] = (int32_t) pwm4;
 
 
-  //build return telemetry carrige
+  // Build return telemetry string
   String telemetry;
-  telemetry.reserve(64);
-  telemetry += 'e';
-  for (size_t i = 0; i < 14; i++) telemetry += ' ' + String(telemetryData[i]);
+  telemetry.reserve(256); // 32-bit signed integer can take up to 11 chars + 1 space = 12 per number.
+  telemetry += TELEMETRY_MESSAGE;
+  for (size_t i = 0; i < TELEMETRY_DATA_SIZE; i++) {
+    // Note: Arduino String library has overloads to handle directly appending int32_t to String
+    // The space and data MUST be added individually for the compiler to recognize these are two differnet pieces of data
+    telemetry += ' ';
+    telemetry += telemetryData[i];
+  }
   telemetry += "\r\n";
 
   // uint32_t dur = millis() - start;
@@ -137,12 +186,12 @@ String get_telemetry() {
 
 
 void encoder_reset() {
-  ROBOCLAW_1->ResetEncoders(0x80);
-  ROBOCLAW_2->ResetEncoders(0x80);
+  ROBOCLAW_1->ResetEncoders(ADDRESS);
+  ROBOCLAW_2->ResetEncoders(ADDRESS);
 }
 
 
-void pid_set(int arg1, int arg2, int arg3) {
+void pid_set(int32_t arg1, int32_t arg2, int32_t arg3) {
   float p = static_cast<float>(arg1) / 100;
   float i = static_cast<float>(arg2) / 100;
   float d = static_cast<float>(arg3) / 100;
@@ -159,37 +208,100 @@ void init_motor_controllers(RoboClaw* RC1, RoboClaw* RC2) {
   for (size_t idx = 0; idx < 3; idx++) {
     EEPROM.get(idx * sizeof(float), fsettings[idx]);
   }
-  ROBOCLAW_1->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps); // change the velocity settings
-  ROBOCLAW_1->SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
-  ROBOCLAW_2->SetM1VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
-  ROBOCLAW_2->SetM2VelocityPID(0x80, fsettings[0], fsettings[1], fsettings[2], qpps);
+  ROBOCLAW_1->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS); // change the velocity settings
+  ROBOCLAW_1->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS);
+  ROBOCLAW_2->SetM1VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS);
+  ROBOCLAW_2->SetM2VelocityPID(ADDRESS, fsettings[0], fsettings[1], fsettings[2], MAX_QPPS);
   //Serial.println("Motor PID set");
 }
 
 
-void safety_check(int setpoint, int v) {
-  if (!(setpoint * v >= 0) && setpoint != 0) {
-    Serial.println("ENCODDER ERROR! CHECK WIRE!");
-    set_motor_speeds(0, 0);
-    while (true) {
-      digitalWrite(13,HIGH);
-      delay(500);
-      digitalWrite(13,LOW);
-      delay(500);
-      Serial.println("ENCODDER ERROR! CHECK WIRE!");
-    }
+bool is_system_faulted() {
+  return _is_faulted;
+}
+
+
+void clear_system_fault() {
+  _is_faulted = false;
+  digitalWrite(13, HIGH); // Set LED back to solid on
+}
+
+
+void update_fault_led() {
+  if (!_is_faulted) return;
+  
+  uint32_t current_time = millis();
+  if (current_time - _last_blink_time >= _blink_interval) {
+    _last_blink_time = current_time;
+    _led_state = !_led_state;
+    digitalWrite(13, _led_state ? HIGH : LOW);
+  }
+}
+
+
+void enter_error_state(MessageCode msg_code, const String& message, uint32_t blink_interval_ms) {
+  set_motor_speeds(0, 0); 
+  send_message(msg_code, message);
+
+  _is_faulted = true;
+  _current_error_code = msg_code;
+  _current_error_message = message;
+  _blink_interval = blink_interval_ms;
+  _last_blink_time = millis();
+}
+
+
+void set_safety_params(int32_t noise_floor, uint32_t opp_dir_ms, int32_t max_vel_percent) {
+  noise_floor_percent = noise_floor;
+  opposite_dir_threshold_ms = opp_dir_ms;
+  max_velocity_percent = max_vel_percent;
+}
+
+
+void safety_check(int32_t setpoint, int32_t actual_vel, MotorTimer &motor_timer, const char* motor_name) {
+  // If the system is already faulted, don't keep triggering new faults
+  if (is_system_faulted()) {
+    return;
   }
 
-  if (abs(v) > qpps * 0.75) {
-    Serial.println("VELOCITY SETPOINT ERROR!");
-    set_motor_speeds(0, 0);
-    while (true) {
-      digitalWrite(13,HIGH);
-      delay(1000);
-      digitalWrite(13,LOW);
-      delay(1000);
-      Serial.println("VELOCITY SETPOINT ERROR!");
+  const int32_t NOISE_FLOOR_QPPS = (noise_floor_percent * MAX_QPPS) / 100;
+  const int32_t MAX_VEL_QPPS = (max_velocity_percent * MAX_QPPS) / 100;
+
+  // Check whether signs are opposite.
+  bool is_opposite = (setpoint > 0 && actual_vel < 0) || (setpoint < 0 && actual_vel > 0);
+
+  // Is it actually moving, or is it just sensor noise?
+  bool is_physically_moving = abs(actual_vel) > NOISE_FLOOR_QPPS;
+  if (is_opposite && is_physically_moving) {
+    motor_timer.start();
+
+    // The fault is active! Check whether time threshold exceeded.
+    if (motor_timer.hasExpired(opposite_dir_threshold_ms)) {
+      String message = "Check ";
+      message += motor_name;
+      message += " motor wires!";
+
+      // Trigger the 500ms blink loop
+      enter_error_state(MessageCode::CHECK_ENCODER, message, 500);
+
+      // Prevent instant re-trigger when the loop exits
+      motor_timer.reset();
+      return;
     }
+  } else {
+    // Motor is behaving correctly (or just experiencing tiny noise), so reset the timer
+    motor_timer.reset();
+  }
+
+  // Max allowable velocity threshold
+  if (abs(actual_vel) > MAX_VEL_QPPS) {
+    String message = "Velocity setpoint error on ";
+    message += motor_name;
+    message += " motor!";
+
+    // Trigger the 1000ms blink loop
+    enter_error_state(MessageCode::CHECK_VELOCITY, message, 1000);
+    return;
   }
 }
 
@@ -203,17 +315,17 @@ Wheel::Wheel() {
 }
 
 
-uint16_t Wheel::calcAccel(int16_t newVel){
+int32_t Wheel::calcAccel(int32_t newVel){
   uint64_t now = micros();
   double dt = (now - _last) / 1e6f;
   if (dt <= 0) dt = 1e-6;
-  uint16_t target_acl = abs(newVel - _prevVel) / dt;
+  int32_t target_acl = abs(newVel - _prevVel) / dt;
   //Serial.println(target_acl);
   _prevVel = newVel;
   _last = now;
   return target_acl;
  }  
 
-int16_t Wheel::velocity(){
+int32_t Wheel::velocity(){
   return _prevVel;
 }
