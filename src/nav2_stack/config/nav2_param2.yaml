@@ -68,6 +68,8 @@ controller_server:
       temperature: 0.3 # selectiveness of trajectories by their costs
       gamma: 0.015 # guide says you prob wont need to change
       motion_model: "DiffDrive"
+      DiffDrive:
+        half_wheel_separation: 0.1575  # physical L/2 — clamps |wz|*(L/2) <= |vx|
       visualize: true # allows you to see possible paths in rviz
       critic_index_to_visualize: 0
       regenerate_noises: false
@@ -125,14 +127,14 @@ controller_server:
         max_angle_to_furthest: 1.2 # max allowed heading error before full penalty (~70 degrees)
         mode: 0                    # 0 = use path heading at reference point
       PreferForwardCritic: # incentivizes moving in forwards direction
-        enabled: true
+        enabled: false
         cost_weight: 3.0
         cost_power: 1
         threshold_to_consider: 0.5 # distance between robot and goal to stop preferring forward and allow goal critic to take over
       VelocityDeadbandCritic: # penalizes velocities that fall below deadband threshold
         enabled: true
         cost_weight: 40.0 
-        deadband_velocities: [0.1, 0.1, 0.1] # [vx, vy, vw] - was [0.1, 0.1, 0.1]
+        deadband_velocities: [0.05, 0.0, 0.0] # [vx, vy, vw] - was [0.1, 0.1, 0.1]
 
 planner_server:
   ros__parameters:

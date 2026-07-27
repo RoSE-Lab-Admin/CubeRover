@@ -14,3 +14,4 @@ frames_*.gv
 Arduino_ROS/RoboClaw.cpp
 Arduino_ROS/RoboClaw.h
 /plotting_data/
+/nav2_mppi_controller/
