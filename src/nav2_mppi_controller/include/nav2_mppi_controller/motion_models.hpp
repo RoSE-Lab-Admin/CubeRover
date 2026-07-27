@@ -207,6 +207,22 @@ public:
   {
     return false;
   }
+
+  /**
+   * @brief Clamp wz so |wz| * half_wheel_separation <= |vx|,
+   *        preventing wheels from spinning in opposite directions.
+   */
+  void applyConstraints(models::ControlSequence & control_sequence) override
+  {
+    auto & vx = control_sequence.vx;
+    auto & wz = control_sequence.wz;
+    auto view = xt::masked_view(wz, (xt::fabs(vx) / xt::fabs(wz)) < half_wheel_separation_);
+    view = xt::sign(wz) * xt::fabs(vx) / half_wheel_separation_;
+  }
+
+private:
+  // Physical half-wheel separation for CubeRover (L/2 in meters)
+  static constexpr float half_wheel_separation_ = 0.1575f;
 };
 
 /**

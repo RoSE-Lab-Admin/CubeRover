@@ -68,8 +68,6 @@ controller_server:
       temperature: 0.3 # selectiveness of trajectories by their costs
       gamma: 0.015 # guide says you prob wont need to change
       motion_model: "DiffDrive"
-      DiffDrive:
-        half_wheel_separation: 0.1575  # physical L/2 — clamps |wz|*(L/2) <= |vx|
       visualize: true # allows you to see possible paths in rviz
       critic_index_to_visualize: 0
       regenerate_noises: false
