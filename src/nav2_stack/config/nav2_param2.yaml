@@ -89,7 +89,7 @@ controller_server:
         cost_weight: 5.0
         threshold_to_consider: 0.8 # min distance to robot and goal where goal cost considered, should be same as predeiction horizon
       ObstaclesCritic: # incentives navigating away from obstacles using distances from obstacles
-        enabled: true
+        enabled: false
         critical_weight: 20.0 # weight to apply critic for near collisions closer than collision_margin_distance
         repulsion_weight: 1.5 # weight for preferring lower cost routes
         cost_power: 1 # power order
@@ -131,8 +131,8 @@ controller_server:
         threshold_to_consider: 0.5 # distance between robot and goal to stop preferring forward and allow goal critic to take over
       VelocityDeadbandCritic: # penalizes velocities that fall below deadband threshold
         enabled: true
-        cost_weight: 100.0
-        threshold_to_consider: 0.5  # go silent within this distance of goal to allow deceleration
+        cost_weight: 80.0
+        threshold_to_consider: 0.5  # decrease weight to 50 within this distance in m to allow deceleration
         deadband_velocities: [0.1, 0.0, 0.0] # [vx, vy, vw]
 
 planner_server:
