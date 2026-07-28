@@ -209,8 +209,22 @@ public:
   }
 
   /**
-   * @brief Clamp wz so |wz| * half_wheel_separation <= |vx|,
-   *        preventing wheels from spinning in opposite directions.
+   * @brief Clamp wz during trajectory rollout so MPPI only evaluates
+   *        trajectories satisfying |wz| * L/2 <= |vx|.
+   */
+  void predict(models::State & state) override
+  {
+    MotionModel::predict(state);
+    for (unsigned int i = 0; i < state.vx.shape(0); i++) {
+      for (unsigned int j = 0; j < state.vx.shape(1); j++) {
+        float max_wz = std::abs(state.vx(i, j)) / half_wheel_separation_;
+        state.wz(i, j) = std::clamp(state.wz(i, j), -max_wz, max_wz);
+      }
+    }
+  }
+
+  /**
+   * @brief Clamp wz on the final output command (same constraint as predict).
    */
   void applyConstraints(models::ControlSequence & control_sequence) override
   {
