@@ -434,12 +434,20 @@ def main():
         for px, py in best_pts:
             f.write(f'{px:.6f},{py:.6f}\n')
 
+    pose_csv = Path(__file__).resolve().parent.parent / 'pose.csv'
+    write_header = not pose_csv.exists()
+    with open(pose_csv, 'a') as f:
+        if write_header:
+            f.write('x,y\n')
+        f.write(f'{bx:.6f},{by:.6f}\n')
+
     print(f'\n[5/5] Best exploration goal:')
     print(f'  x = {bx:.4f}')
     print(f'  y = {by:.4f}')
     print(f'  ALC / distance score = {scores[best]:.6f}')
     print(f'  ({len(goals)} of {len(candidates)} candidates had valid paths)')
     print(f'  planned path saved → {out_path}')
+    print(f'  goal pose appended → {pose_csv}')
 
 
 if __name__ == '__main__':

@@ -23,6 +23,7 @@ void VelocityDeadbandCritic::initialize()
 
   getParam(power_, "cost_power", 1);
   getParam(weight_, "cost_weight", 35.0);
+  getParam(threshold_to_consider_, "threshold_to_consider", 0.5f);
 
   // Recast double to float
   std::vector<double> deadband_velocities{0.0, 0.0, 0.0};
@@ -46,6 +47,11 @@ void VelocityDeadbandCritic::score(CriticData & data)
     return;
   }
 
+  const float dx = data.goal.position.x - data.state.pose.pose.position.x;
+  const float dy = data.goal.position.y - data.state.pose.pose.position.y;
+  const float dist_to_goal = std::sqrt(dx * dx + dy * dy);
+  const float effective_weight = (dist_to_goal < threshold_to_consider_) ? weight_ * 0.5f : weight_;
+
   auto & vx = data.state.vx;
   auto & wz = data.state.wz;
 
@@ -60,7 +66,7 @@ void VelocityDeadbandCritic::score(CriticData & data)
             xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0)) *
           data.model_dt,
           {1}, immediate) *
-        weight_,
+        effective_weight,
         power_);
     } else {
       data.costs += xt::sum(
@@ -70,7 +76,7 @@ void VelocityDeadbandCritic::score(CriticData & data)
           xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0))) *
         data.model_dt,
         {1}, immediate) *
-        weight_;
+        effective_weight;
     }
     return;
   }
@@ -83,7 +89,7 @@ void VelocityDeadbandCritic::score(CriticData & data)
           xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0)) *
         data.model_dt,
         {1}, immediate) *
-      weight_,
+      effective_weight,
       power_);
   } else {
     data.costs += xt::sum(
@@ -92,7 +98,7 @@ void VelocityDeadbandCritic::score(CriticData & data)
         xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0))) *
       data.model_dt,
       {1}, immediate) *
-      weight_;
+      effective_weight;
   }
   return;
 }

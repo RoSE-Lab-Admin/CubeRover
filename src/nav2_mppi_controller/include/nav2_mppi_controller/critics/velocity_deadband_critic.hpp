@@ -46,6 +46,7 @@ public:
 protected:
   unsigned int power_{0};
   float weight_{0};
+  float threshold_to_consider_{0.5f};
   std::vector<float> deadband_velocities_{0.0f, 0.0f, 0.0f};
 };
 
