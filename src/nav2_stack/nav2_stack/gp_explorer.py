@@ -435,11 +435,9 @@ def main():
             f.write(f'{px:.6f},{py:.6f}\n')
 
     pose_csv = Path(__file__).resolve().parent.parent / 'pose.csv'
-    write_header = not pose_csv.exists()
-    with open(pose_csv, 'a') as f:
-        if write_header:
-            f.write('x,y\n')
-        f.write(f'{bx:.6f},{by:.6f}\n')
+    with open(pose_csv, 'w') as f:
+        f.write('x,y,z\n')
+        f.write(f'{bx:.6f},{by:.6f},0.0\n')
 
     print(f'\n[5/5] Best exploration goal:')
     print(f'  x = {bx:.4f}')
