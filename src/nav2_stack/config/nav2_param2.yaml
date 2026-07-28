@@ -131,7 +131,7 @@ controller_server:
         threshold_to_consider: 0.5 # distance between robot and goal to stop preferring forward and allow goal critic to take over
       VelocityDeadbandCritic: # penalizes velocities that fall below deadband threshold
         enabled: true
-        cost_weight: 40.0 
+        cost_weight: 100.0 
         deadband_velocities: [0.1, 0.0, 0.0] # [vx, vy, vw] - was [0.1, 0.1, 0.1]
 
 planner_server:
