@@ -175,6 +175,7 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
   } while (fallback(critics_data_.fail_flag));
 
   utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
+  motion_model_->applyConstraints(control_sequence_);
   auto control = getControlFromSequenceAsTwist(plan.header.stamp);
 
   if (settings_.shift_control_sequence) {
