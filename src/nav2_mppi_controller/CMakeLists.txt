@@ -19,6 +19,10 @@ find_package(xtensor REQUIRED)
 # e.g. cmake .. -DCMAKE_PREFIX_PATH=$(conda run -n pytorch_rosbags python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
 find_package(Torch REQUIRED)
 
+# Embed libtorch's lib directory as RPATH so the installed .so finds libtorch
+# at runtime without needing LD_LIBRARY_PATH.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 include_directories(
   include
 )
