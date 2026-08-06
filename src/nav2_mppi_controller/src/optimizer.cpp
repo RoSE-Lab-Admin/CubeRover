@@ -115,6 +115,7 @@ void Optimizer::getParams()
 
   NNDynamics::Config nn_cfg;
   getParam(nn_cfg.model_path, "nn_model_path",  default_model_path);
+  getParam(nn_cfg.use_nn,     "nn_enabled",     true);
   getParam(nn_cfg.lookback,   "nn_lookback",    20);
   getParam(nn_cfg.nn_horizon, "nn_horizon",     20);
   getParam(nn_cfg.use_cuda,   "nn_use_cuda",    true);

@@ -27,6 +27,7 @@
 #include <xtensor/xview.hpp>
 #include <xtensor/xmath.hpp>
 #include <xtensor/xnoalias.hpp>
+#include <xtensor/xmanipulation.hpp>
 #pragma GCC diagnostic pop
 
 #include "rclcpp/rclcpp.hpp"
@@ -71,6 +72,7 @@ public:
     std::string model_path;  ///< absolute path to TorchScript .pt file
     int lookback{20};        ///< past command steps fed as context
     int nn_horizon{20};      ///< future steps the NN predicts
+    bool use_nn{true};       ///< false → pure kinematics regardless of model load
     bool use_cuda{true};     ///< attempt CUDA; falls back to CPU if unavailable
     // Future: std::string input_mode{"cmd_only"};
     // Future: bool online_update{false};

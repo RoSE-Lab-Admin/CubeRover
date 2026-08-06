@@ -70,6 +70,8 @@ controller_server:
       motion_model: "DiffDrive"
 
       # ── Learned NN dynamics ────────────────────────────────────────────────
+      # nn_enabled: set false to use pure unicycle kinematics (no NN correction)
+      nn_enabled:    true
       # nn_model_path: absolute path to TorchScript .pt file.
       # Leave unset to use the default installed model (mlp_small_scripted.pt).
       # To swap architecture: run scripts/export_model.py --arch <name> and

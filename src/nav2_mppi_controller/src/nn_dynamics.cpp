@@ -32,9 +32,8 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
   if (cfg_.use_cuda && torch::cuda::is_available()) {
     device_ = torch::Device(torch::kCUDA);
     RCLCPP_INFO(
-      logger_, "NNDynamics: CUDA available — using %s",
-      torch::cuda::device_count() > 0 ?
-      torch::cuda::get_device_name(0).c_str() : "GPU");
+      logger_, "NNDynamics: CUDA available — %d device(s) detected",
+      static_cast<int>(torch::cuda::device_count()));
   } else {
     device_ = torch::Device(torch::kCPU);
     if (cfg_.use_cuda) {
@@ -159,7 +158,7 @@ void NNDynamics::integrateTrajectories(
   const float s0         = std::sin(yaw0);
 
   // ── Pure-kinematics fallback ─────────────────────────────────────────────
-  if (!enabled_) {
+  if (!enabled_ || !cfg_.use_nn) {
     // Seed step 0: use MPPI-sampled command at step 0, current heading
     auto vx_0 = xt::view(state.vx, xt::all(), 0);
     auto wz_0 = xt::view(state.wz, xt::all(), 0);
@@ -190,12 +189,21 @@ void NNDynamics::integrateTrajectories(
   auto nn_wz = xt::view(state.wz, xt::all(), xt::range(0, H));
 
   // Cumulative robot-frame heading after each step: ths[k] = sum(wz[0..k])*dt
-  auto kin_rth = xt::eval(xt::cumsum(nn_wz * model_dt, {1}));    // [batch, H]
+  auto kin_rth  = xt::eval(xt::cumsum(nn_wz * model_dt, {1}));  // [batch, H]
+  auto kin_cos  = xt::eval(xt::cos(kin_rth));
+  auto kin_sin  = xt::eval(xt::sin(kin_rth));
 
-  // Heading used for position update at step k is ths[k-1] (before wz[k] is applied)
-  auto cos_prev = xt::roll(xt::eval(xt::cos(kin_rth)), 1, 1);   // shift right by 1
-  auto sin_prev = xt::roll(xt::eval(xt::sin(kin_rth)), 1, 1);
-  xt::view(cos_prev, xt::all(), 0) = 1.0f;  // cos(0) — heading at start
+  // Heading used for position update at step k is ths[k-1] (before wz[k] is applied).
+  // Equivalent to rolling kin_cos right by 1 along axis 1, then setting col 0 = 1.
+  auto cos_prev = xt::zeros<float>(kin_rth.shape());
+  auto sin_prev = xt::zeros<float>(kin_rth.shape());
+  if (H > 1) {
+    xt::view(cos_prev, xt::all(), xt::range(1, H)) =
+      xt::view(kin_cos, xt::all(), xt::range(0, H - 1));
+    xt::view(sin_prev, xt::all(), xt::range(1, H)) =
+      xt::view(kin_sin, xt::all(), xt::range(0, H - 1));
+  }
+  xt::view(cos_prev, xt::all(), 0) = 1.0f;  // cos(0) — robot starts aligned
   xt::view(sin_prev, xt::all(), 0) = 0.0f;  // sin(0)
 
   auto nn_vx_eval = xt::eval(nn_vx);
