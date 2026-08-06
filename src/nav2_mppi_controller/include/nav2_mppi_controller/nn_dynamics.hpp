@@ -18,6 +18,8 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wshadow"
 #include <torch/script.h>
+#include <torch/cuda.h>
+#include <c10/cuda/CUDAFunctions.h>
 #pragma GCC diagnostic pop
 
 #pragma GCC diagnostic push
@@ -151,7 +153,7 @@ private:
     float model_dt) const;
 
   Config cfg_;
-  torch::jit::Module module_;
+  mutable torch::jit::Module module_;  // forward() is non-const in libtorch
   torch::Device device_{torch::kCPU};
   bool enabled_{false};
   std::deque<std::pair<float, float>> cmd_history_;  ///< rolling [vx, wz] history
