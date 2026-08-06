@@ -107,7 +107,7 @@ def generate_launch_description():
         FindPackageShare('roseybot_control'),
         'bringup',
         'config',
-        'roseybot_controllers.yaml',
+        'roseybot_controllers_sim.yaml',
     ])
 
     robot_controller_spawner = Node(

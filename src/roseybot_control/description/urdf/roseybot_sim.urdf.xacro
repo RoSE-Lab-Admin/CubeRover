@@ -44,7 +44,7 @@
          and connects roseybot_control's controllers to Gazebo's joint physics -->
     <gazebo>
         <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-            <parameters>$(find roseybot_control)/bringup/config/roseybot_controllers.yaml</parameters>
+            <parameters>$(find roseybot_control)/bringup/config/roseybot_controllers_sim.yaml</parameters>
             <ros>
                 <!-- remap DiffDriveController's input to the global /cmd_vel -->
                 <remapping>/roseybot_base_controller/cmd_vel:=/cmd_vel</remapping>
