@@ -19,7 +19,6 @@
 #include <xtensor/xadapt.hpp>
 #pragma GCC diagnostic pop
 
-#include "tf2/utils.h"
 
 namespace mppi
 {
@@ -153,7 +152,11 @@ void NNDynamics::integrateTrajectories(
   const int   time_steps = static_cast<int>(state.vx.shape(1));
   const float x0         = static_cast<float>(state.pose.pose.position.x);
   const float y0         = static_cast<float>(state.pose.pose.position.y);
-  const float yaw0       = static_cast<float>(tf2::getYaw(state.pose.pose.orientation));
+  const auto & q = state.pose.pose.orientation;
+  const float yaw0 = static_cast<float>(
+    std::atan2(
+      2.0 * (q.w * q.z + q.x * q.y),
+      1.0 - 2.0 * (q.y * q.y + q.z * q.z)));
   const float c0         = std::cos(yaw0);
   const float s0         = std::sin(yaw0);
 
