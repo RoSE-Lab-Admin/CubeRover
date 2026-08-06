@@ -141,6 +141,6 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('robot_frame', default_value='CubeRover_V1'),
+        DeclareLaunchArgument('robot_frame', default_value='FitRosey_V1'),
         OpaqueFunction(function=launch_setup),
     ])

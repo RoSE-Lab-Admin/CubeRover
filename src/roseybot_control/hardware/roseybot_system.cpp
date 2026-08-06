@@ -251,7 +251,18 @@ hardware_interface::return_type RoseyBotSystemHardware::read(
 hardware_interface::return_type roseybot_arduino_interface ::RoseyBotSystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
-  
+  double & left_cmd  = wheel_map_[info_.joints[0].name]->cmd_;
+  double & right_cmd = wheel_map_[info_.joints[2].name]->cmd_;
+
+  // If the controller commands opposite-direction wheel speeds (e.g. during
+  // deceleration from a tight turn due to differential ramp rates, or when
+  // wz * half_wheel_separation > vx), stop both wheels instead of commanding
+  // a pivot turn or triggering the RoboClaw opposite-direction safety fault.
+  if (left_cmd * right_cmd < 0.0) {
+    left_cmd  = 0.0;
+    right_cmd = 0.0;
+  }
+
   comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc());
 
   return hardware_interface::return_type::OK;

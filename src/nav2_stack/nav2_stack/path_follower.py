@@ -11,6 +11,7 @@ from tf2_ros import TransformBroadcaster
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
 from collections import deque
+import copy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import time, signal
@@ -22,8 +23,8 @@ class PathFollower(Node):
 
         # parameters
         self.declare_parameter('use_opti', True)
-        self.declare_parameter('opti_topic', '/CubeRover_V1/pose')
-        self.declare_parameter('robot_frame', 'CubeRover_V1')
+        self.declare_parameter('opti_topic', '/FitRosey_V1/pose')
+        self.declare_parameter('robot_frame', 'FitRosey_V1')
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
@@ -50,14 +51,18 @@ class PathFollower(Node):
         self.nav = BasicNavigator()
 
         self.waypoints = []
+        self.point_path = []
 
         # state trackers
         self.nav2_ready = False
         self.started = False
         self.finished = False
         self.rec_pose = False
-        self.calc_orien = False
-        self.got_orien = False
+        self.current_wp_idx = 0
+        self.last_goal_time = None
+        self.last_issued_heading = None
+        self.goal_replan_interval = 2.0      # seconds between orientation checks
+        self.heading_update_threshold = 0.26  # ~15 degrees: only re-issue if heading changed more than this
 
         # poll for nav2 readiness separately so it doesn't block the control loop
         self.nav2_check_timer = self.create_timer(1.0, self.check_nav2_ready, callback_group=self.opti_group)
@@ -66,11 +71,7 @@ class PathFollower(Node):
     def waypoint_callback(self, trajectory):
         # path message with list of posestamped waypoints
         self.point_path = trajectory.poses
-        # self.waypoints = trajectory.poses
-
-        if not self.calc_orien and self.got_orien:
-            self.orientation_calc()
-            self.calc_orien = True
+        self.waypoints = trajectory.poses
 
     def arc_arrival_heading(self, x0, y0, theta0, x1, y1):
         # find the unique circular arc from (x0,y0,theta0) through (x1,y1)
@@ -141,11 +142,6 @@ class PathFollower(Node):
         odom.header.frame_id = 'odom'
         odom.child_frame_id = self.robot_frame
         odom.pose.pose = msg.pose
-
-        if not self.got_orien:
-            self.first_orien = msg.pose.orientation
-            self.first_pos = msg.pose.position
-            self.got_orien = True
 
         # calculate a rough linear and angular velocity
         if len(self.prev_poses) < 5:
@@ -237,16 +233,41 @@ class PathFollower(Node):
         self.nav._waitForNodeToActivate('bt_navigator')
         self.nav2_ready = True
 
+    def _arc_heading(self):
+        if not self.use_opti or len(self.prev_poses) == 0:
+            return None
+        wp = self.point_path[self.current_wp_idx]
+        cur = self.prev_poses[-1]
+        q = cur.pose.orientation
+        theta = R.from_quat([q.x, q.y, q.z, q.w]).as_euler('xyz')[2]
+        return self.arc_arrival_heading(
+            cur.pose.position.x, cur.pose.position.y, theta,
+            wp.pose.position.x, wp.pose.position.y
+        )
+
+    def _issue_goal(self):
+        wp = copy.deepcopy(self.point_path[self.current_wp_idx])
+        heading = self._arc_heading()
+        if heading is not None:
+            q_new = R.from_euler('z', heading).as_quat()
+            wp.pose.orientation.x = float(q_new[0])
+            wp.pose.orientation.y = float(q_new[1])
+            wp.pose.orientation.z = float(q_new[2])
+            wp.pose.orientation.w = float(q_new[3])
+        self.last_issued_heading = heading
+        self.last_goal_time = self.get_clock().now()
+        self.nav.goToPose(wp)
+
     def follow_waypoints(self):
 
         # if no path received yet
-        if len(self.waypoints) == 0:
+        if len(self.point_path) == 0:
             return
 
         # wait for nav2 to initialize
         if not self.nav2_ready:
             return
-        
+
         if self.finished:
             return
 
@@ -255,28 +276,47 @@ class PathFollower(Node):
             if self.use_opti and not self.rec_pose:
                 self.get_logger().info("waiting to receive OptiTrack pose before beginning trajectory")
                 return
-            self.nav.followWaypoints(self.waypoints)
+            self.current_wp_idx = 0
+            self._issue_goal()
             self.started = True
             return
 
-        # check to see if task has completed
         if not self.nav.isTaskComplete():
+            now = self.get_clock().now()
+            elapsed = (now - self.last_goal_time).nanoseconds / 1e9
+            if elapsed > self.goal_replan_interval:
+                # only re-issue if the arc heading has shifted significantly
+                new_heading = self._arc_heading()
+                if new_heading is not None and self.last_issued_heading is not None:
+                    diff = abs(np.arctan2(np.sin(new_heading - self.last_issued_heading),
+                                         np.cos(new_heading - self.last_issued_heading)))
+                    if diff > self.heading_update_threshold:
+                        self._issue_goal()
+                    else:
+                        self.last_goal_time = self.get_clock().now()  # reset timer, skip re-issue
+                else:
+                    self._issue_goal()
             return
 
         result = self.nav.getResult()
 
-        # reset 
-        self.started = False
-
-        if result == TaskResult.SUCCEEDED:
-            self.get_logger().info("trajectory completed")
-
-        elif result == TaskResult.CANCELED:
+        if result == TaskResult.CANCELED:
             self.get_logger().info("trajectory cancelled")
+            self.started = False
+            self.finished = True
+            self.stop_nav()
+            return
 
-        self.finished = True
+        # advance to next waypoint
+        self.current_wp_idx += 1
+        if self.current_wp_idx >= len(self.point_path):
+            self.get_logger().info("trajectory completed")
+            self.started = False
+            self.finished = True
+            self.stop_nav()
+            return
 
-        self.stop_nav()
+        self._issue_goal()
 
 
     def stop_nav(self):
