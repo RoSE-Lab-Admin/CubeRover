@@ -28,6 +28,7 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
 {
   cmd_history_.assign(cfg_.lookback, {0.0f, 0.0f});
 
+#ifdef NAV2_MPPI_WITH_CUDA
   if (cfg_.use_cuda && c10::cuda::device_count() > 0) {
     device_ = torch::Device(torch::kCUDA);
     RCLCPP_INFO(
@@ -39,6 +40,12 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
       RCLCPP_WARN(logger_, "NNDynamics: CUDA requested but not available, falling back to CPU");
     }
   }
+#else
+  device_ = torch::Device(torch::kCPU);
+  if (cfg_.use_cuda) {
+    RCLCPP_WARN(logger_, "NNDynamics: built without CUDA support, falling back to CPU");
+  }
+#endif
 
   try {
     module_ = torch::jit::load(cfg_.model_path, device_);

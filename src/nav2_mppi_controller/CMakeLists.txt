@@ -19,6 +19,14 @@ find_package(xtensor REQUIRED)
 # e.g. cmake .. -DCMAKE_PREFIX_PATH=$(conda run -n pytorch_rosbags python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
 find_package(Torch REQUIRED)
 
+# TORCH_CUDA_LIBRARIES is only populated when the linked libtorch was built with
+# CUDA support (its TorchConfig.cmake bakes the surrounding if() to 0 otherwise).
+# CPU-only libtorch ships stub c10/cuda headers that reference CUDA-toolkit-generated
+# files that don't exist without CUDA, so those headers must not be included unguarded.
+if(TORCH_CUDA_LIBRARIES)
+  add_compile_definitions(NAV2_MPPI_WITH_CUDA)
+endif()
+
 # Embed libtorch's lib directory as RPATH so the installed .so finds libtorch
 # at runtime without needing LD_LIBRARY_PATH.
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)

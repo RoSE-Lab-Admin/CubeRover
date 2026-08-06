@@ -18,8 +18,10 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wshadow"
 #include <torch/script.h>
+#ifdef NAV2_MPPI_WITH_CUDA
 #include <torch/cuda.h>
 #include <c10/cuda/CUDAFunctions.h>
+#endif
 #pragma GCC diagnostic pop
 
 #pragma GCC diagnostic push
