@@ -195,10 +195,11 @@ void NNDynamics::integrateTrajectories(
 
   // Heading used for position update at step k is ths[k-1] (before wz[k] is applied).
   // Equivalent to rolling kin_cos right by 1 along axis 1, then setting col 0 = 1.
-  // Use explicit xtensor type — xt::zeros with a shape arg returns a lazy broadcast
-  // (read-only); assigning to xt::xtensor<float,2> materialises it immediately.
-  xt::xtensor<float, 2> cos_prev = xt::zeros<float>({(std::size_t)batch_size, (std::size_t)H});
-  xt::xtensor<float, 2> sin_prev = xt::zeros<float>({(std::size_t)batch_size, (std::size_t)H});
+  // xt::eval() materialises the lazy zeros broadcast into an xarray so that
+  // subsequent slice assignments stay in dynamic-shape (svector) land and avoid
+  // the xtl static/dynamic shape conversion that triggers -Wmaybe-uninitialized.
+  auto cos_prev = xt::eval(xt::zeros<float>({(std::size_t)batch_size, (std::size_t)H}));
+  auto sin_prev = xt::eval(xt::zeros<float>({(std::size_t)batch_size, (std::size_t)H}));
   if (H > 1) {
     xt::view(cos_prev, xt::all(), xt::range(1, H)) =
       xt::view(kin_cos, xt::all(), xt::range(0, H - 1));

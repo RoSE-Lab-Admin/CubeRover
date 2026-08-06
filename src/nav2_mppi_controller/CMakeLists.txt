@@ -86,7 +86,7 @@ add_library(mppi_controller SHARED
 # nn_dynamics.cpp uses libtorch which requires IEEE-754 compliance for NaN/Inf checks.
 # Disable -ffast-math for this file only so the rest of the library keeps its optimizations.
 set_source_files_properties(src/nn_dynamics.cpp
-  PROPERTIES COMPILE_FLAGS "-fno-fast-math"
+  PROPERTIES COMPILE_FLAGS "-fno-fast-math -Wno-maybe-uninitialized"
 )
 
 add_library(mppi_critics SHARED
