@@ -68,6 +68,16 @@ controller_server:
       temperature: 0.3 # selectiveness of trajectories by their costs
       gamma: 0.015 # guide says you prob wont need to change
       motion_model: "DiffDrive"
+
+      # ── Learned NN dynamics ────────────────────────────────────────────────
+      # nn_model_path: absolute path to TorchScript .pt file.
+      # Leave unset to use the default installed model (mlp_small_scripted.pt).
+      # To swap architecture: run scripts/export_model.py --arch <name> and
+      # point nn_model_path to the new file.
+      #nn_model_path: "/path/to/custom_model_scripted.pt"
+      nn_lookback:   20      # past command steps fed as context  (must match training LOOKBACK)
+      nn_horizon:    20      # future steps the NN corrects       (must match training HORIZON)
+      nn_use_cuda:   true    # use GPU if available
       visualize: true # allows you to see possible paths in rviz
       critic_index_to_visualize: 0
       regenerate_noises: false

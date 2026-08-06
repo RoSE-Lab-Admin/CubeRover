@@ -24,6 +24,8 @@
 #include <xtensor/xrandom.hpp>
 #include <xtensor/xnoalias.hpp>
 
+#include "ament_index_cpp/get_package_share_directory.hpp"
+
 #include "nav2_core/controller_exceptions.hpp"
 #include "nav2_costmap_2d/costmap_filters/filter_values.hpp"
 
@@ -104,6 +106,21 @@ void Optimizer::getParams()
 
   getParam(motion_model_name, "motion_model", std::string("DiffDrive"));
 
+  // ── Neural-network dynamics parameters ────────────────────────────────────
+  // Default model path resolves to the installed share directory so users
+  // only need to override nn_model_path when experimenting with a custom model.
+  std::string default_model_path =
+    ament_index_cpp::get_package_share_directory("nav2_mppi_controller") +
+    "/models/mlp_small_scripted.pt";
+
+  NNDynamics::Config nn_cfg;
+  getParam(nn_cfg.model_path, "nn_model_path",  default_model_path);
+  getParam(nn_cfg.lookback,   "nn_lookback",    20);
+  getParam(nn_cfg.nn_horizon, "nn_horizon",     20);
+  getParam(nn_cfg.use_cuda,   "nn_use_cuda",    true);
+
+  nn_dynamics_ = std::make_unique<NNDynamics>(nn_cfg, logger_);
+
   s.constraints = s.base_constraints;
   setMotionModel(motion_model_name);
   parameters_handler_->addPostCallback([this]() {reset();});
@@ -153,6 +170,10 @@ void Optimizer::reset(bool reset_dynamic_speed_limits)
   noise_generator_.reset(settings_, isHolonomic());
   motion_model_->initialize(settings_.constraints, settings_.model_dt);
 
+  if (nn_dynamics_) {
+    nn_dynamics_->resetHistory();
+  }
+
   RCLCPP_INFO(logger_, "Optimizer reset");
 }
 
@@ -177,6 +198,13 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
   utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
   motion_model_->applyConstraints(control_sequence_);
   auto control = getControlFromSequenceAsTwist(plan.header.stamp);
+
+  // Record the command being sent so the NN history buffer stays up to date
+  if (nn_dynamics_) {
+    nn_dynamics_->recordCommand(
+      static_cast<float>(control.twist.linear.x),
+      static_cast<float>(control.twist.angular.z));
+  }
 
   if (settings_.shift_control_sequence) {
     shiftControlSequence();
@@ -369,28 +397,10 @@ void Optimizer::integrateStateVelocities(
   models::Trajectories & trajectories,
   const models::State & state) const
 {
-  const float initial_yaw = static_cast<float>(tf2::getYaw(state.pose.pose.orientation));
-
-  xt::noalias(trajectories.yaws) =
-    xt::cumsum(state.wz * settings_.model_dt, {1}) + initial_yaw;
-
-  auto yaw_cos = xt::roll(xt::eval(xt::cos(trajectories.yaws)), 1, 1);
-  auto yaw_sin = xt::roll(xt::eval(xt::sin(trajectories.yaws)), 1, 1);
-  xt::view(yaw_cos, xt::all(), 0) = cosf(initial_yaw);
-  xt::view(yaw_sin, xt::all(), 0) = sinf(initial_yaw);
-
-  auto && dx = xt::eval(state.vx * yaw_cos);
-  auto && dy = xt::eval(state.vx * yaw_sin);
-
-  if (isHolonomic()) {
-    dx = dx - state.vy * yaw_sin;
-    dy = dy + state.vy * yaw_cos;
-  }
-
-  xt::noalias(trajectories.x) = state.pose.pose.position.x +
-    xt::cumsum(dx * settings_.model_dt, {1});
-  xt::noalias(trajectories.y) = state.pose.pose.position.y +
-    xt::cumsum(dy * settings_.model_dt, {1});
+  // Delegate to NNDynamics, which handles both the NN-corrected first nn_horizon
+  // steps and the kinematic tail for the remaining time steps.
+  // Falls back to pure kinematics automatically if the NN failed to load.
+  nn_dynamics_->integrateTrajectories(trajectories, state, settings_.model_dt);
 }
 
 xt::xtensor<float, 2> Optimizer::getOptimizedTrajectory()

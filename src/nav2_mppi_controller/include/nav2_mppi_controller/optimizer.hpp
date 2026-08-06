@@ -46,6 +46,7 @@
 #include "nav2_mppi_controller/tools/noise_generator.hpp"
 #include "nav2_mppi_controller/tools/parameters_handler.hpp"
 #include "nav2_mppi_controller/tools/utils.hpp"
+#include "nav2_mppi_controller/nn_dynamics.hpp"
 
 namespace mppi
 {
@@ -246,6 +247,7 @@ protected:
   std::string name_;
 
   std::shared_ptr<MotionModel> motion_model_;
+  std::unique_ptr<NNDynamics> nn_dynamics_;
 
   ParametersHandler * parameters_handler_;
   CriticManager critic_manager_;

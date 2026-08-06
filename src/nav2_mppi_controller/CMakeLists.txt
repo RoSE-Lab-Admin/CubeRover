@@ -15,12 +15,17 @@ find_package(ament_cmake REQUIRED)
 find_package(xsimd REQUIRED)
 find_package(xtensor REQUIRED)
 
+# libtorch — set CMAKE_PREFIX_PATH to $(python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
+# e.g. cmake .. -DCMAKE_PREFIX_PATH=$(conda run -n pytorch_rosbags python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
+find_package(Torch REQUIRED)
+
 include_directories(
   include
 )
 
 set(dependencies_pkgs
   rclcpp
+  ament_index_cpp
   nav2_common
   pluginlib
   tf2
@@ -75,6 +80,13 @@ add_library(mppi_controller SHARED
   src/path_handler.cpp
   src/parameters_handler.cpp
   src/noise_generator.cpp
+  src/nn_dynamics.cpp
+)
+
+# nn_dynamics.cpp uses libtorch which requires IEEE-754 compliance for NaN/Inf checks.
+# Disable -ffast-math for this file only so the rest of the library keeps its optimizations.
+set_source_files_properties(src/nn_dynamics.cpp
+  PROPERTIES COMPILE_FLAGS "-fno-fast-math"
 )
 
 add_library(mppi_critics SHARED
@@ -95,15 +107,19 @@ set(libraries mppi_controller mppi_critics)
 
 foreach(lib IN LISTS libraries)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # Clang: use C++20 and optimization, omit -fconcepts
     target_compile_features(${lib} PUBLIC cxx_std_20)
   else()
     target_compile_options(${lib} PUBLIC -fconcepts)
   endif()
-  target_include_directories(${lib} PUBLIC ${xsimd_INCLUDE_DIRS})  #  ${OpenMP_INCLUDE_DIRS}
-  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd)
+  target_include_directories(${lib} PUBLIC ${xsimd_INCLUDE_DIRS} ${TORCH_INCLUDE_DIRS})
+  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd ${TORCH_LIBRARIES})
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
+
+# Install model files to share directory so ament_index can locate them at runtime
+install(DIRECTORY models/
+  DESTINATION share/${PROJECT_NAME}/models
+)
 
 install(TARGETS mppi_controller mppi_critics
   ARCHIVE DESTINATION lib

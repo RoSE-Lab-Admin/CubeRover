@@ -12,6 +12,7 @@
   <buildtool_depend>ament_cmake_ros</buildtool_depend>
 
   <depend>rclcpp</depend>
+  <depend>ament_index_cpp</depend>
   <depend>nav2_common</depend>
   <depend>nav2_core</depend>
   <depend>nav2_util</depend>
