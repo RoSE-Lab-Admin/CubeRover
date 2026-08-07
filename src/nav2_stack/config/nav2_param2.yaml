@@ -20,7 +20,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: false
-    controller_frequency: 15.0 # previously 10
+    controller_frequency: 10.0 # previously 10
     costmap_update_timeout: 0.3 # timeout value for costmap to be updated
     use_realtime_priority: false # adds real time prioritization to controller server, will set as higher priority
     publish_zero_velocity: true # whether to publish zero vel command on goal exit
@@ -53,9 +53,9 @@ controller_server:
       
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 56
-      model_dt: 0.0666666666666667 # should match roseybot_control frequency # previously 0.1 when roseybot_control frequency = 10 (hz)
-      batch_size: 10000
+      time_steps: 25
+      model_dt: 0.1 # should match roseybot_control frequency # previously 0.1 when roseybot_control frequency = 10 (hz)
+      batch_size: 5000
       vx_std: 0.35 # speed standard deviations
       wz_std: 0.3
       vx_max: 0.2 # max/min speeds # previously 0.4
@@ -71,7 +71,7 @@ controller_server:
 
       # ── Learned NN dynamics ────────────────────────────────────────────────
       # nn_enabled: set false to use pure unicycle kinematics (no NN correction)
-      nn_enabled:    true
+      nn_enabled:    false
       # nn_model_path: absolute path to TorchScript .pt file.
       # Leave unset to use the default installed model (mlp_small_scripted.pt).
       # To swap architecture: run scripts/export_model.py --arch <name> and
