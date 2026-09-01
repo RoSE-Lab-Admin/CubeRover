@@ -1,0 +1,8 @@
+[submodule "src/um7/um7"]
+	path = src/um7/um7
+	url = https://github.com/ros-drivers/um7.git
+	branch = ros2
+[submodule "src/um7/serial-ros2"]
+	path = src/um7/serial-ros2
+	url = https://github.com/RoverRobotics-forks/serial-ros2.git
+	branch = master
