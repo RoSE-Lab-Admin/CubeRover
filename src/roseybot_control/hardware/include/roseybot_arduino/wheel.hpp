@@ -1,8 +1,10 @@
 #ifndef WHEEL_HPP
 #define WHEEL_HPP
 
+#include <stdexcept>
 #include <string>
 #include <cmath>
+#include <algorithm>
 
 
 class wheel {
@@ -26,6 +28,11 @@ class wheel {
 
 
 wheel::wheel(float enc_count_per_rev) {
+    // Prevent bad data from entering
+    if (enc_count_per_rev <= 0.0) {
+        throw std::invalid_argument("Encoder counts per rev must be positive and non-zero.");
+    }
+
     rads_per_ct_ = (2 * M_PI) / enc_count_per_rev;
 }
 
@@ -52,11 +59,17 @@ void wheel::updateVolt(int mVolt){
 void wheel::updatePWM(int mPWM) {
     // RoboClaw Manual: 48 - Read Motor PWM values
     // Duty cycle percent is calculated by dividing the Value by 327.67.
-    pwm_ = mPWM / 327.67;
+
+    // Clamp the raw input between the absolute hardware limits
+    const int PWM_LIMIT = 32767;
+    int clamped_pwm = std::max(-PWM_LIMIT, std::min(mPWM, PWM_LIMIT));
+
+    pwm_ = clamped_pwm / 327.67;
 }
 
 int wheel::cmd_to_enc() {
-    return static_cast<int>(cmd_ / rads_per_ct_);
+    // round to nearest encoder count rather than truncating
+    return std::lround(cmd_ / rads_per_ct_);
 }
 
 

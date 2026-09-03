@@ -1,0 +1,37 @@
+name: Auto PR from Dev to Main
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    # Explicitly grant permission to the default token to manage PRs
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check and Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Use GitHub CLI to count open PRs from dev to main
+          PR_COUNT=$(gh pr list --base main --head dev --state open --json number --jq 'length')
+          
+          if [ "$PR_COUNT" -eq "0" ]; then
+            echo "No open PR found. Creating a new release PR..."
+            gh pr create \
+              --base main \
+              --head dev \
+              --title "Hardware Test Queue: Dev to Main" \
+              --body "This PR automatically updates when new code is merged to \`dev\`. Pull this PR locally to run hardware tests."
+          else
+            echo "A PR from dev to main already exists."
+            echo "Git has automatically updated the existing PR with these new commits."
+          fi

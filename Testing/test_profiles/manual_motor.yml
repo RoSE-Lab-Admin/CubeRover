@@ -1,0 +1,9 @@
+name: "Manual Motor Test"
+description: "Run the motors until stopped."
+steps:
+  - type: set_motor_speed
+    value: 1.0           # Linear X velocity
+    # duration_sec: 5      # Optional, defaults to running until stopped
+    # pub_rate: 10         # Optional, defaults to 10
+
+pass_criteria: []

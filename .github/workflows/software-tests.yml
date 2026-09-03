@@ -1,0 +1,97 @@
+name: Software Unit Tests
+
+on:
+  # Allow manually starting this workflow
+  workflow_dispatch:
+  # Run when PR into dev opened
+  pull_request:
+    branches:
+      - dev
+  # Run when dev updated
+  push:
+    branches:
+      - dev
+
+env:
+  # FIXME: Remove this flag once ros-tooling/setup-ros releases a version 
+  # that natively supports Node 24 (current v0.7 requires Node 20).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Explicitly tell ccache where to store files so actions/cache can find them
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+# If another update is pushed before the workflow completes, cancel the old workflow run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+
+    steps:
+      # Checkout the repository code
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1  # CI only needs the most recent commit
+
+      # Setup standard ROS 2 Jazzy environment
+      - name: Setup ROS 2
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      # Cache for rosdep (Only updates when package.xml changes)
+      - name: Cache rosdep
+        uses: actions/cache@v5
+        with:
+          path: /home/runner/.ros/rosdep
+          key: ${{ runner.os }}-rosdep-${{ hashFiles('**/package.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-rosdep-
+
+      # Cache for ccache (Updates on every single commit)
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-ccache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+      
+      # Download and install all package.xml dependencies
+      - name: Install Dependencies & ccache
+        run: |
+          # Install ccache explicitly because it is not pre-installed on ubuntu-24.04
+          sudo apt-get update && sudo apt-get install -y ccache
+          rosdep update --include-eol-distros
+          rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+
+      # Build the ROS 2 workspace
+      - name: Build Workspace
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          # Ensure the build process sees the cache folder
+          export CCACHE_DIR=$GITHUB_WORKSPACE/.ccache
+
+          # Reset ccache stats before the build
+          ccache -z
+          
+          # Build with ccache injected
+          colcon build --symlink-install --cmake-args -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          
+          # Print the cache hit rate to the Action logs for debugging
+          ccache -s
+
+      # Run the tests (include only targets with "software_")
+      - name: Run Software Tests
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_cohesion+ --ctest-args -R "software_"
+          
+      # Report the results and fail the Action if any tests didn't pass
+      - name: Check Test Results
+        if: always() 
+        run: |
+          colcon test-result --all
