@@ -31,7 +31,7 @@ jobs:
     steps:
       # Checkout the repository code
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1  # CI only needs the most recent commit
 
