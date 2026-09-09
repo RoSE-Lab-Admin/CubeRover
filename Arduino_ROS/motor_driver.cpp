@@ -42,8 +42,8 @@ static bool _led_state = false;
 // start custom function implementations
 void set_motor_speed(int32_t motorIndex, int32_t speed) {
   if (motorIndex == 1)      ROBOCLAW_1->SpeedAccelM1(ADDRESS, FL.calcAccel(speed), speed);
-  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(ADDRESS, BL.calcAccel(speed), speed);
-  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(ADDRESS, FR.calcAccel(speed), speed);
+  else if (motorIndex == 2) ROBOCLAW_1->SpeedAccelM2(ADDRESS, FR.calcAccel(speed), speed);
+  else if (motorIndex == 3) ROBOCLAW_2->SpeedAccelM1(ADDRESS, BL.calcAccel(speed), speed);
   else if (motorIndex == 4) ROBOCLAW_2->SpeedAccelM2(ADDRESS, BR.calcAccel(speed), speed);
 }
 
@@ -75,6 +75,8 @@ String get_telemetry() {
 
   // uint32_t start = millis();
 
+  // data should be collected in format of ros2 control link initialization -> FL, FR, BL, BR
+
   // Zero-initialize the entire array. If a sensor fails all attempts, 
   // it safely reports '0' instead of random memory garbage.
   int32_t telemetryData[TELEMETRY_DATA_SIZE] = {0};
@@ -83,8 +85,8 @@ String get_telemetry() {
   uint32_t count1 = 0, count2 = 0, count3 = 0, count4 = 0;
   for (int i = 0; i < CAPTURE_ATTEMPTS; i++) {
       bool v1, v2;
-      v1 = ROBOCLAW_1->ReadEncoders(ADDRESS, count1, count2);
-      v2 = ROBOCLAW_2->ReadEncoders(ADDRESS, count3, count4);
+      v1 = ROBOCLAW_1->ReadEncoders(ADDRESS, count1, count2); // FL FR
+      v2 = ROBOCLAW_2->ReadEncoders(ADDRESS, count3, count4); // BL BR
       if (v1 && v2) break;
   }
 
@@ -111,8 +113,8 @@ String get_telemetry() {
   // Note: Technically, an unsafe typecast
   // Speed should always always be below the max value for a signed integer though (~2 billion).
   int32_t FL_speed = (int32_t) speed1;
-  int32_t BL_speed = (int32_t) speed2;
-  int32_t FR_speed = (int32_t) speed3;
+  int32_t FR_speed = (int32_t) speed2; // Fixed a bug where FR and BL were switched
+  int32_t BL_speed = (int32_t) speed3;
   int32_t BR_speed = (int32_t) speed4;
 
   safety_check(FL.velocity(), FL_speed, FL_timer, FL_name);
@@ -121,8 +123,8 @@ String get_telemetry() {
   safety_check(BR.velocity(), BR_speed, BR_timer, BR_name);
 
   telemetryData[4] = FL_speed;
-  telemetryData[5] = BL_speed;
-  telemetryData[6] = FR_speed;
+  telemetryData[5] = FR_speed;
+  telemetryData[6] = BL_speed;
   telemetryData[7] = BR_speed;
 
 

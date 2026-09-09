@@ -293,7 +293,9 @@ hardware_interface::return_type roseybot_arduino_interface ::RoseyBotSystemHardw
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
 
-  comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[2].name]->cmd_to_enc());
+  // may have been a bug in this, where the back left joint was 2, so the right side was getting the left velocity
+  comm_->set_motor_values(wheel_map_[info_.joints[0].name]->cmd_to_enc(), wheel_map_[info_.joints[1].name]->cmd_to_enc());
+
 
   return hardware_interface::return_type::OK;
 }
