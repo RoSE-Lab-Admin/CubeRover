@@ -4,15 +4,10 @@
   <xacro:arg name="use_mock_hardware" default="false" />
 
   <!-- Import Rviz colors -->
-  <xacro:include filename="$(find rosey_drivers)/description/robot/roseybot_colors.urdf.xacro" />
+  <xacro:include filename="$(find rosey_description)/description/robot/roseybot_colors.urdf.xacro" />
 
-  <xacro:include filename="$(find rosey_drivers)/description/robot/roseybot_description.urdf.xacro"/>
-  <!-- Import diffbot ros2_control description -->
-  <xacro:include filename="$(find rosey_drivers)/description/ros2_control/rosey_drivers.urdf.xacro" />
-
-  <!-- <xacro:roseybot prefix="$(arg prefix)" /> -->
-
-  <!-- <xacro:diffbot_ros2_control
-    name="roseybot" prefix="$(arg prefix)" use_mock_hardware="$(arg use_mock_hardware)"/> -->
+  <xacro:include filename="$(find rosey_description)/description/robot/roseybot_description.urdf.xacro"/>
+  <!-- Import ros2_control hardware description -->
+  <xacro:include filename="$(find rosey_description)/description/ros2_control/roseybot_control.urdf.xacro" />
 
 </robot>

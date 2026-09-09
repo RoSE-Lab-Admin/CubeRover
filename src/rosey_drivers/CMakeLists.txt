@@ -43,7 +43,7 @@ pluginlib_export_plugin_description_file(hardware_interface roseybot_arduino.xml
 
 #install compiled library
 install(
-  DIRECTORY hardware/include
+  DIRECTORY hardware/include/
   DESTINATION include/roseybot_arduino
 )
 
@@ -54,10 +54,16 @@ install(TARGETS roseybot_arduino
   RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY
-  bringup description hardware
-  DESTINATION share/${PROJECT_NAME}/
+install(
+  EXPORT export_roseybot_arduino
+  DESTINATION share/${PROJECT_NAME}/cmake
 )
 
+install(FILES roseybot_arduino.xml
+  DESTINATION share/${PROJECT_NAME}
+)
+
+ament_export_targets(export_roseybot_arduino HAS_LIBRARY_TARGET)
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 ament_package()

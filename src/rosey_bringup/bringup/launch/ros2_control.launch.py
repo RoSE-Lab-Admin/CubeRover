@@ -9,7 +9,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     path_to_urdf = PathJoinSubstitution([
-            FindPackageShare('rosey_drivers'),
+            FindPackageShare('rosey_description'),
             'description',
             'urdf',
             'roseybot.urdf.xacro'
@@ -25,10 +25,10 @@ def generate_launch_description():
 
     robot_controllers = PathJoinSubstitution(
         [
-            FindPackageShare("rosey_drivers"),
+            FindPackageShare("rosey_bringup"),
             "bringup",
             "config",
-            "rosey_driverslers.yaml",
+            "roseybot_controllers.yaml",
         ]
     )
 
