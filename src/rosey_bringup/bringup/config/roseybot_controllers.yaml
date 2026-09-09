@@ -48,8 +48,8 @@ roseybot_base_controller:
     angular.z.has_velocity_limits: true
     angular.z.has_acceleration_limits: true
     # angular.z.has_jerk_limits: false
-    angular.z.max_velocity: 1
-    angular.z.min_velocity: -1
+    angular.z.max_velocity: 1.0
+    angular.z.min_velocity: -1.0
     angular.z.max_acceleration: 0.211666666667
     angular.z.min_acceleration: -0.211666666667
     # angular.z.max_jerk: 0.0
