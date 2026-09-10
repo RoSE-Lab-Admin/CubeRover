@@ -5,35 +5,15 @@ ROS Source Build files for the RoSE Lab CubeRover
 
 ---
 
-### Before the first run — record an initial bag
-
-Do a short manual drive while recording a bag so the GP has some training data:
-
-**Terminal 1** — start OptiTrack:
-```bash
-./optitrack.sh
-```
-
-**Terminal 2** — record a bag:
-```bash
-ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory -o initial_bag
-```
-
-Stop recording (`Ctrl+C`) after the drive.
-
----
-
-### Each exploration run
+### Session startup — do this every session
 
 **Step 0 — start the rover Pi** (SSH in a separate terminal):
 ```bash
 ssh rosey@192.168.2.50
-ros2 launch roseybot_control hardware_startup.launch.py
+ros2 launch roseybot_bringup hardware_startup.launch.py
 ```
 
-Wait until the controller spawner finishes and you see `[roseybot_base_controller] Configured and activated`.
-
----
+Wait until you see `[roseybot_base_controller] Configured and activated`.
 
 **Terminal 1** — start OptiTrack:
 ```bash
@@ -56,6 +36,23 @@ The bridge connects the rover Pi (ROS_DOMAIN_ID=1) to the lab machines (ROS_DOMA
 ```
 
 Leave this terminal running for the entire session.
+
+---
+
+### Before the first run — record an initial bag
+
+Do a short manual drive while recording a bag so the GP has some training data:
+
+**Terminal 3** — record a bag:
+```bash
+ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory -o initial_bag
+```
+
+Stop recording (`Ctrl+C`) after the drive.
+
+---
+
+### Each exploration run
 
 **Terminal 3** — build and launch Nav2:
 ```bash
