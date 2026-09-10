@@ -25,12 +25,39 @@ Stop recording (`Ctrl+C`) after the drive.
 
 ### Each exploration run
 
+**Step 0 — start the rover Pi** (SSH in a separate terminal):
+```bash
+ssh rosey@192.168.2.50
+ros2 launch roseybot_control hardware_startup.launch.py
+```
+
+Wait until the controller spawner finishes and you see `[roseybot_base_controller] Configured and activated`.
+
+---
+
 **Terminal 1** — start OptiTrack:
 ```bash
 ./optitrack.sh
 ```
 
-**Terminal 2** — build and launch Nav2:
+**Terminal 2** — start the ROS2 domain bridge:
+```bash
+python3 ~/CubeRover/ros2_bridge.py
+```
+
+The bridge connects the rover Pi (ROS_DOMAIN_ID=1) to the lab machines (ROS_DOMAIN_ID=0). It must be running before Nav2 starts so that `/cmd_vel` is forwarded to the Pi immediately when the controller begins publishing. Once running you will see it auto-discover and print each Pi topic it bridges:
+
+```
+[bridge] Main→Pi: /cmd_vel [geometry_msgs/msg/TwistStamped]
+[bridge] Pi→Main: /tf  [tf2_msgs/msg/TFMessage]
+[bridge] Pi→Main: /joint_states  [sensor_msgs/msg/JointState]
+[bridge] Pi→Main: /roseybot_base_controller/odom  [nav_msgs/msg/Odometry]
+...
+```
+
+Leave this terminal running for the entire session.
+
+**Terminal 3** — build and launch Nav2:
 ```bash
 cd CubeRover_waypoints/
 source /opt/ros/jazzy/setup.bash
@@ -41,7 +68,7 @@ ros2 launch nav2_stack nav2.launch.py
 
 Wait for: `[lifecycle_manager] All lifecycle nodes are active`
 
-**Terminal 3** — run the GP explorer to pick the best goal (requires current rover position):
+**Terminal 4** — run the GP explorer to pick the best goal (requires current rover position):
 ```bash
 cd CubeRover_waypoints/
 source /opt/ros/jazzy/setup.bash
@@ -59,7 +86,7 @@ deactivate
 
 The script prints the best `(x, y)` goal. Copy it into `src/nav2_stack/pose.csv`.
 
-**Terminal 3** (same terminal, after updating pose.csv) — record a new bag and drive:
+**Terminal 4** (same terminal, after updating pose.csv) — record a new bag and drive:
 ```bash
 ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory -o bag_01 &
 ros2 launch nav2_stack waypoint.launch.py
