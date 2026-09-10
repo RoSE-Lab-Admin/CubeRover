@@ -37,7 +37,7 @@ from rosbags.typesys import Stores, get_typestore
 
 
 # ── Map config — must match map.yaml ─────────────────────────────────────────
-MAP_RES    = 0.2     # metres per pixel
+MAP_RES    = 0.05    # metres per pixel
 MAP_ORIG_X = -5.0    # world x of left (col=0) edge
 MAP_ORIG_Y = -5.0    # world y of bottom edge
 INFLATION  = 0.75    # metres — match inflation_radius in nav2_param2.yaml
