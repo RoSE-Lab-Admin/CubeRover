@@ -46,16 +46,18 @@ class PiListener:
     listener, so no state is shared with any other listener.
     """
 
-    def __init__(self, node_pi: Node, node_main: Node, label: str):
+    def __init__(self, node_pi: Node, node_main: Node, label: str,
+                 extra_skip: set = None):
         self._n_pi   = node_pi
         self._n_main = node_main
         self._label  = label
+        self._skip   = SKIP_TOPICS | (extra_skip or set())
         self._bridged: set = set()
         node_pi.create_timer(2.0, self._discover)
 
     def _discover(self):
         for topic, types in self._n_pi.get_topic_names_and_types():
-            if topic in SKIP_TOPICS or not types:
+            if topic in self._skip or not types:
                 continue
             if self._n_pi.count_publishers(topic) == 0:
                 continue
@@ -108,8 +110,12 @@ class DualBridge:
         print('[bridge] Main→Pi2: /cmd_vel [geometry_msgs/msg/TwistStamped]')
 
         # ── Pi→Main: each listener owns its own main-side node ───────────────
+        PI2_SKIP = {
+            '/MastCam/Front/color/image_raw/compressedDepth',
+            '/MastCam/Front/depth/image_rect_raw/compressed',
+        }
         PiListener(self.n1, self.n0_pi1, 'Pi1')
-        PiListener(self.n2, self.n0_pi2, 'Pi2')
+        PiListener(self.n2, self.n0_pi2, 'Pi2', extra_skip=PI2_SKIP)
 
         # ── Executors ───────────────────────────────────────────────────────
         self.exec0 = MultiThreadedExecutor(context=self.ctx0)
