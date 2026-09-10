@@ -52,11 +52,11 @@ MAP_PGM      = REPO_ROOT / "src/nav2_stack/maps/map.pgm"
 PREVIEW_PNG  = SCRIPT_DIR / "costmap_preview.png"
 
 # ── Map parameters (must match map.yaml) ─────────────────────────────────────
-RESOLUTION  = 0.05   # m/pixel
+RESOLUTION  = 0.2    # m/pixel
 ORIGIN_X    = -5.0
 ORIGIN_Y    = -5.0
-WIDTH_PX    = 200
-HEIGHT_PX   = 200
+WIDTH_PX    = 50
+HEIGHT_PX   = 50
 
 # ── Nav2 inflation params (from nav2_param2.yaml) ─────────────────────────────
 INFLATION_RADIUS = 0.75

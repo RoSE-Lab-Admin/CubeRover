@@ -42,7 +42,7 @@ from rosbags.typesys import Stores, get_typestore
 
 
 # ── Map config — must match map.yaml ──────────────────────────────────────────
-MAP_RES    = 0.05
+MAP_RES    = 0.2
 MAP_ORIG_X = -5.0
 MAP_ORIG_Y = -5.0
 INFLATION  = 0.75
