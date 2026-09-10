@@ -7,7 +7,7 @@ Dynamic ROS2 domain bridge for two rovers.
       Pi1→Main : ALL topics discovered and forwarded
 
   Pi 2  (domain 2, ROS_DOMAIN_ID=2):
-      Main→Pi2 : nothing sent
+      Main→Pi2 : /cmd_vel forwarded (needed for DDS bidirectional discovery)
       Pi2→Main : ALL topics discovered and forwarded
 
 Each Pi gets its own isolated pair of nodes so discovery never shares
@@ -91,13 +91,21 @@ class DualBridge:
         self.n1      = Node('bridge_pi1',           context=self.ctx1)
         self.n2      = Node('bridge_pi2',           context=self.ctx2)
 
-        # ── Main→Pi1: /cmd_vel ───────────────────────────────────────────────
+        # ── Main→Pi1 and Pi2: /cmd_vel ──────────────────────────────────────
+        # Forwarding cmd_vel to Pi2 as well ensures bridge_pi2 is a real DDS
+        # publisher on domain 2, which is required for bidirectional discovery.
         qos_cmd = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.VOLATILE, depth=10)
-        pub_cmd = self.n1.create_publisher(TwistStamped, '/cmd_vel', qos_cmd)
-        self.n0_ctrl.create_subscription(TwistStamped, '/cmd_vel', pub_cmd.publish, qos_cmd)
+        pub_cmd1 = self.n1.create_publisher(TwistStamped, '/cmd_vel', qos_cmd)
+        pub_cmd2 = self.n2.create_publisher(TwistStamped, '/cmd_vel', qos_cmd)
+
+        def forward_cmd_vel(msg):
+            pub_cmd1.publish(msg)
+            pub_cmd2.publish(msg)
+
+        self.n0_ctrl.create_subscription(TwistStamped, '/cmd_vel', forward_cmd_vel, qos_cmd)
         print('[bridge] Main→Pi1: /cmd_vel [geometry_msgs/msg/TwistStamped]')
-        print('[bridge] Main→Pi2: (nothing forwarded)')
+        print('[bridge] Main→Pi2: /cmd_vel [geometry_msgs/msg/TwistStamped]')
 
         # ── Pi→Main: each listener owns its own main-side node ───────────────
         PiListener(self.n1, self.n0_pi1, 'Pi1')
