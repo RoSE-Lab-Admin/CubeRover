@@ -113,6 +113,10 @@ class DualBridge:
         PI2_SKIP = {
             '/MastCam/Front/color/image_raw/compressedDepth',
             '/MastCam/Front/depth/image_rect_raw/compressed',
+            '/MastCam/Front/color/image_raw/zstd',
+            '/MastCam/Front/depth/image_rect_raw/zstd',
+            '/MastCam/Front/color/image_raw/theora',
+            '/MastCam/Front/depth/image_rect_raw/theora',
         }
         PiListener(self.n1, self.n0_pi1, 'Pi1')
         PiListener(self.n2, self.n0_pi2, 'Pi2', extra_skip=PI2_SKIP)

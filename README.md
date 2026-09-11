@@ -45,7 +45,7 @@ Do a short manual drive while recording a bag so the GP has some training data:
 
 **Terminal 3** — record a bag:
 ```bash
-ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory -o initial_bag
+ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory /imu/data /imu/mag /imu/rpy -o initial_bag
 ```
 
 Stop recording (`Ctrl+C`) after the drive.
