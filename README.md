@@ -15,6 +15,10 @@ ros2 launch roseybot_bringup hardware_startup.launch.py
 
 Wait until you see `[roseybot_base_controller] Configured and activated`.
 
+**or**
+fastdds discovery --server-id 0
+```
+
 **Terminal 1** — start OptiTrack:
 ```bash
 ./optitrack.sh
