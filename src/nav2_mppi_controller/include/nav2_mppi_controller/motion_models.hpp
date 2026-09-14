@@ -236,7 +236,7 @@ public:
 
 private:
   // Physical half-wheel separation for CubeRover (L/2 in meters)
-  static constexpr float half_wheel_separation_ = 0.1575f;
+  static constexpr float half_wheel_separation_ = 0.16825f;
 };
 
 /**
