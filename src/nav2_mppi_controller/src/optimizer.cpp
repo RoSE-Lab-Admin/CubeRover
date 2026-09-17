@@ -106,19 +106,66 @@ void Optimizer::getParams()
 
   getParam(motion_model_name, "motion_model", std::string("DiffDrive"));
 
-  // ── Neural-network dynamics parameters ────────────────────────────────────
-  // Default model path resolves to the installed share directory so users
-  // only need to override nn_model_path when experimenting with a custom model.
-  std::string default_model_path =
-    ament_index_cpp::get_package_share_directory("nav2_mppi_controller") +
-    "/models/mlp_small_scripted.pt";
+  // ── Dynamics-correction parameters ─────────────────────────────────────────
+  // dynamics_mode selects the trajectory-integration model:
+  //   "kinematics"     : pure unicycle integration, no correction (default)
+  //   "linear"         : hardcoded 2x2 linear correction (see linear_model.*)
+  //   "neural_network" : per-step TorchScript MLP, width via nn_hidden_width,
+  //                      CUDA-graph-accelerated when running on GPU
+  std::string dynamics_mode_str;
+  getParam(dynamics_mode_str, "dynamics_mode", std::string("kinematics"));
 
   NNDynamics::Config nn_cfg;
-  getParam(nn_cfg.model_path, "nn_model_path",  default_model_path);
-  getParam(nn_cfg.use_nn,     "nn_enabled",     true);
-  getParam(nn_cfg.lookback,   "nn_lookback",    20);
-  getParam(nn_cfg.nn_horizon, "nn_horizon",     20);
-  getParam(nn_cfg.use_cuda,   "nn_use_cuda",    true);
+  if (dynamics_mode_str == "kinematics") {
+    nn_cfg.mode = NNDynamics::DynamicsMode::Kinematics;
+  } else if (dynamics_mode_str == "linear") {
+    nn_cfg.mode = NNDynamics::DynamicsMode::Linear;
+  } else if (dynamics_mode_str == "neural_network") {
+    nn_cfg.mode = NNDynamics::DynamicsMode::NeuralNetwork;
+  } else {
+    throw nav2_core::ControllerException(
+            "dynamics_mode '" + dynamics_mode_str +
+            "' is not valid! Valid options are kinematics, linear, or neural_network");
+  }
+
+  nn_cfg.batch_size = s.batch_size;
+  nn_cfg.horizon    = static_cast<int>(s.time_steps);
+  nn_cfg.model_dt   = s.model_dt;
+  getParam(nn_cfg.use_cuda, "nn_use_cuda", true);
+
+  if (nn_cfg.mode == NNDynamics::DynamicsMode::NeuralNetwork) {
+    int width;
+    getParam(width, "nn_hidden_width", 64);
+    if (width != 8 && width != 16 && width != 32 && width != 64 && width != 128) {
+      throw nav2_core::ControllerException(
+              "nn_hidden_width must be one of 8, 16, 32, 64, or 128 (got " +
+              std::to_string(width) + ")");
+    }
+    std::string default_model_path =
+      ament_index_cpp::get_package_share_directory("nav2_mppi_controller") +
+      "/models/ar_mlp/mlp" + std::to_string(width) + "_ar_velocity_teacher.pt";
+    getParam(nn_cfg.model_path, "nn_model_path", default_model_path);
+  }
+
+  if (nn_cfg.mode == NNDynamics::DynamicsMode::Linear ||
+    nn_cfg.mode == NNDynamics::DynamicsMode::NeuralNetwork)
+  {
+    std::vector<double> weight, bias, fmean, fstd;
+    getParam(weight, "linear_model.weight", std::vector<double>{0.0, 0.0, 0.0, 0.0});
+    getParam(bias,   "linear_model.bias",   std::vector<double>{0.0, 0.0});
+    getParam(fmean,  "linear_model.fmean",  std::vector<double>{0.0, 0.0});
+    getParam(fstd,   "linear_model.fstd",   std::vector<double>{1.0, 1.0});
+    if (weight.size() != 4 || bias.size() != 2 || fmean.size() != 2 || fstd.size() != 2) {
+      throw nav2_core::ControllerException(
+              "linear_model.weight must have 4 entries and bias/fmean/fstd must have 2 each");
+    }
+    for (int i = 0; i < 4; ++i) {nn_cfg.lin_weight[i] = static_cast<float>(weight[i]);}
+    for (int i = 0; i < 2; ++i) {
+      nn_cfg.lin_bias[i]  = static_cast<float>(bias[i]);
+      nn_cfg.lin_fmean[i] = static_cast<float>(fmean[i]);
+      nn_cfg.lin_fstd[i]  = static_cast<float>(fstd[i]);
+    }
+  }
 
   nn_dynamics_ = std::make_unique<NNDynamics>(nn_cfg, logger_);
 
@@ -171,10 +218,6 @@ void Optimizer::reset(bool reset_dynamic_speed_limits)
   noise_generator_.reset(settings_, isHolonomic());
   motion_model_->initialize(settings_.constraints, settings_.model_dt);
 
-  if (nn_dynamics_) {
-    nn_dynamics_->resetHistory();
-  }
-
   RCLCPP_INFO(logger_, "Optimizer reset");
 }
 
@@ -199,13 +242,6 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
   utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
   motion_model_->applyConstraints(control_sequence_);
   auto control = getControlFromSequenceAsTwist(plan.header.stamp);
-
-  // Record the command being sent so the NN history buffer stays up to date
-  if (nn_dynamics_) {
-    nn_dynamics_->recordCommand(
-      static_cast<float>(control.twist.linear.x),
-      static_cast<float>(control.twist.angular.z));
-  }
 
   if (settings_.shift_control_sequence) {
     shiftControlSequence();
