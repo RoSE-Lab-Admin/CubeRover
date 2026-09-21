@@ -24,7 +24,7 @@ def qos_for(topic: str) -> QoSProfile:
     if topic == '/tf_static':
         return QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                           durability=DurabilityPolicy.TRANSIENT_LOCAL, depth=100)
-    return QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
+    return QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                       durability=DurabilityPolicy.VOLATILE, depth=10)
 
 
