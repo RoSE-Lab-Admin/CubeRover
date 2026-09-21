@@ -58,9 +58,11 @@ ORIGIN_Y    = -5.0
 WIDTH_PX    = 50
 HEIGHT_PX   = 50
 
-# ── Nav2 inflation params (from nav2_param2.yaml) ─────────────────────────────
+# ── Nav2 inflation params (from nav2_param2.yaml, local_costmap/global_costmap's
+# actual InflationLayer -- NOT the disabled MPPI ObstaclesCritic's own
+# cost_scaling_factor, which is a separate, unrelated 10.0) ───────────────────
 INFLATION_RADIUS = 0.75
-COST_SCALING     = 10.0
+COST_SCALING     = 2.58
 
 # ── Default arena corners (x, y) in world frame ───────────────────────────────
 DEFAULT_CORNERS = [
@@ -167,6 +169,7 @@ def build_preview(pixels, corners, obstacles):
 
     SCALE = 4
     W, H = WIDTH_PX * SCALE, HEIGHT_PX * SCALE
+    LEGEND_W = 190   # dedicated side panel so the legend never overlaps the map
 
     if HAS_SCIPY:
         occupied  = (pixels == 0)
@@ -175,7 +178,7 @@ def build_preview(pixels, corners, obstacles):
     else:
         dist_m = None
 
-    img = Image.new('RGB', (W, H))
+    img = Image.new('RGB', (W + LEGEND_W, H), color=(255, 255, 255))
     px  = img.load()
 
     for row in range(HEIGHT_PX):
@@ -227,8 +230,9 @@ def build_preview(pixels, corners, obstacles):
         draw.text((cx_s + rs + 4, cy_s - 8),
                   f"r={radius}m", fill=(60, 0, 180))
 
-    # Legend
-    lx, ly = W - 170, 10
+    # Legend — drawn in the dedicated side panel to the right of the map so it
+    # never overlays map content.
+    lx, ly = W + 14, 14
     legend_entries = [
         ((20, 20, 20),    "Occupied / wall"),
         ((255, 60, 80),   "Inscribed zone"),
@@ -237,7 +241,7 @@ def build_preview(pixels, corners, obstacles):
         ((60, 0, 200),    "Added obstacle"),
     ]
     box_h = len(legend_entries) * 18 + 8
-    draw.rectangle([lx - 4, ly - 4, lx + 164, ly + box_h],
+    draw.rectangle([lx - 4, ly - 4, lx + (LEGEND_W - 24), ly + box_h],
                    fill=(255, 255, 255), outline=(180, 180, 180))
     for i, (swatch, label) in enumerate(legend_entries):
         y = ly + 2 + i * 18
