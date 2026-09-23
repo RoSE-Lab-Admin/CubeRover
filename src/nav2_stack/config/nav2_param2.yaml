@@ -72,10 +72,10 @@ controller_server:
       # ── Dynamics correction ──────────────────────────────────────────────────
       # dynamics_mode: "kinematics" (default, no correction) | "linear" | "neural_network"
       # Set once, requires a relaunch to change (not a live-reconfigurable param).
-      dynamics_mode: "kinematics"
+      dynamics_mode: "neural_network"
       # nn_hidden_width: one of 8/16/32/64/128 -- only used when dynamics_mode == "neural_network".
       # Selects which exported model to load: models/ar_mlp/mlp<width>_ar_velocity_teacher.pt
-      nn_hidden_width: 64
+      nn_hidden_width: 8
       # nn_model_path: absolute path to a TorchScript .pt file, overrides the
       # nn_hidden_width-derived default path above.
       #nn_model_path: "/path/to/custom_model_scripted.pt"
