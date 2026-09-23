@@ -85,8 +85,8 @@ controller_server:
       # used when dynamics_mode == "linear", AND shared (fmean/fstd only) for
       # normalizing the neural_network mode's input, since both were trained
       # against the same v11 Normalizer fit.
-      linear_model.weight: [-0.00167538, 0.00017245, 0.00002856, -0.02373879]
-      linear_model.bias: [-0.00006122, 0.00271365]
+      linear_model.weight: [-0.00170712, 0.00014948, 0.00004433, -0.02380247]
+      linear_model.bias: [-0.00010697, 0.00273522]
       linear_model.fmean: [0.00372449, -0.03188930]
       linear_model.fstd: [0.19342424, 0.31374899]
       visualize: true # allows you to see possible paths in rviz
