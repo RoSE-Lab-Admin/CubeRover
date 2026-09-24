@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -29,6 +30,7 @@ def launch_setup(context):
     use_opti   = LaunchConfiguration('use_opti').perform(context)
     pose_csv   = LaunchConfiguration('pose_csv').perform(context)
     rover_type = LaunchConfiguration('rover_type').perform(context)
+    include_nav2 = LaunchConfiguration('include_nav2')
 
     if rover_type not in ROVER_CONFIGS:
         raise ValueError(f"Unknown rover_type '{rover_type}'. Choose from: {list(ROVER_CONFIGS)}")
@@ -64,6 +66,10 @@ def launch_setup(context):
         }]
     )
 
+    # include_nav2:=false is used when Nav2 is already running elsewhere (e.g. brought
+    # up once by autonomous_trials.launch.py) -- launching it again would duplicate
+    # every fixed-named Nav2 node (map_server, planner_server, controller_server, ...),
+    # which is a likely cause of intermittent "service not available" errors.
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
@@ -72,7 +78,8 @@ def launch_setup(context):
                 'nav2.launch.py'
             ])
         ),
-        launch_arguments={'robot_frame': robot_frame}.items()
+        launch_arguments={'robot_frame': robot_frame}.items(),
+        condition=IfCondition(include_nav2),
     )
 
     nodes = [pose_pub_node, path_follower_node, nav2_launch]
@@ -99,5 +106,6 @@ def generate_launch_description():
         DeclareLaunchArgument('use_opti',    default_value='true'),
         DeclareLaunchArgument('pose_csv',    default_value='pose.csv'),
         DeclareLaunchArgument('rover_type',  default_value='fit_rosey'),
+        DeclareLaunchArgument('include_nav2', default_value='true'),
         OpaqueFunction(function=launch_setup),
     ])

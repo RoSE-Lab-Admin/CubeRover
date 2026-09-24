@@ -33,6 +33,7 @@ setup(
         'console_scripts': [
             'path_follower = nav2_stack.path_follower:main',
             'pose_pub = nav2_stack.pose_pub:main',
+            'autonomous_trials = nav2_stack.autonomous_trials:main',
         ],
     },
 )
