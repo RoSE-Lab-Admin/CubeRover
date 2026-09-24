@@ -83,7 +83,7 @@ python3 src/nav2_stack/nav2_stack/gp_explorer.py \
 cd CubeRover_waypoints/
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
-source ~/cude_end/bin/activate
+source ~/cuda_end/bin/activate
 python3 src/nav2_stack/nav2_stack/gp_explorer_gpu.py \
     --bag-dir ~/bag_dir --name traj_01
 deactivate
@@ -119,7 +119,7 @@ cd CubeRover_waypoints/
 source /opt/ros/jazzy/setup.bash
 colcon build          # only needed if source files changed
 source install/setup.bash
-source ~/cude_end/bin/activate
+source ~/cuda_end/bin/activate
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir
 deactivate
 ```
