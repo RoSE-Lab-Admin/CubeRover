@@ -111,7 +111,8 @@ def read_goal_xy(pose_csv: Path):
         return float(row[0]), float(row[1])
 
 
-def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str):
+def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str) -> str:
+    """Returns 'reached' or 'stalled' (see wait_for_goal)."""
     bag_path = bag_dir / bag_name
     bag_proc = start_process(["ros2", "bag", "record", *BAG_TOPICS, "-o", str(bag_path)])
     time.sleep(BAG_START_DELAY_S)
@@ -122,10 +123,11 @@ def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_no
     ])
 
     try:
-        wait_for_goal(pose_node, goal_xy, label)
+        outcome = wait_for_goal(pose_node, goal_xy, label)
     finally:
         stop_process(wp_proc, "waypoint.launch.py")
         stop_process(bag_proc, "ros2 bag record")
+    return outcome
 
 
 def parse_bool(s: str) -> bool:
@@ -286,12 +288,17 @@ def main():
             origin_csv = bag_dir / "initial_goal.csv"
             with open(origin_csv, "w") as f:
                 f.write("x,y,z\n0.0,0.0,0.0\n")
-            run_one_trial(bag_dir, "initial_bag", origin_csv, (0.0, 0.0), pose_node,
-                         "initial_bag")
+            outcome = run_one_trial(bag_dir, "initial_bag", origin_csv, (0.0, 0.0), pose_node,
+                                    "initial_bag")
+            if outcome == "reached":
+                log("initial_bag: waypoint reached")
+            else:
+                log("initial_bag: FAILED to reach waypoint (stalled)")
             maybe_retrain(retrain_cfg, bag_dir, initial_bag)
         else:
             log(f"found existing {initial_bag}, skipping bootstrap")
 
+        n_success = 0
         for i in range(1, args.n_trajectories + 1):
             traj_name = f"traj_{i:02d}"
             bag_name = f"bag_{i:02d}"
@@ -302,10 +309,17 @@ def main():
                          f"for {traj_name} -- aborting entire run")
 
             goal_xy = read_goal_xy(pose_csv)
-            run_one_trial(bag_dir, bag_name, pose_csv, goal_xy, pose_node, traj_name)
+            outcome = run_one_trial(bag_dir, bag_name, pose_csv, goal_xy, pose_node, traj_name)
+            if outcome == "reached":
+                n_success += 1
+                log(f"trial {i}/{args.n_trajectories} ({traj_name}): waypoint reached")
+            else:
+                log(f"trial {i}/{args.n_trajectories} ({traj_name}): FAILED to reach "
+                    f"waypoint (stalled) -- planning a new trajectory")
             maybe_retrain(retrain_cfg, bag_dir, bag_dir / bag_name)
 
-        log(f"all {args.n_trajectories} trials complete")
+        log(f"all {args.n_trajectories} trials complete: "
+            f"{n_success}/{args.n_trajectories} successful")
     finally:
         pose_node.destroy_node()
         rclpy.shutdown()
