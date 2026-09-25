@@ -32,7 +32,9 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from ament_index_python.packages import get_package_share_directory
 
-from nav2_stack import dynamics_retrain
+# dynamics_retrain (and therefore torch) is imported lazily, inside
+# maybe_retrain(), so that retrain_dynamics=false (the default) never requires
+# torch to be importable at all -- only opting into retraining does.
 
 XY_GOAL_TOLERANCE = 0.5     # matches nav2_param2.yaml's goal_checker xy_goal_tolerance
 STALL_WINDOW_S = 30.0       # no-progress-for-this-long => treat the trial as stuck
@@ -183,6 +185,7 @@ def reload_controller():
 def maybe_retrain(retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
     if retrain_cfg is None:
         return
+    from nav2_stack import dynamics_retrain  # deferred -- see import comment near top of file
     log(f"retraining {retrain_cfg['model_type']}"
         f"{retrain_cfg.get('width', '')} on data in {bag_dir} "
         f"(warm_start={retrain_cfg['warm_start']}, subset={retrain_cfg['subset']})")
@@ -236,7 +239,12 @@ def main():
     parser.add_argument("--retrain-subset-fraction", default=0.3, type=float,
                         help="Fraction of prior bags to sample when --retrain-subset is "
                              "true. Default: 0.3")
-    args = parser.parse_args()
+    # launch_ros.actions.Node always appends --ros-args (and would append any
+    # remappings/params too) to the process's argv, since it assumes the
+    # executable parses those via rclpy's standard handling. Strip them before
+    # plain argparse sees argv, or it chokes on --ros-args as unrecognized.
+    import rclpy.utilities
+    args = parser.parse_args(rclpy.utilities.remove_ros_args(sys.argv)[1:])
 
     bag_dir = args.bag_dir
     bag_dir.mkdir(parents=True, exist_ok=True)
