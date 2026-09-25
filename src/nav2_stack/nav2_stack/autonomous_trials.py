@@ -240,11 +240,18 @@ def maybe_retrain(retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
 
 
 def run_gp_explorer(gp_explorer_path: Path, bag_dir: Path, name: str) -> bool:
+    # gp_explorer_gpu.py's own --map default is Path(__file__).resolve().parent.parent
+    # / 'maps' / 'map.pgm' -- only correct when run from source. From the
+    # installed location that resolves to .../site-packages/maps/map.pgm (wrong).
+    # Override explicitly with the real installed path, same fix already
+    # applied for pose_csv.
+    map_path = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.pgm"
     for attempt in range(1, GP_EXPLORER_MAX_ATTEMPTS + 1):
         log(f"gp_explorer_gpu.py attempt {attempt}/{GP_EXPLORER_MAX_ATTEMPTS} "
             f"(name={name})")
         result = subprocess.run(
-            [sys.executable, str(gp_explorer_path), "--bag-dir", str(bag_dir), "--name", name])
+            [sys.executable, str(gp_explorer_path), "--bag-dir", str(bag_dir), "--name", name,
+             "--map", str(map_path)])
         if result.returncode == 0:
             return True
         log(f"attempt {attempt} failed (exit code {result.returncode})")
