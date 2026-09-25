@@ -360,25 +360,27 @@ class PathFollower(Node):
         stop_msg.header.stamp = self.get_clock().now().to_msg()
         self.cmd_vel_pub.publish(stop_msg)
         time.sleep(0.2)
-        rclpy.shutdown()
-
-            
+        # Stop the EXECUTOR (lets executor.spin() in main() return cleanly),
+        # not rclpy itself -- calling rclpy.shutdown() here, while spin() is
+        # still actively running, left spin()'s internal loop trying to build
+        # a new wait-set against an already-shutdown context on its next
+        # iteration (RCLError: "failed to initialize wait set ... the given
+        # context is not valid"), which crashed the process instead of exiting
+        # cleanly and made launch wait out the full SIGINT timeout before
+        # escalating to SIGTERM on every single trial.
+        self.executor.shutdown()
 
 def main(args=None):
     rclpy.init()
     path_follower = PathFollower()
     executor = MultiThreadedExecutor()
     executor.add_node(path_follower)
+    path_follower.executor = executor
 
     signal.signal(signal.SIGINT, path_follower.shutdown_handler)
 
     executor.spin()
-
-    # try:
-    #     executor.spin()
-    # finally:
-    #     path_follower.stop_nav()
-    #     rclpy.shutdown()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
