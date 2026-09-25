@@ -72,6 +72,13 @@ class PathFollower(Node):
         # path message with list of posestamped waypoints
         self.point_path = trajectory.poses
         self.waypoints = trajectory.poses
+        if trajectory.poses:
+            last = trajectory.poses[-1].pose.position
+            self.get_logger().info(
+                f"received path with {len(trajectory.poses)} waypoint(s), "
+                f"final target=({last.x:.3f}, {last.y:.3f})")
+        else:
+            self.get_logger().warn("received EMPTY path (0 waypoints)")
 
     def arc_arrival_heading(self, x0, y0, theta0, x1, y1):
         # find the unique circular arc from (x0,y0,theta0) through (x1,y1)
@@ -232,6 +239,8 @@ class PathFollower(Node):
         self.nav._waitForNodeToActivate('controller_server')
         self.nav._waitForNodeToActivate('bt_navigator')
         self.nav2_ready = True
+        self.get_logger().info("nav2_ready=True (planner_server/controller_server/"
+                               "bt_navigator all active)")
 
     def _arc_heading(self):
         if not self.use_opti or len(self.prev_poses) == 0:
@@ -256,6 +265,9 @@ class PathFollower(Node):
             wp.pose.orientation.w = float(q_new[3])
         self.last_issued_heading = heading
         self.last_goal_time = self.get_clock().now()
+        self.get_logger().info(
+            f"issuing goal {self.current_wp_idx + 1}/{len(self.point_path)}: "
+            f"({wp.pose.position.x:.3f}, {wp.pose.position.y:.3f})  heading={heading}")
         self.nav.goToPose(wp)
 
     def follow_waypoints(self):
@@ -306,6 +318,18 @@ class PathFollower(Node):
             self.finished = True
             self.stop_nav()
             return
+
+        if result == TaskResult.FAILED:
+            # NOTE: previously fell through and was silently treated the same
+            # as success (current_wp_idx still advanced) -- now at least logged
+            # so a failed goToPose is visible instead of indistinguishable from
+            # a real success.
+            self.get_logger().warn(
+                f"goToPose FAILED for waypoint {self.current_wp_idx + 1}/{len(self.point_path)} "
+                f"-- advancing anyway (existing behavior, unchanged)")
+        else:
+            self.get_logger().info(
+                f"goToPose result={result} for waypoint {self.current_wp_idx + 1}/{len(self.point_path)}")
 
         # advance to next waypoint
         self.current_wp_idx += 1
