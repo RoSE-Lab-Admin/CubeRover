@@ -31,6 +31,17 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from ament_index_python.packages import get_package_share_directory
+from nav2_simple_commander.robot_navigator import BasicNavigator
+
+# Every node lifecycle_manager_navigation brings up (nav2_param2.yaml). No amcl
+# in this stack (ground-truth pose comes from OptiTrack instead) -- deliberately
+# NOT using BasicNavigator.waitUntilNav2Active(), whose default localizer='amcl'
+# would hang forever waiting for a node that's never launched. Matches the
+# narrower per-node wait path_follower.py already does internally for a subset
+# of these (planner_server/controller_server/bt_navigator); this waits for all
+# 6, once, before any trial starts.
+NAV2_MANAGED_NODES = ["map_server", "planner_server", "controller_server",
+                      "behavior_server", "bt_navigator", "waypoint_follower"]
 
 # dynamics_retrain (and therefore torch) is imported lazily, inside
 # maybe_retrain(), so that retrain_dynamics=false (the default) never requires
@@ -62,6 +73,27 @@ class PoseWatcher(Node):
 
     def _cb(self, msg: PoseStamped):
         self.xy = (msg.pose.position.x, msg.pose.position.y)
+
+
+def wait_for_nav2_active():
+    """Blocks until every lifecycle_manager_navigation-managed node reports
+    itself active. Nav2 bringup -- especially controller_server, which now
+    loads a TorchScript model and may capture a CUDA graph for the deployed
+    dynamics model -- can take real time; without this, the very first trial
+    can race a stack that isn't actually ready yet and look like a stall."""
+    log(f"waiting for Nav2 to fully activate ({', '.join(NAV2_MANAGED_NODES)}) "
+        f"-- this can take a while, especially controller_server loading/capturing "
+        f"the dynamics model")
+    nav = BasicNavigator()
+    t0 = time.monotonic()
+    for node_name in NAV2_MANAGED_NODES:
+        try:
+            nav._waitForNodeToActivate(node_name)
+        except Exception as e:
+            log(f"WARNING: error waiting for {node_name} to activate ({e}) -- continuing anyway")
+        log(f"  {node_name}: active ({time.monotonic() - t0:.1f}s elapsed)")
+    nav.destroy_node()
+    log(f"Nav2 fully active after {time.monotonic() - t0:.1f}s")
 
 
 def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
@@ -287,6 +319,7 @@ def main():
     pose_csv = gp_explorer_path.resolve().parent.parent / "pose.csv"
 
     rclpy.init()
+    wait_for_nav2_active()
     pose_node = PoseWatcher(args.opti_topic)
 
     try:
