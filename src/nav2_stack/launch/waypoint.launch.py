@@ -66,6 +66,19 @@ def launch_setup(context):
         }]
     )
 
+    # Always included (not conditional on include_nav2) -- cross-checks OptiTrack
+    # pose against wheel encoders + commanded velocity and force-stops the rover
+    # if the pose feed looks stale/frozen while real motion is otherwise evident.
+    # See nav2_stack/safety_watchdog.py.
+    safety_watchdog_node = Node(
+        package='nav2_stack',
+        executable='safety_watchdog',
+        parameters=[{
+            'use_sim_time': False,
+            'opti_topic':   opti_topic,
+        }]
+    )
+
     # include_nav2:=false is used when Nav2 is already running elsewhere (e.g. brought
     # up once by autonomous_trials.launch.py) -- launching it again would duplicate
     # every fixed-named Nav2 node (map_server, planner_server, controller_server, ...),
@@ -82,7 +95,7 @@ def launch_setup(context):
         condition=IfCondition(include_nav2),
     )
 
-    nodes = [pose_pub_node, path_follower_node, nav2_launch]
+    nodes = [pose_pub_node, path_follower_node, safety_watchdog_node, nav2_launch]
 
     # only run EKF when not using ground truth
     if not is_opti:

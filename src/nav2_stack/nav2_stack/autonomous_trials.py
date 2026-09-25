@@ -30,6 +30,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Bool
 from ament_index_python.packages import get_package_share_directory
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
@@ -64,15 +65,22 @@ def log(msg: str):
 
 
 class PoseWatcher(Node):
-    """Keeps the latest real OptiTrack pose available for goal-reached / stall checks."""
+    """Keeps the latest real OptiTrack pose available for goal-reached / stall
+    checks, and watches for a safety_watchdog-triggered emergency stop."""
 
     def __init__(self, opti_topic: str):
         super().__init__("autonomous_trials_pose_watcher")
         self.xy = None
+        self.safety_stop = False
         self.create_subscription(PoseStamped, opti_topic, self._cb, 10)
+        self.create_subscription(Bool, "/safety_stop", self._safety_stop_cb, 10)
 
     def _cb(self, msg: PoseStamped):
         self.xy = (msg.pose.position.x, msg.pose.position.y)
+
+    def _safety_stop_cb(self, msg: Bool):
+        if msg.data:
+            self.safety_stop = True
 
 
 def wait_for_nav2_active():
@@ -97,14 +105,18 @@ def wait_for_nav2_active():
 
 
 def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
-    """Spins until the real pose is within XY_GOAL_TOLERANCE of goal_xy, or no
-    progress has been made for STALL_WINDOW_S. Returns 'reached' or 'stalled'."""
+    """Spins until the real pose is within XY_GOAL_TOLERANCE of goal_xy, no
+    progress has been made for STALL_WINDOW_S, or safety_watchdog fires.
+    Returns 'reached', 'stalled', or 'safety_stop'."""
     best_dist = math.inf
     last_improve_t = time.monotonic()
     log(f"{label}: waiting for goal ({goal_xy[0]:.3f}, {goal_xy[1]:.3f})  "
         f"tolerance={XY_GOAL_TOLERANCE}m  stall_window={STALL_WINDOW_S}s")
     while True:
         rclpy.spin_once(node, timeout_sec=0.5)
+        if node.safety_stop:
+            log(f"{label}: SAFETY STOP triggered by safety_watchdog -- aborting")
+            return "safety_stop"
         if node.xy is not None:
             dist = math.hypot(node.xy[0] - goal_xy[0], node.xy[1] - goal_xy[1])
             if dist < XY_GOAL_TOLERANCE:
@@ -340,6 +352,10 @@ def main():
                                     "initial_bag")
             if outcome == "reached":
                 log("initial_bag: waypoint reached")
+            elif outcome == "safety_stop":
+                sys.exit("FATAL: safety_watchdog triggered an emergency stop during "
+                         "initial_bag -- aborting entire run. Check the waypoint.launch.py "
+                         "log for the safety_watchdog diagnostic message.")
             else:
                 log("initial_bag: FAILED to reach waypoint (stalled)")
             maybe_retrain(retrain_cfg, bag_dir, initial_bag)
@@ -361,6 +377,11 @@ def main():
             if outcome == "reached":
                 n_success += 1
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): waypoint reached")
+            elif outcome == "safety_stop":
+                sys.exit(f"FATAL: safety_watchdog triggered an emergency stop during "
+                         f"trial {i}/{args.n_trajectories} ({traj_name}) -- aborting entire "
+                         f"run. Check the waypoint.launch.py log for the safety_watchdog "
+                         f"diagnostic message.")
             else:
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): FAILED to reach "
                     f"waypoint (stalled) -- planning a new trajectory")
