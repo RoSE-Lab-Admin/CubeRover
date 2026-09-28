@@ -136,6 +136,7 @@ deactivate
 | `retrain_subset_fraction` | `0.3` | Fraction of the *previously existing* bags to sample when `retrain_subset:=true`. Unused otherwise. |
 | `train_from_scratch` | `false` | Runs the first `from_scratch_n_bootstrap` trials under pure kinematics (regardless of what's deployed in `nav2_param2.yaml`), then trains a fresh MLP from a blank init on just that data (including `initial_bag`) and keeps updating it every trial after. Weights are saved per-iteration under `bag_dir/from_scratch_weights/` and pushed to the live controller via `nn_model_path` — the shared deployed model under `nav2_mppi_controller`'s share dir is never read from or written to. Takes over from `retrain_dynamics` if both are set (logs a warning). |
 | `from_scratch_n_bootstrap` | `5` | Number of initial kinematics-only trials (not counting `initial_bag`, which is included in the dataset regardless) before the first from-scratch fit. |
+| `start_rviz` | `true` | Launches `rviz2` alongside everything else — replaces running it manually in a separate terminal. Set to `false` to skip it. |
 
 Example with retraining on:
 ```bash

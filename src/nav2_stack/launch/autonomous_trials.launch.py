@@ -28,12 +28,16 @@ stored per-iteration under bag_dir/from_scratch_weights/ -- the shared deployed
 model is never read from or written to. See dynamics_retrain.py / autonomous_trials.py.
   ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \\
       train_from_scratch:=true from_scratch_n_bootstrap:=5
+
+rviz2 is launched by default (replaces running it manually in a separate
+terminal) -- pass start_rviz:=false to skip it.
 """
 
 from launch import LaunchDescription
 from launch.substitutions import PathJoinSubstitution, LaunchConfiguration
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.conditions import IfCondition
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -53,6 +57,7 @@ def launch_setup(context):
     retrain_subset_fraction = LaunchConfiguration('retrain_subset_fraction')
     train_from_scratch = LaunchConfiguration('train_from_scratch')
     from_scratch_n_bootstrap = LaunchConfiguration('from_scratch_n_bootstrap')
+    start_rviz = LaunchConfiguration('start_rviz')
 
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -80,7 +85,17 @@ def launch_setup(context):
         ],
     )
 
-    return [nav2_launch, orchestrator_node]
+    # Replaces the "run rviz2 in a separate terminal" step -- bare rviz2, no
+    # custom config (matches what was being run manually; there's no .rviz
+    # file checked in to load instead).
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        output='screen',
+        condition=IfCondition(start_rviz),
+    )
+
+    return [nav2_launch, orchestrator_node, rviz_node]
 
 
 def generate_launch_description():
@@ -110,5 +125,8 @@ def generate_launch_description():
         DeclareLaunchArgument('from_scratch_n_bootstrap', default_value='5',
                               description='Number of initial kinematics-only trials before '
                                           'the first from-scratch fit'),
+        DeclareLaunchArgument('start_rviz', default_value='true',
+                              description='Launch rviz2 alongside everything else (replaces '
+                                          'running it manually in a separate terminal)'),
         OpaqueFunction(function=launch_setup),
     ])
