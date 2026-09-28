@@ -49,7 +49,7 @@ NAV2_MANAGED_NODES = ["map_server", "planner_server", "controller_server",
 # torch to be importable at all -- only opting into retraining does.
 
 XY_GOAL_TOLERANCE = 0.5     # matches nav2_param2.yaml's goal_checker xy_goal_tolerance
-STALL_WINDOW_S = 30.0       # no-progress-for-this-long => treat the trial as stuck
+STALL_WINDOW_S = 60.0       # no-progress-for-this-long => treat the trial as stuck
 MIN_IMPROVEMENT_M = 0.05    # smaller than this doesn't count as "progress" (noise floor)
 GP_EXPLORER_MAX_ATTEMPTS = 3
 BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before commands flow
