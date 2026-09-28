@@ -94,8 +94,13 @@ class PosePub(Node):
 def main(args=None):
     rclpy.init(args=args)
     pose_pub = PosePub()
-    rclpy.spin(pose_pub)
-    rclpy.shutdown()
+    try:
+        rclpy.spin(pose_pub)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pose_pub.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == "__main__":
     main()

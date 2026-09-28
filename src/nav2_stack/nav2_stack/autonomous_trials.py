@@ -30,7 +30,10 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
+from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.msg import Parameter as ParameterMsg, ParameterValue, ParameterType
+from nav2_msgs.srv import ManageLifecycleNodes
 from ament_index_python.packages import get_package_share_directory
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
@@ -66,14 +69,32 @@ def log(msg: str):
 
 class PoseWatcher(Node):
     """Keeps the latest real OptiTrack pose available for goal-reached / stall
-    checks, and watches for a safety_watchdog-triggered emergency stop."""
+    checks, watches for a safety_watchdog-triggered emergency stop and
+    path_follower's authoritative trajectory outcome, and owns persistent
+    service clients for pushing live params / cycling the Nav2 lifecycle.
+
+    The clients are owned here (one long-lived node for the whole run)
+    rather than shelling out to `ros2 param set` / `ros2 service call` per
+    call -- each of those CLI invocations spins up a brand-new DDS
+    participant and pays fresh discovery from scratch, which was observed to
+    occasionally hang indefinitely with zero diagnostic output right after a
+    burst of node churn (bag recorder / waypoint launch / gp_explorer
+    processes joining and leaving the ROS graph in quick succession). Reusing
+    one already-discovered participant, with an explicit timeout on every
+    call, turns that into a bounded, diagnosable failure instead."""
 
     def __init__(self, opti_topic: str):
         super().__init__("autonomous_trials_pose_watcher")
         self.xy = None
         self.safety_stop = False
+        self.goal_result = None  # None | "succeeded" | "failed"
         self.create_subscription(PoseStamped, opti_topic, self._cb, 10)
         self.create_subscription(Bool, "/safety_stop", self._safety_stop_cb, 10)
+        self.create_subscription(String, "/trial_goal_result", self._goal_result_cb, 10)
+        self.set_params_client = self.create_client(
+            SetParameters, "/controller_server/set_parameters")
+        self.manage_nodes_client = self.create_client(
+            ManageLifecycleNodes, "/lifecycle_manager_navigation/manage_nodes")
 
     def _cb(self, msg: PoseStamped):
         self.xy = (msg.pose.position.x, msg.pose.position.y)
@@ -81,6 +102,12 @@ class PoseWatcher(Node):
     def _safety_stop_cb(self, msg: Bool):
         if msg.data:
             self.safety_stop = True
+
+    def _goal_result_cb(self, msg: String):
+        self.goal_result = msg.data
+
+    def reset_trial_state(self):
+        self.goal_result = None
 
 
 def wait_for_nav2_active():
@@ -105,9 +132,23 @@ def wait_for_nav2_active():
 
 
 def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
-    """Spins until the real pose is within XY_GOAL_TOLERANCE of goal_xy, no
-    progress has been made for STALL_WINDOW_S, or safety_watchdog fires.
-    Returns 'reached', 'stalled', or 'safety_stop'."""
+    """Spins until path_follower reports its authoritative trajectory
+    outcome, the real pose is within XY_GOAL_TOLERANCE of goal_xy (a
+    secondary/fallback "reached" signal -- see below), no progress has been
+    made for STALL_WINDOW_S, or safety_watchdog fires.
+    Returns 'reached', 'stalled', or 'safety_stop'.
+
+    Trusts path_follower's own /trial_goal_result over the distance poll:
+    Nav2's internal goToPose result and this function's independent
+    re-derivation of "reached" from a coarser, staler pose-topic poll can
+    disagree right at the tolerance boundary (observed live: Nav2 reported
+    TaskResult.SUCCEEDED while this poll still saw 0.542m > 0.5m and the
+    trial was wrongly marked STALLED after burning the full stall window).
+    The distance check is kept as a fallback "reached" trigger too -- it can
+    only ever fire *correctly* (same 0.5m tolerance Nav2's own goal checker
+    uses), so keeping it can't reintroduce that bug, only catch a reached
+    goal if /trial_goal_result were ever dropped."""
+    node.reset_trial_state()
     best_dist = math.inf
     last_improve_t = time.monotonic()
     log(f"{label}: waiting for goal ({goal_xy[0]:.3f}, {goal_xy[1]:.3f})  "
@@ -117,6 +158,12 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
         if node.safety_stop:
             log(f"{label}: SAFETY STOP triggered by safety_watchdog -- aborting")
             return "safety_stop"
+        if node.goal_result == "succeeded":
+            log(f"{label}: goal reached (path_follower reported TaskResult.SUCCEEDED)")
+            return "reached"
+        if node.goal_result == "failed":
+            log(f"{label}: path_follower reported the trajectory FAILED")
+            return "stalled"
         if node.xy is not None:
             dist = math.hypot(node.xy[0] - goal_xy[0], node.xy[1] - goal_xy[1])
             if dist < XY_GOAL_TOLERANCE:
@@ -207,26 +254,92 @@ def parse_nav2_param_yaml(text: str) -> dict:
     }
 
 
-def push_linear_params_and_reload(weight, bias):
+def with_retries(fn, attempts=3, backoff_s=5.0, label=""):
+    last_exc = None
+    for attempt in range(1, attempts + 1):
+        try:
+            fn()
+            return
+        except Exception as e:
+            last_exc = e
+            log(f"WARNING: {label} attempt {attempt}/{attempts} failed ({e})")
+            if attempt < attempts:
+                time.sleep(backoff_s)
+    raise RuntimeError(f"{label} failed after {attempts} attempts") from last_exc
+
+
+def _param_value(value) -> ParameterValue:
+    if isinstance(value, bool):
+        return ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=value)
+    if isinstance(value, int):
+        return ParameterValue(type=ParameterType.PARAMETER_INTEGER, integer_value=value)
+    if isinstance(value, float):
+        return ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=value)
+    if isinstance(value, str):
+        return ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=value)
+    if isinstance(value, (list, tuple)):
+        return ParameterValue(
+            type=ParameterType.PARAMETER_DOUBLE_ARRAY,
+            double_array_value=[float(v) for v in value])
+    raise TypeError(f"unsupported parameter value type: {type(value)}")
+
+
+def set_controller_param(node: PoseWatcher, name: str, value, timeout_sec=15.0,
+                          service_wait_sec=10.0):
+    """Sets a /controller_server parameter via a persistent rclpy service
+    client (see PoseWatcher docstring for why not `ros2 param set`), with an
+    explicit timeout and a bounded retry instead of hanging indefinitely."""
+    def _do():
+        if not node.set_params_client.wait_for_service(timeout_sec=service_wait_sec):
+            raise RuntimeError(f"/controller_server/set_parameters not available "
+                                f"after {service_wait_sec}s")
+        req = SetParameters.Request(parameters=[ParameterMsg(name=name, value=_param_value(value))])
+        future = node.set_params_client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=timeout_sec)
+        if not future.done():
+            raise RuntimeError(f"timed out after {timeout_sec}s waiting for response")
+        result = future.result()
+        if result is None:
+            raise RuntimeError(f"service call raised {future.exception()}")
+        if not result.results[0].successful:
+            raise RuntimeError(f"rejected ({result.results[0].reason})")
+    with_retries(_do, label=f"set parameter {name}")
+
+
+def call_manage_nodes(node: PoseWatcher, command: int, label: str, timeout_sec=180.0,
+                       service_wait_sec=15.0):
+    """Calls lifecycle_manager_navigation's ManageLifecycleNodes service via a
+    persistent rclpy client (see PoseWatcher docstring), with an explicit
+    timeout and a bounded retry. timeout_sec is generous (a full stack
+    RESET+STARTUP cycle has been observed to legitimately take ~60s, more if
+    controller_server needs to recapture its CUDA graph) but still bounded,
+    so a genuine hang is caught and retried instead of blocking forever."""
+    def _do():
+        if not node.manage_nodes_client.wait_for_service(timeout_sec=service_wait_sec):
+            raise RuntimeError(f"/lifecycle_manager_navigation/manage_nodes not available "
+                                f"after {service_wait_sec}s")
+        req = ManageLifecycleNodes.Request(command=command)
+        future = node.manage_nodes_client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=timeout_sec)
+        if not future.done():
+            raise RuntimeError(f"timed out after {timeout_sec}s waiting for response")
+        result = future.result()
+        if result is None:
+            raise RuntimeError(f"service call raised {future.exception()}")
+        if not result.success:
+            raise RuntimeError("returned success=False")
+    with_retries(_do, label=label)
+
+
+def push_linear_params_and_reload(node: PoseWatcher, weight, bias):
     log(f"pushing retrained linear weights into the live controller: "
         f"weight={weight} bias={bias}")
-    subprocess.run(["ros2", "param", "set", "/controller_server",
-                    "FollowPath.linear_model.weight", str(weight)], check=True)
-    subprocess.run(["ros2", "param", "set", "/controller_server",
-                    "FollowPath.linear_model.bias", str(bias)], check=True)
-    reload_controller()
+    set_controller_param(node, "FollowPath.linear_model.weight", list(weight))
+    set_controller_param(node, "FollowPath.linear_model.bias", list(bias))
+    reload_controller(node)
 
 
-def _call_manage_nodes(command: int, label: str):
-    result = subprocess.run(
-        ["ros2", "service", "call", "/lifecycle_manager_navigation/manage_nodes",
-         "nav2_msgs/srv/ManageLifecycleNodes", f"{{command: {command}}}"],
-        check=True, capture_output=True, text=True)
-    if "success=True" not in result.stdout:
-        raise RuntimeError(f"{label} did not report success=True: {result.stdout}")
-
-
-def reload_controller():
+def reload_controller(node: PoseWatcher):
     """Cycles the WHOLE Nav2 stack via lifecycle_manager_navigation's own
     ManageLifecycleNodes service (RESET=3 then STARTUP=0), so it reconstructs
     NNDynamics fresh (re-reads the .pt file / just-pushed linear/dynamics_mode
@@ -246,11 +359,11 @@ def reload_controller():
     take a while if the model needs CUDA graph capture on activate."""
     log("cycling the Nav2 stack via lifecycle_manager_navigation to reload the dynamics "
         "model (RESET then STARTUP -- can take a while)")
-    _call_manage_nodes(3, "RESET")
-    _call_manage_nodes(0, "STARTUP")
+    call_manage_nodes(node, 3, "RESET")
+    call_manage_nodes(node, 0, "STARTUP")
 
 
-def maybe_retrain(retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
+def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
     if retrain_cfg is None:
         return
     from nav2_stack import dynamics_retrain  # deferred -- see import comment near top of file
@@ -269,25 +382,24 @@ def maybe_retrain(retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
         return
 
     if retrain_cfg["model_type"] == "linear":
-        push_linear_params_and_reload(result["weight"], result["bias"])
+        push_linear_params_and_reload(node, result["weight"], result["bias"])
     else:
         log(f"exported retrained mlp to {result['exported_path']}")
-        reload_controller()
+        reload_controller(node)
 
 
-def push_dynamics_mode(mode: str):
+def push_dynamics_mode(node: PoseWatcher, mode: str):
     log(f"pushing dynamics_mode={mode} into the live controller")
-    subprocess.run(["ros2", "param", "set", "/controller_server",
-                    "FollowPath.dynamics_mode", mode], check=True)
+    set_controller_param(node, "FollowPath.dynamics_mode", mode)
 
 
-def push_model_path(model_path: Path):
+def push_model_path(node: PoseWatcher, model_path: Path):
     log(f"pushing nn_model_path={model_path} into the live controller")
-    subprocess.run(["ros2", "param", "set", "/controller_server",
-                    "FollowPath.nn_model_path", str(model_path)], check=True)
+    set_controller_param(node, "FollowPath.nn_model_path", str(model_path))
 
 
-def maybe_train_from_scratch(fs_cfg: dict, bag_dir: Path, new_bag_path: Path, trial_label: str):
+def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new_bag_path: Path,
+                              trial_label: str):
     """Called after every post-bootstrap trial once train_from_scratch is
     active. Retrains (or, on the very first call, trains from a blank init)
     the from-scratch MLP, saving each iteration's weights to its own file
@@ -312,10 +424,10 @@ def maybe_train_from_scratch(fs_cfg: dict, bag_dir: Path, new_bag_path: Path, tr
         return
 
     fs_cfg["current_weights_path"] = Path(result["exported_path"])
-    push_model_path(fs_cfg["current_weights_path"])
+    push_model_path(node, fs_cfg["current_weights_path"])
     if is_first:
-        push_dynamics_mode("neural_network")
-    reload_controller()
+        push_dynamics_mode(node, "neural_network")
+    reload_controller(node)
 
 
 def run_gp_explorer(gp_explorer_path: Path, bag_dir: Path, name: str) -> bool:
@@ -438,15 +550,14 @@ def main():
     pose_csv = gp_explorer_path.resolve().parent.parent / "pose.csv"
 
     rclpy.init()
+    pose_node = PoseWatcher(args.opti_topic)
     wait_for_nav2_active()
 
     if fs_cfg is not None and parsed["dynamics_mode"] != "kinematics":
         log("train_from_scratch: forcing dynamics_mode=kinematics for the bootstrap phase "
             "(regardless of what nav2_param2.yaml currently has deployed)")
-        push_dynamics_mode("kinematics")
-        reload_controller()
-
-    pose_node = PoseWatcher(args.opti_topic)
+        push_dynamics_mode(pose_node, "kinematics")
+        reload_controller(pose_node)
 
     try:
         initial_bag = bag_dir / "initial_bag"
@@ -465,7 +576,7 @@ def main():
                          "log for the safety_watchdog diagnostic message.")
             else:
                 log("initial_bag: FAILED to reach waypoint (stalled)")
-            maybe_retrain(retrain_cfg, bag_dir, initial_bag)
+            maybe_retrain(pose_node, retrain_cfg, bag_dir, initial_bag)
         else:
             log(f"found existing {initial_bag}, skipping bootstrap")
 
@@ -492,9 +603,10 @@ def main():
             else:
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): FAILED to reach "
                     f"waypoint (stalled) -- planning a new trajectory")
-            maybe_retrain(retrain_cfg, bag_dir, bag_dir / bag_name)
+            maybe_retrain(pose_node, retrain_cfg, bag_dir, bag_dir / bag_name)
             if fs_cfg is not None and i >= fs_cfg["n_bootstrap"]:
-                maybe_train_from_scratch(fs_cfg, bag_dir, bag_dir / bag_name, f"trial{i:02d}")
+                maybe_train_from_scratch(pose_node, fs_cfg, bag_dir, bag_dir / bag_name,
+                                          f"trial{i:02d}")
 
         log(f"all {args.n_trajectories} trials complete: "
             f"{n_success}/{args.n_trajectories} successful")

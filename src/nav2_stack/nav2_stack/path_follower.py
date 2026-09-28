@@ -5,6 +5,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.time import Time
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped, Vector3
+from std_msgs.msg import String
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
@@ -46,6 +47,15 @@ class PathFollower(Node):
 
         # publisher to explicitly stop motors on shutdown
         self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+        # authoritative trajectory outcome -- autonomous_trials.py's own
+        # distance-based polling of the pose topic is a coarser, staler proxy
+        # for the same thing and can disagree with Nav2's own goToPose result
+        # right at the goal-tolerance boundary (observed: Nav2 reported
+        # TaskResult.SUCCEEDED while the external distance poll still saw
+        # 0.542m > 0.5m tolerance and eventually gave up as "stalled"), so
+        # this publishes the real result for it to trust instead.
+        self.goal_result_pub = self.create_publisher(String, '/trial_goal_result', 10)
+        self.trajectory_had_failure = False
 
         # initialize nav2
         self.nav = BasicNavigator()
@@ -327,6 +337,7 @@ class PathFollower(Node):
             self.get_logger().warn(
                 f"goToPose FAILED for waypoint {self.current_wp_idx + 1}/{len(self.point_path)} "
                 f"-- advancing anyway (existing behavior, unchanged)")
+            self.trajectory_had_failure = True
         else:
             self.get_logger().info(
                 f"goToPose result={result} for waypoint {self.current_wp_idx + 1}/{len(self.point_path)}")
@@ -337,6 +348,8 @@ class PathFollower(Node):
             self.get_logger().info("trajectory completed")
             self.started = False
             self.finished = True
+            self.goal_result_pub.publish(
+                String(data="failed" if self.trajectory_had_failure else "succeeded"))
             self.stop_nav()
             return
 

@@ -185,6 +185,14 @@ void Optimizer::getParams()
     }
   }
 
+  // Explicitly destroy the old NNDynamics (freeing its CUDA graph + static
+  // tensors) before constructing the new one. Without this, `make_unique`
+  // on the right-hand side runs first -- capturing a brand new CUDA graph
+  // while the old one is still alive -- so every reload transiently holds
+  // two live graphs on the GPU and leaves the allocator's private mempools
+  // fragmented across repeated reload cycles instead of cleanly reusing the
+  // freed space.
+  nn_dynamics_.reset();
   nn_dynamics_ = std::make_unique<NNDynamics>(nn_cfg, logger_);
 
   s.constraints = s.base_constraints;
