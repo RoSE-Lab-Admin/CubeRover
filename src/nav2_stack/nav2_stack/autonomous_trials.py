@@ -217,23 +217,37 @@ def push_linear_params_and_reload(weight, bias):
     reload_controller()
 
 
-def reload_controller():
-    """Cycles controller_server's lifecycle so it reconstructs NNDynamics fresh
-    (re-reads the .pt file / just-pushed linear params). See plan doc for why
-    this is needed -- weights are otherwise only ever loaded once at startup.
+def _call_manage_nodes(command: int, label: str):
+    result = subprocess.run(
+        ["ros2", "service", "call", "/lifecycle_manager_navigation/manage_nodes",
+         "nav2_msgs/srv/ManageLifecycleNodes", f"{{command: {command}}}"],
+        check=True, capture_output=True, text=True)
+    if "success=True" not in result.stdout:
+        raise RuntimeError(f"{label} did not report success=True: {result.stdout}")
 
-    controller_server is already 'active' at this point (Nav2's own bringup
-    already activated it), and ROS2's lifecycle state machine doesn't allow
-    jumping straight to 'configure' from there -- from 'active', the only
-    valid transitions are 'deactivate' or 'shutdown'. Full cycle needed:
-    active -[deactivate]-> inactive -[cleanup]-> unconfigured
-           -[configure]-> inactive (re-runs on_configure/getParams here)
-           -[activate]-> active."""
-    log("cycling controller_server lifecycle to reload the dynamics model")
-    subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "deactivate"], check=True)
-    subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "cleanup"], check=True)
-    subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "configure"], check=True)
-    subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "activate"], check=True)
+
+def reload_controller():
+    """Cycles the WHOLE Nav2 stack via lifecycle_manager_navigation's own
+    ManageLifecycleNodes service (RESET=3 then STARTUP=0), so it reconstructs
+    NNDynamics fresh (re-reads the .pt file / just-pushed linear/dynamics_mode
+    params) -- weights are otherwise only ever loaded once at startup.
+
+    Does NOT use direct per-node `ros2 lifecycle set` calls on controller_server
+    -- confirmed by trial and error that lifecycle_manager_navigation reacts to
+    ANY externally-driven state change on a node it manages (not just a bond
+    heartbeat timeout) and starts its own concurrent recovery, racing whatever
+    sequence we're mid-way through (observed as "transition not registered"
+    errors and the whole process crashing while Nav2 silently self-healed with
+    nothing left running to notice). Going through the manager's own official
+    control service instead means the manager is the one making the state
+    changes, so it has no "unexpected" state to react to. This does mean all 6
+    managed nodes get reconfigured, not just controller_server -- harmless
+    (the other 5 just re-read their own unchanged params) but slower, and can
+    take a while if the model needs CUDA graph capture on activate."""
+    log("cycling the Nav2 stack via lifecycle_manager_navigation to reload the dynamics "
+        "model (RESET then STARTUP -- can take a while)")
+    _call_manage_nodes(3, "RESET")
+    _call_manage_nodes(0, "STARTUP")
 
 
 def maybe_retrain(retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
