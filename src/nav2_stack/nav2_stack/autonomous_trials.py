@@ -220,8 +220,18 @@ def push_linear_params_and_reload(weight, bias):
 def reload_controller():
     """Cycles controller_server's lifecycle so it reconstructs NNDynamics fresh
     (re-reads the .pt file / just-pushed linear params). See plan doc for why
-    this is needed -- weights are otherwise only ever loaded once at startup."""
+    this is needed -- weights are otherwise only ever loaded once at startup.
+
+    controller_server is already 'active' at this point (Nav2's own bringup
+    already activated it), and ROS2's lifecycle state machine doesn't allow
+    jumping straight to 'configure' from there -- from 'active', the only
+    valid transitions are 'deactivate' or 'shutdown'. Full cycle needed:
+    active -[deactivate]-> inactive -[cleanup]-> unconfigured
+           -[configure]-> inactive (re-runs on_configure/getParams here)
+           -[activate]-> active."""
     log("cycling controller_server lifecycle to reload the dynamics model")
+    subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "deactivate"], check=True)
+    subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "cleanup"], check=True)
     subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "configure"], check=True)
     subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "activate"], check=True)
 
