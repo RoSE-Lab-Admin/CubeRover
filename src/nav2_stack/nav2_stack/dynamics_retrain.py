@@ -354,17 +354,26 @@ def _load_segments(bag_paths: List[Path], typestore) -> List[Dict]:
 
 def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[int],
            warm_start: bool, subset: bool, subset_fraction: float,
-           fmean: np.ndarray, fstd: np.ndarray) -> dict:
+           fmean: np.ndarray, fstd: np.ndarray,
+           warm_start_path: Optional[Path] = None, save_path: Optional[Path] = None) -> dict:
     """
-    Retrains the deployed model (model_type="linear" or "mlp", width required for
-    "mlp") on bags in bag_dir, always including new_bag_path plus either every
-    other bag (subset=False) or a random subset_fraction of them (subset=True).
+    Retrains a model (model_type="linear" or "mlp", width required for "mlp")
+    on bags in bag_dir, always including new_bag_path plus either every other
+    bag (subset=False) or a random subset_fraction of them (subset=True).
+
+    MLP weight locations (both optional, MLP only):
+      - warm_start_path: read the warm-start init from here instead of the
+        shared deployed .pt (ignored if warm_start=False).
+      - save_path: write the retrained, scripted model here instead of the
+        shared deployed .pt (used by --train-from-scratch to keep every
+        iteration's weights isolated in bag_dir, never touching the shared
+        deployed model other callers rely on).
+      Both default to the shared installed path (found via ament_index, not
+      the source tree) when not given -- unchanged behavior for the normal
+      retrain_dynamics flow.
 
     Returns a dict:
-      - model_type="mlp": {"exported_path": <str>} -- also writes the retrained,
-        scripted model directly to the installed share directory the live
-        controller reads from (found via ament_index, not the source tree --
-        see module docstring).
+      - model_type="mlp": {"exported_path": <str>}.
       - model_type="linear": {"weight": [4 floats], "bias": [2 floats]} -- the
         caller (autonomous_trials.py) is responsible for pushing these into the
         live controller via `ros2 param set`, since linear weights are ROS2
@@ -421,12 +430,14 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
     if model_type == "mlp":
         if width not in VALID_WIDTHS:
             raise ValueError(f"width must be one of {sorted(VALID_WIDTHS)}, got {width}")
-        deploy_dir = Path(get_package_share_directory("nav2_mppi_controller")) / "models" / "ar_mlp"
-        deploy_path = deploy_dir / f"mlp{width}_ar_velocity_teacher.pt"
+        default_dir = Path(get_package_share_directory("nav2_mppi_controller")) / "models" / "ar_mlp"
+        default_path = default_dir / f"mlp{width}_ar_velocity_teacher.pt"
+        load_path = warm_start_path if warm_start_path is not None else default_path
+        out_path = save_path if save_path is not None else default_path
 
         init_state_dict = None
-        if warm_start and deploy_path.exists():
-            init_state_dict = torch.jit.load(str(deploy_path)).state_dict()
+        if warm_start and load_path.exists():
+            init_state_dict = torch.jit.load(str(load_path)).state_dict()
 
         model, val_loss = train_mlp_ar_teacher(width, 2, train_segs, val_segs, norm,
                                                init_state_dict=init_state_dict)
@@ -439,8 +450,8 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
             ref, got = model(x), scripted(x)
         assert (ref - got).abs().max().item() == 0.0, "scripted model diverges from eager -- aborting export"
 
-        deploy_dir.mkdir(parents=True, exist_ok=True)
-        scripted.save(str(deploy_path))
-        return {"exported_path": str(deploy_path)}
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        scripted.save(str(out_path))
+        return {"exported_path": str(out_path)}
 
     raise ValueError(f"model_type must be 'linear' or 'mlp', got {model_type!r}")

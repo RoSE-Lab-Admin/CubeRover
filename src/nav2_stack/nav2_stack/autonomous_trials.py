@@ -251,6 +251,49 @@ def maybe_retrain(retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
         reload_controller()
 
 
+def push_dynamics_mode(mode: str):
+    log(f"pushing dynamics_mode={mode} into the live controller")
+    subprocess.run(["ros2", "param", "set", "/controller_server",
+                    "FollowPath.dynamics_mode", mode], check=True)
+
+
+def push_model_path(model_path: Path):
+    log(f"pushing nn_model_path={model_path} into the live controller")
+    subprocess.run(["ros2", "param", "set", "/controller_server",
+                    "FollowPath.nn_model_path", str(model_path)], check=True)
+
+
+def maybe_train_from_scratch(fs_cfg: dict, bag_dir: Path, new_bag_path: Path, trial_label: str):
+    """Called after every post-bootstrap trial once train_from_scratch is
+    active. Retrains (or, on the very first call, trains from a blank init)
+    the from-scratch MLP, saving each iteration's weights to its own file
+    under bag_dir/from_scratch_weights/ -- the shared deployed model under
+    nav2_mppi_controller's share dir is never read from or written to."""
+    from nav2_stack import dynamics_retrain  # deferred -- see import comment near top of file
+    is_first = fs_cfg["current_weights_path"] is None
+    save_path = fs_cfg["weights_dir"] / f"mlp{fs_cfg['width']}_{trial_label}.pt"
+    log(f"train_from_scratch: {'training from a blank init' if is_first else 'continuing'} "
+        f"mlp{fs_cfg['width']} on data in {bag_dir} -> {save_path}")
+    try:
+        result = dynamics_retrain.retrain(
+            bag_dir=bag_dir, new_bag_path=new_bag_path,
+            model_type="mlp", width=fs_cfg["width"],
+            warm_start=not is_first, subset=fs_cfg["subset"],
+            subset_fraction=fs_cfg["subset_fraction"],
+            fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
+            warm_start_path=fs_cfg["current_weights_path"], save_path=save_path)
+    except Exception as e:
+        log(f"WARNING: train_from_scratch retrain failed ({e}) -- keeping the "
+            f"currently deployed from-scratch weights")
+        return
+
+    fs_cfg["current_weights_path"] = Path(result["exported_path"])
+    push_model_path(fs_cfg["current_weights_path"])
+    if is_first:
+        push_dynamics_mode("neural_network")
+    reload_controller()
+
+
 def run_gp_explorer(gp_explorer_path: Path, bag_dir: Path, name: str) -> bool:
     # gp_explorer_gpu.py's own --map default is Path(__file__).resolve().parent.parent
     # / 'maps' / 'map.pgm' -- only correct when run from source. From the
@@ -290,6 +333,16 @@ def main():
     parser.add_argument("--retrain-subset-fraction", default=0.3, type=float,
                         help="Fraction of prior bags to sample when --retrain-subset is "
                              "true. Default: 0.3")
+    parser.add_argument("--train-from-scratch", default="false", type=parse_bool,
+                        help="Run the first --from-scratch-n-bootstrap trials under pure "
+                             "kinematics, then train a fresh MLP from a blank init on just "
+                             "that data and keep updating it after every trial after that. "
+                             "Weights are stored per-iteration under bag_dir/from_scratch_weights/ "
+                             "and the shared deployed model is never read from or written to. "
+                             "Takes over from --retrain-dynamics if both are set. Default: false")
+    parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
+                        help="Number of initial kinematics-only trials to collect before the "
+                             "first from-scratch fit. Default: 5")
     # launch_ros.actions.Node always appends --ros-args (and would append any
     # remappings/params too) to the process's argv, since it assumes the
     # executable parses those via rclpy's standard handling. Strip them before
@@ -300,10 +353,33 @@ def main():
     bag_dir = args.bag_dir
     bag_dir.mkdir(parents=True, exist_ok=True)
 
+    yaml_path = Path(get_package_share_directory("nav2_stack")) / "config" / "nav2_param2.yaml"
+    parsed = parse_nav2_param_yaml(yaml_path.read_text())
+
+    if args.train_from_scratch and args.retrain_dynamics:
+        log("WARNING: both --train-from-scratch and --retrain-dynamics are true -- "
+            "train_from_scratch takes over, retrain_dynamics is ignored")
+
+    fs_cfg = None
+    if args.train_from_scratch:
+        fs_cfg = {
+            "width": parsed["nn_hidden_width"],
+            "n_bootstrap": args.from_scratch_n_bootstrap,
+            "weights_dir": bag_dir / "from_scratch_weights",
+            "current_weights_path": None,
+            "subset": args.retrain_subset,
+            "subset_fraction": args.retrain_subset_fraction,
+            "fmean": np.array(parsed["fmean"], dtype=np.float32),
+            "fstd": np.array(parsed["fstd"], dtype=np.float32),
+        }
+        fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
+        log(f"train_from_scratch enabled: first {fs_cfg['n_bootstrap']} trials (including "
+            f"initial_bag) run under kinematics, then mlp{fs_cfg['width']} trains from a "
+            f"blank init on that data and updates every trial after -- weights isolated "
+            f"under {fs_cfg['weights_dir']}, shared deployed model untouched")
+
     retrain_cfg = None
-    if args.retrain_dynamics:
-        yaml_path = Path(get_package_share_directory("nav2_stack")) / "config" / "nav2_param2.yaml"
-        parsed = parse_nav2_param_yaml(yaml_path.read_text())
+    if args.retrain_dynamics and not args.train_from_scratch:
         if parsed["dynamics_mode"] == "kinematics":
             log("retrain_dynamics=true but dynamics_mode=kinematics in nav2_param2.yaml "
                 "-- nothing to retrain, disabling")
@@ -339,6 +415,13 @@ def main():
 
     rclpy.init()
     wait_for_nav2_active()
+
+    if fs_cfg is not None and parsed["dynamics_mode"] != "kinematics":
+        log("train_from_scratch: forcing dynamics_mode=kinematics for the bootstrap phase "
+            "(regardless of what nav2_param2.yaml currently has deployed)")
+        push_dynamics_mode("kinematics")
+        reload_controller()
+
     pose_node = PoseWatcher(args.opti_topic)
 
     try:
@@ -386,6 +469,8 @@ def main():
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): FAILED to reach "
                     f"waypoint (stalled) -- planning a new trajectory")
             maybe_retrain(retrain_cfg, bag_dir, bag_dir / bag_name)
+            if fs_cfg is not None and i >= fs_cfg["n_bootstrap"]:
+                maybe_train_from_scratch(fs_cfg, bag_dir, bag_dir / bag_name, f"trial{i:02d}")
 
         log(f"all {args.n_trajectories} trials complete: "
             f"{n_success}/{args.n_trajectories} successful")

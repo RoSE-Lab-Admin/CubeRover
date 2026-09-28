@@ -19,6 +19,15 @@ collected in bag_dir after every trial, and pushes the result into the live
 controller via a controller_server lifecycle cycle. See dynamics_retrain.py.
   ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \\
       retrain_dynamics:=true warm_start:=true retrain_subset:=false
+
+Optional train-from-scratch mode (default off, takes over from retrain_dynamics
+if both are set): runs the first from_scratch_n_bootstrap trials under pure
+kinematics regardless of what's deployed, then trains a fresh MLP from a blank
+init on just that data and keeps updating it every trial after. Weights are
+stored per-iteration under bag_dir/from_scratch_weights/ -- the shared deployed
+model is never read from or written to. See dynamics_retrain.py / autonomous_trials.py.
+  ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \\
+      train_from_scratch:=true from_scratch_n_bootstrap:=5
 """
 
 from launch import LaunchDescription
@@ -42,6 +51,8 @@ def launch_setup(context):
     warm_start = LaunchConfiguration('warm_start')
     retrain_subset = LaunchConfiguration('retrain_subset')
     retrain_subset_fraction = LaunchConfiguration('retrain_subset_fraction')
+    train_from_scratch = LaunchConfiguration('train_from_scratch')
+    from_scratch_n_bootstrap = LaunchConfiguration('from_scratch_n_bootstrap')
 
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -64,6 +75,8 @@ def launch_setup(context):
             '--warm-start', warm_start,
             '--retrain-subset', retrain_subset,
             '--retrain-subset-fraction', retrain_subset_fraction,
+            '--train-from-scratch', train_from_scratch,
+            '--from-scratch-n-bootstrap', from_scratch_n_bootstrap,
         ],
     )
 
@@ -89,5 +102,13 @@ def generate_launch_description():
         DeclareLaunchArgument('retrain_subset_fraction', default_value='0.3',
                               description='Fraction of prior bags to sample when '
                                           'retrain_subset is true'),
+        DeclareLaunchArgument('train_from_scratch', default_value='false',
+                              description='Bootstrap under kinematics then train a fresh MLP '
+                                          'from scratch, isolated from the shared deployed '
+                                          'model -- takes over from retrain_dynamics if both '
+                                          'are set'),
+        DeclareLaunchArgument('from_scratch_n_bootstrap', default_value='5',
+                              description='Number of initial kinematics-only trials before '
+                                          'the first from-scratch fit'),
         OpaqueFunction(function=launch_setup),
     ])
