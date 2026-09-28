@@ -104,7 +104,11 @@ void Optimizer::getParams()
       "Sign of the parameter ay_min is incorrect, consider setting it negative.");
   }
 
-  getParam(motion_model_name, "motion_model", std::string("DiffDrive"));
+  // Static for the same reason as the dynamics-correction params below --
+  // motion_model_name is a local variable, destroyed when this function
+  // returns; the default Dynamic would register a callback holding a
+  // dangling reference to it.
+  getParam(motion_model_name, "motion_model", std::string("DiffDrive"), ParameterType::Static);
 
   // ── Dynamics-correction parameters ─────────────────────────────────────────
   // dynamics_mode selects the trajectory-integration model:
@@ -112,8 +116,21 @@ void Optimizer::getParams()
   //   "linear"         : hardcoded 2x2 linear correction (see linear_model.*)
   //   "neural_network" : per-step TorchScript MLP, width via nn_hidden_width,
   //                      CUDA-graph-accelerated when running on GPU
+  // ParameterType::Static on every getParam below is required, not optional --
+  // these all read into local variables (dynamics_mode_str, width, nn_cfg's
+  // members, weight/bias/fmean/fstd) that are destroyed the instant
+  // getParams() returns. The default ParameterType::Dynamic registers a
+  // live-reconfigure callback that captures &setting BY REFERENCE
+  // (parameters_handler.hpp's setDynamicParamCallback) -- once this function
+  // returns, that's a dangling reference. A later `ros2 param set` on any of
+  // these (exactly what the online-retraining Python tooling does before a
+  // lifecycle cycle) writes through it: undefined behavior, observed in
+  // practice as controller_server segfaulting. Static skips registering that
+  // callback while still letting `ros2 param set` update the value normally
+  // for the next lifecycle configure() cycle to pick up fresh -- exactly the
+  // redeploy pattern already used everywhere else.
   std::string dynamics_mode_str;
-  getParam(dynamics_mode_str, "dynamics_mode", std::string("kinematics"));
+  getParam(dynamics_mode_str, "dynamics_mode", std::string("kinematics"), ParameterType::Static);
 
   NNDynamics::Config nn_cfg;
   if (dynamics_mode_str == "kinematics") {
@@ -131,11 +148,11 @@ void Optimizer::getParams()
   nn_cfg.batch_size = s.batch_size;
   nn_cfg.horizon    = static_cast<int>(s.time_steps);
   nn_cfg.model_dt   = s.model_dt;
-  getParam(nn_cfg.use_cuda, "nn_use_cuda", true);
+  getParam(nn_cfg.use_cuda, "nn_use_cuda", true, ParameterType::Static);
 
   if (nn_cfg.mode == NNDynamics::DynamicsMode::NeuralNetwork) {
     int width;
-    getParam(width, "nn_hidden_width", 64);
+    getParam(width, "nn_hidden_width", 64, ParameterType::Static);
     if (width != 8 && width != 16 && width != 32 && width != 64 && width != 128) {
       throw nav2_core::ControllerException(
               "nn_hidden_width must be one of 8, 16, 32, 64, or 128 (got " +
@@ -144,17 +161,18 @@ void Optimizer::getParams()
     std::string default_model_path =
       ament_index_cpp::get_package_share_directory("nav2_mppi_controller") +
       "/models/ar_mlp/mlp" + std::to_string(width) + "_ar_velocity_teacher.pt";
-    getParam(nn_cfg.model_path, "nn_model_path", default_model_path);
+    getParam(nn_cfg.model_path, "nn_model_path", default_model_path, ParameterType::Static);
   }
 
   if (nn_cfg.mode == NNDynamics::DynamicsMode::Linear ||
     nn_cfg.mode == NNDynamics::DynamicsMode::NeuralNetwork)
   {
     std::vector<double> weight, bias, fmean, fstd;
-    getParam(weight, "linear_model.weight", std::vector<double>{0.0, 0.0, 0.0, 0.0});
-    getParam(bias,   "linear_model.bias",   std::vector<double>{0.0, 0.0});
-    getParam(fmean,  "linear_model.fmean",  std::vector<double>{0.0, 0.0});
-    getParam(fstd,   "linear_model.fstd",   std::vector<double>{1.0, 1.0});
+    getParam(weight, "linear_model.weight", std::vector<double>{0.0, 0.0, 0.0, 0.0},
+      ParameterType::Static);
+    getParam(bias,   "linear_model.bias",   std::vector<double>{0.0, 0.0}, ParameterType::Static);
+    getParam(fmean,  "linear_model.fmean",  std::vector<double>{0.0, 0.0}, ParameterType::Static);
+    getParam(fstd,   "linear_model.fstd",   std::vector<double>{1.0, 1.0}, ParameterType::Static);
     if (weight.size() != 4 || bias.size() != 2 || fmean.size() != 2 || fstd.size() != 2) {
       throw nav2_core::ControllerException(
               "linear_model.weight must have 4 entries and bias/fmean/fstd must have 2 each");
