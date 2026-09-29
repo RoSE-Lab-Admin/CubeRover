@@ -1,98 +1,684 @@
 <?xml version="1.0"?>
-<!-- RoseyBot Robot Description File -->
+<!-- RoseyBot Robot Description File
+
+     Links, joints, and mass properties come from the SolidWorks to URDF
+     exporter (URDF2 export). Frames follow REP-103/REP-105:
+       - base_footprint is the root, on the ground plane below base_link.
+       - base_footprint, imu_link, and camera_*_optical_link are virtual
+         frames with no mass, inertia, or geometry.
+       - All wheel joints rotate about +y, so a positive velocity drives the
+         robot forward on both sides. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-    
-    <!-- properties for robot dimensions (in m)-->
-    <xacro:property name="base_width" value="0.422"/>
-    <xacro:property name="base_length" value="0.703"/>
-    <xacro:property name="base_height" value="0.15"/>
-    <xacro:property name="wheel_radius" value="0.1515"/>
-    <xacro:property name="wheel_length" value="0.1"/>
-    <xacro:property name="z_offset" value="0.05"/>
-    <xacro:property name="x_offset" value="0.05"/>
-    <xacro:property name="base_mass" value="12"/>
-    <xacro:property name="wheel_mass" value="0.5"/>
-
-
-    <!-- Define inertial property macros  -->
-    <xacro:macro name="box_inertia" params="m w h d">
-        <inertial>
-        <origin xyz="0 0 0" rpy="${pi/2} 0 ${pi/2}"/>
-        <mass value="${m}"/>
-        <inertia ixx="${(m/12) * (h*h + d*d)}" ixy="0.0" ixz="0.0" iyy="${(m/12) * (w*w + d*d)}" iyz="0.0" izz="${(m/12) * (w*w + h*h)}"/>
-        </inertial>
-    </xacro:macro>
-
-    <xacro:macro name="cylinder_inertia" params="m r h">
-        <inertial>
-        <origin xyz="0 0 0" rpy="${pi/2} 0 0" />
-        <mass value="${m}"/>
-        <inertia ixx="${(m/12) * (3*r*r + h*h)}" ixy = "0" ixz = "0" iyy="${(m/12) * (3*r*r + h*h)}" iyz = "0" izz="${(m/2) * (r*r)}"/>
-        </inertial>
-    </xacro:macro>
-
-    <!-- define base link for rover (Primary Parent Link)-->
-    <link name="base_link">
-        <collision>
-            <origin xyz="0 0 0" rpy= "0 0 0"/>
-            <geometry>
-                <box size="${base_length} ${base_width} ${base_height}"/>
-            </geometry>
-        </collision>
-
-        <visual>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
-            <geometry>
-                <box size = "${base_length} ${base_width} ${base_height}"/>
-            </geometry>
-            <material name="pink"/>
-        </visual>
-
-        <xacro:box_inertia m ="${base_mass}" w="${base_width}" d="${base_length}" h="${base_height}"/>
-    </link>
-
-    <!-- define footprint of rover-->
-    <link name="base_footprint"/>
-
-    <joint name="base_joint" type="fixed">
-        <parent link="base_link"/>
-        <child link="base_footprint"/>
-        <origin xyz="0 0 ${- (z_offset + wheel_radius) }"/>
-    </joint>
-
-    <!-- set up macro for wheel definitions -->
-    <xacro:macro name="wheel" params="prefix x_reflect y_reflect">
-        <joint name="${prefix}_wheel_joint" type="continuous">
-            <parent link="base_link"/>
-            <child link="${prefix}_wheel_link"/>
-            <origin xyz="${x_reflect * ((base_length/2) - x_offset)} ${y_reflect * base_width/2} ${-z_offset}" rpy= "0 0 0"/>
-            <axis xyz = "0 1 0"/>
-        </joint>
-
-        <link name="${prefix}_wheel_link">
-            <collision>
-                <origin xyz="0 ${wheel_length/2} 0" rpy= "${pi/2} 0 0"/>
-                <geometry>
-                    <cylinder radius="${wheel_radius}" length="${wheel_length}"/>
-                </geometry>
-            </collision>
-
-            <visual>
-                <origin xyz="0 ${y_reflect * wheel_length/2} 0" rpy="${pi/2} 0 0"/>
-                <geometry>
-                    <cylinder radius="${wheel_radius}" length="${wheel_length}"/>
-                </geometry>
-                <material name="black"/>
-            </visual>
-
-            <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_length}"/>
-        </link>
-    </xacro:macro>
-
-    <!-- call macros to define wheels-->
-    <xacro:wheel prefix="front_left" x_reflect="1" y_reflect="1"/>
-    <xacro:wheel prefix="front_right" x_reflect="1" y_reflect="-1"/>
-    <xacro:wheel prefix="back_left" x_reflect="-1" y_reflect="1"/>
-    <xacro:wheel prefix="back_right" x_reflect="-1" y_reflect="-1"/>
-
+  <!-- Virtual frame: no mass, inertia, or geometry. -->
+  <link
+    name="base_footprint" />
+  <joint
+    name="base_footprint_joint"
+    type="fixed">
+    <!-- base_footprint lies on the ground plane under base_link (150 mm
+         effective wheel radius; the grousers sink into the terrain). -->
+    <origin
+      xyz="0 0 0.264385282852235"
+      rpy="0 0 0" />
+    <parent
+      link="base_footprint" />
+    <child
+      link="base_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-0.0054525 0.0030219 -0.021701"
+        rpy="0 0 0" />
+      <mass
+        value="7.6408" />
+      <inertia
+        ixx="0.027157"
+        ixy="1.7861E-05"
+        ixz="2.7978E-05"
+        iyy="0.085655"
+        iyz="2.5148E-06"
+        izz="0.10185" />
+    </inertial>
+    <visual>
+      <!-- SolidWorks exported base_link.STL relative to a frame 0.264385 m
+           below base_link, so shift it back up into base_link. -->
+      <origin
+        xyz="0 0 -0.264385282852235"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="base_link_material">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <!-- SolidWorks exported base_link.STL relative to a frame 0.264385 m
+           below base_link, so shift it back up into base_link. -->
+      <origin
+        xyz="0 0 -0.264385282852235"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <!-- Virtual frame: no mass, inertia, or geometry. -->
+  <link
+    name="imu_link" />
+  <joint
+    name="imu_joint"
+    type="fixed">
+    <origin
+      xyz="0.16256 -0.05 0.017088"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="imu_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="front_left_wheel_link">
+    <inertial>
+      <origin
+        xyz="-9.6438E-08 -0.0035297 2.5028E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.8653" />
+      <inertia
+        ixx="0.0018675"
+        ixy="1.302E-10"
+        ixz="-1.4777E-08"
+        iyy="0.00325"
+        iyz="-1.3427E-10"
+        izz="0.0018676" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/front_left_wheel_link.STL" />
+      </geometry>
+      <material
+        name="front_left_wheel_link_material">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/front_left_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="front_left_wheel_joint"
+    type="continuous">
+    <origin
+      xyz="0.1881 0.16825 -0.11444"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="front_left_wheel_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="front_right_wheel_link">
+    <inertial>
+      <origin
+        xyz="9.6438E-08 0.0035297 2.5028E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.8653" />
+      <inertia
+        ixx="0.0018675"
+        ixy="1.302E-10"
+        ixz="1.4777E-08"
+        iyy="0.00325"
+        iyz="1.3427E-10"
+        izz="0.0018676" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/front_right_wheel_link.STL" />
+      </geometry>
+      <material
+        name="front_right_wheel_link_material">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/front_right_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="front_right_wheel_joint"
+    type="continuous">
+    <origin
+      xyz="0.1881 -0.16825 -0.11433"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="front_right_wheel_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="back_left_wheel_link">
+    <inertial>
+      <origin
+        xyz="-9.6438E-08 -0.0035297 2.5028E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.8653" />
+      <inertia
+        ixx="0.0018675"
+        ixy="1.302E-10"
+        ixz="-1.4777E-08"
+        iyy="0.00325"
+        iyz="-1.3427E-10"
+        izz="0.0018676" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/back_left_wheel_link.STL" />
+      </geometry>
+      <material
+        name="back_left_wheel_link_material">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/back_left_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="back_left_wheel_joint"
+    type="continuous">
+    <origin
+      xyz="-0.1881 0.16825 -0.11433"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="back_left_wheel_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="back_right_wheel_link">
+    <inertial>
+      <origin
+        xyz="9.6438E-08 0.0035297 2.5028E-08"
+        rpy="0 0 0" />
+      <mass
+        value="0.8653" />
+      <inertia
+        ixx="0.0018675"
+        ixy="1.302E-10"
+        ixz="1.4777E-08"
+        iyy="0.00325"
+        iyz="1.3427E-10"
+        izz="0.0018676" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/back_right_wheel_link.STL" />
+      </geometry>
+      <material
+        name="back_right_wheel_link_material">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/back_right_wheel_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="back_right_wheel_joint"
+    type="continuous">
+    <origin
+      xyz="-0.1881 -0.16825 -0.11444"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="back_right_wheel_link" />
+    <axis
+      xyz="0 1 0" />
+  </joint>
+  <link
+    name="camera_0_link">
+    <inertial>
+      <origin
+        xyz="-0.0046466 0.00022408 0.0091953"
+        rpy="0 0 0" />
+      <mass
+        value="0.019933" />
+      <inertia
+        ixx="1.1262E-05"
+        ixy="-4.5237E-08"
+        ixz="9.1405E-07"
+        iyy="6.1143E-06"
+        iyz="8.1423E-08"
+        izz="7.1098E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_0_link.STL" />
+      </geometry>
+      <material
+        name="camera_0_link_material">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_0_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="camera_0_joint"
+    type="fixed">
+    <origin
+      xyz="0.18813 -0.074785 -0.17781"
+      rpy="0 0.1309 1.5708" />
+    <parent
+      link="base_link" />
+    <child
+      link="camera_0_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <!-- Virtual frame: no mass, inertia, or geometry. -->
+  <link
+    name="camera_0_optical_link" />
+  <joint
+    name="camera_0_optical_joint"
+    type="fixed">
+    <origin
+      xyz="0.0169748 0 0"
+      rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent
+      link="camera_0_link" />
+    <child
+      link="camera_0_optical_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="camera_1_link">
+    <inertial>
+      <origin
+        xyz="-0.00464663459696391 0.000224076591143291 0.00919530728463955"
+        rpy="0 0 0" />
+      <mass
+        value="0.0199333054151819" />
+      <inertia
+        ixx="1.12618268455886E-05"
+        ixy="-4.52367068876269E-08"
+        ixz="9.14048214484759E-07"
+        iyy="6.11430619035568E-06"
+        iyz="8.14228444575266E-08"
+        izz="7.10984214823996E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_1_link.STL" />
+      </geometry>
+      <material
+        name="camera_1_link_material">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_1_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="camera_1_joint"
+    type="fixed">
+    <origin
+      xyz="0.18807 0.074785 -0.17781"
+      rpy="0 0.1309 -1.5708" />
+    <parent
+      link="base_link" />
+    <child
+      link="camera_1_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <!-- Virtual frame: no mass, inertia, or geometry. -->
+  <link
+    name="camera_1_optical_link" />
+  <joint
+    name="camera_1_optical_joint"
+    type="fixed">
+    <origin
+      xyz="0.0169748 0 0"
+      rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent
+      link="camera_1_link" />
+    <child
+      link="camera_1_optical_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="camera_2_link">
+    <inertial>
+      <origin
+        xyz="-0.0046466345969639 0.000224076591143346 0.00919530728463952"
+        rpy="0 0 0" />
+      <mass
+        value="0.0199333054151819" />
+      <inertia
+        ixx="1.12618268455886E-05"
+        ixy="-4.52367068876263E-08"
+        ixz="9.14048214484766E-07"
+        iyy="6.1143061903557E-06"
+        iyz="8.14228444575181E-08"
+        izz="7.10984214823997E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_2_link.STL" />
+      </geometry>
+      <material
+        name="camera_2_link_material">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_2_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="camera_2_joint"
+    type="fixed">
+    <origin
+      xyz="-0.18807 -0.074785 -0.17781"
+      rpy="0 0.1309 1.5708" />
+    <parent
+      link="base_link" />
+    <child
+      link="camera_2_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <!-- Virtual frame: no mass, inertia, or geometry. -->
+  <link
+    name="camera_2_optical_link" />
+  <joint
+    name="camera_2_optical_joint"
+    type="fixed">
+    <origin
+      xyz="0.0169748 0 0"
+      rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent
+      link="camera_2_link" />
+    <child
+      link="camera_2_optical_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="camera_3_link">
+    <inertial>
+      <origin
+        xyz="-0.00464663459696388 0.000224076591143318 0.0091953072846396"
+        rpy="0 0 0" />
+      <mass
+        value="0.0199333054151819" />
+      <inertia
+        ixx="1.12618268455886E-05"
+        ixy="-4.52367068876303E-08"
+        ixz="9.14048214484761E-07"
+        iyy="6.11430619035569E-06"
+        iyz="8.14228444575291E-08"
+        izz="7.10984214823997E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_3_link.STL" />
+      </geometry>
+      <material
+        name="camera_3_link_material">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/camera_3_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="camera_3_joint"
+    type="fixed">
+    <origin
+      xyz="-0.18813 0.074785 -0.17781"
+      rpy="0 0.1309 -1.5708" />
+    <parent
+      link="base_link" />
+    <child
+      link="camera_3_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <!-- Virtual frame: no mass, inertia, or geometry. -->
+  <link
+    name="camera_3_optical_link" />
+  <joint
+    name="camera_3_optical_joint"
+    type="fixed">
+    <origin
+      xyz="0.0169748 0 0"
+      rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent
+      link="camera_3_link" />
+    <child
+      link="camera_3_optical_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="mocap_origin_link">
+    <inertial>
+      <origin
+        xyz="0.133097306252821 -0.0683857803026376 -0.0528171152723194"
+        rpy="0 0 0" />
+      <mass
+        value="0.107749962743113" />
+      <inertia
+        ixx="7.45485791686811E-06"
+        ixy="-1.61999451002995E-15"
+        ixz="8.58214338682135E-07"
+        iyy="7.43060022663629E-06"
+        iyz="1.27959501424391E-07"
+        izz="4.36492640075189E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/mocap_origin_link.STL" />
+      </geometry>
+      <material
+        name="mocap_origin_link_material">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/mocap_origin_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="mocap_origin_joint"
+    type="fixed">
+    <origin
+      xyz="-0.23356 0.05 0.114"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="mocap_origin_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="realsense_link">
+    <inertial>
+      <origin
+        xyz="0.0122023502976824 -0.0474592338080081 -0.0126678739124035"
+        rpy="0 0 0" />
+      <mass
+        value="2.5457871005553" />
+      <inertia
+        ixx="0.00541121222483047"
+        ixy="5.97829816391115E-07"
+        ixz="4.49788092705714E-05"
+        iyy="0.00115194956857122"
+        iyz="1.23773290018687E-06"
+        izz="0.00477606793112727" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/realsense_link.STL" />
+      </geometry>
+      <material
+        name="realsense_link_material">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://rosey_description/description/meshes/realsense_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="realsense_joint"
+    type="fixed">
+    <origin
+      xyz="0.21558 0.04725 0.22826"
+      rpy="0 0.17453 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="realsense_link" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
 </robot>

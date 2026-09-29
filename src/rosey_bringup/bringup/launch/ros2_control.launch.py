@@ -5,6 +5,7 @@ from launch.event_handlers import OnProcessExit
 from launch.substitutions import Command, FindExecutable, PathJoinSubstitution, LaunchConfiguration
 
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
@@ -15,11 +16,15 @@ def generate_launch_description():
             'roseybot.urdf.xacro'
     ])
 
-    robot_description_content = Command([
+    use_mock_hardware = LaunchConfiguration('use_mock_hardware')
+
+    robot_description_content = ParameterValue(Command([
         FindExecutable(name='xacro'),
         ' ',
-        path_to_urdf
-    ])
+        path_to_urdf,
+        ' use_mock_hardware:=',
+        use_mock_hardware
+    ]), value_type=str)
 
     robot_description = {'robot_description': robot_description_content}
 
@@ -66,6 +71,10 @@ def generate_launch_description():
     )
 
     nodes = [
+        DeclareLaunchArgument(
+            'use_mock_hardware',
+            default_value='false',
+            description='Use mock_components/GenericSystem instead of the Teensy hardware'),
         control_node,
         robot_state_pub_node,
         joint_state_broadcaster_spawner,

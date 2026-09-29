@@ -3,7 +3,7 @@
 <package format="3">
   <name>rosey_description</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>URDF description of RoseyBot (SolidWorks URDF2 export) with its ros2_control hardware interface</description>
   <maintainer email="enderman9523@gmail.com">cameron</maintainer>
   <license>TODO: License declaration</license>
 
@@ -14,6 +14,10 @@
 
   <exec_depend>xacro</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rviz2</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

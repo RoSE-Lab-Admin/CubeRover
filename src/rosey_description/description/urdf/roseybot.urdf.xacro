@@ -3,11 +3,10 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="roseybot">
   <xacro:arg name="use_mock_hardware" default="false" />
 
-  <!-- Import Rviz colors -->
-  <xacro:include filename="$(find rosey_description)/description/robot/roseybot_colors.urdf.xacro" />
-
   <xacro:include filename="$(find rosey_description)/description/robot/roseybot_description.urdf.xacro"/>
+
   <!-- Import ros2_control hardware description -->
   <xacro:include filename="$(find rosey_description)/description/ros2_control/roseybot_control.urdf.xacro" />
+  <xacro:roseybot_ros2_control use_mock_hardware="$(arg use_mock_hardware)"/>
 
 </robot>

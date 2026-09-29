@@ -12,9 +12,9 @@ roseybot_base_controller:
     left_wheel_names: ["front_left_wheel_joint", "back_left_wheel_joint"]
     right_wheel_names: ["front_right_wheel_joint", "back_right_wheel_joint"]
 
-    wheel_separation: 0.315
+    wheel_separation: 0.3365  # from CAD: wheels at y = +/-0.16825
     wheels_per_side: 2 
-    wheel_radius: 0.1515
+    wheel_radius: 0.150  # effective radius; matches base_footprint height
 
     wheel_separation_multiplier: 1.0
     left_wheel_radius_multiplier: 1.0
@@ -22,7 +22,7 @@ roseybot_base_controller:
 
     publish_rate: 50.0
     odom_frame_id: odom
-    base_frame_id: base_link
+    base_frame_id: base_footprint  # URDF root (REP-105)
     pose_covariance_diagonal : [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
     twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
 
@@ -48,8 +48,8 @@ roseybot_base_controller:
     angular.z.has_velocity_limits: true
     angular.z.has_acceleration_limits: true
     # angular.z.has_jerk_limits: false
-    angular.z.max_velocity: 1
-    angular.z.min_velocity: -1
+    angular.z.max_velocity: 1.0
+    angular.z.min_velocity: -1.0
     angular.z.max_acceleration: 0.211666666667
     angular.z.min_acceleration: -0.211666666667
     # angular.z.max_jerk: 0.0
