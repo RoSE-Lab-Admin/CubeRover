@@ -184,7 +184,7 @@ planner_server:
       use_quadratic_cost_penalty: false
       goal_heading_mode: "ALL_DIRECTION"
       coarse_search_resolution: 4 # number of goal headings bins to skip during coarse search phase 
-      smooth_path: false # does simple and fast smoothing post-proccessing to the path
+      smooth_path: true # does simple and fast smoothing post-proccessing to the path
   
       smoother:
         max_iterations: 1000 # the max number of iterations the smoother has smooth the path
