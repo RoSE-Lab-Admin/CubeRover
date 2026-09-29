@@ -23,5 +23,6 @@ teleop_node:
     enable_button: 4
     enable_turbo_button: 5
     require_enable_button: true
+    inverted_reverse: true
  
     publish_stamped_twist: true
