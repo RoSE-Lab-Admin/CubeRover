@@ -72,7 +72,7 @@ controller_server:
       # ── Dynamics correction ──────────────────────────────────────────────────
       # dynamics_mode: "kinematics" (default, no correction) | "linear" | "neural_network"
       # Set once, requires a relaunch to change (not a live-reconfigurable param).
-      dynamics_mode: "neural_network"
+      dynamics_mode: "kinematics"
       # nn_hidden_width: one of 8/16/32/64/128 -- only used when dynamics_mode == "neural_network".
       # Selects which exported model to load: models/ar_mlp/mlp<width>_ar_velocity_teacher.pt
       nn_hidden_width: 128
@@ -168,7 +168,8 @@ planner_server:
     # on a goal, or make it the active default here later) without needing to
     # rebuild/remove anything -- it does not run unless something asks for it
     # by name.
-    planner_plugins: ["GridBased", "GridBasedCustom"]
+    #planner_plugins: ["GridBased", "GridBasedCustom"] #use default planner
+    planner_plugins: ["GridBasedCustom", "GridBased"] #use custom planner
 
     GridBased:
       plugin: "nav2_smac_planner::SmacPlannerHybrid"
