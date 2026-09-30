@@ -66,6 +66,7 @@ class PathFollower(Node):
 
         # state trackers
         self.nav2_ready = False
+        self._checking_nav2 = False  # guards against overlapping check_nav2_ready() calls
         self.started = False
         self.finished = False
         self.rec_pose = False
@@ -282,16 +283,30 @@ class PathFollower(Node):
             self.nav.destroy_client(client)
 
     def check_nav2_ready(self):
-        for node_name in ('planner_server', 'controller_server', 'bt_navigator'):
-            if not self._wait_for_node_active(node_name):
-                self.get_logger().warn(
-                    f"check_nav2_ready: {node_name} not active yet (or its get_state "
-                    f"call timed out) -- retrying in 1s")
-                return
-        self.nav2_check_timer.cancel()
-        self.nav2_ready = True
-        self.get_logger().info("nav2_ready=True (planner_server/controller_server/"
-                               "bt_navigator all active)")
+        # opti_group is a ReentrantCallbackGroup, so the executor is free to
+        # start a SECOND overlapping invocation of this same timer callback
+        # if one is already in progress (each _wait_for_node_active call can
+        # take several real seconds, easily longer than this timer's 1s
+        # period) -- two concurrent calls both spinning self.nav collide on
+        # self.nav's own executor (RuntimeError: Executor is already
+        # spinning, confirmed live). This guard ensures only one invocation
+        # of check_nav2_ready itself is ever actually running at a time.
+        if self._checking_nav2:
+            return
+        self._checking_nav2 = True
+        try:
+            for node_name in ('planner_server', 'controller_server', 'bt_navigator'):
+                if not self._wait_for_node_active(node_name):
+                    self.get_logger().warn(
+                        f"check_nav2_ready: {node_name} not active yet (or its get_state "
+                        f"call timed out) -- retrying in 1s")
+                    return
+            self.nav2_check_timer.cancel()
+            self.nav2_ready = True
+            self.get_logger().info("nav2_ready=True (planner_server/controller_server/"
+                                   "bt_navigator all active)")
+        finally:
+            self._checking_nav2 = False
 
     def _arc_heading(self):
         if not self.use_opti or len(self.prev_poses) == 0:
