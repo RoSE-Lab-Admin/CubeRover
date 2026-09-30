@@ -99,7 +99,7 @@ controller_server:
         plugin: "mppi::DefaultOptimalTrajectoryValidator"
         collision_lookahead_time: 2.0
         consider_footprint: false
-      critics: ["ConstraintCritic", "GoalCritic", "ObstaclesCritic", "CostCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "VelocityDeadbandCritic"]
+      critics: ["ConstraintCritic", "GoalCritic", "ObstaclesCritic", "CostCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "VelocityDeadbandCritic", "DirectionChangeCritic"]
       ConstraintCritic: # Penalizes paths outside of set dynamics or kinematic constraints
         enabled: true
         cost_weight: 4.0 # weight to apply to term
@@ -155,6 +155,15 @@ controller_server:
         cost_weight: 50.0
         threshold_to_consider: 0.4 #was 0.5 # decrease weight to 50 within this distance in m to allow deceleration
         deadband_velocities: [0.08, 0.0, 0.0] # [vx, vy, vw]
+      DirectionChangeCritic: # penalizes commanding velocity opposite to the robot's recently-established
+        # direction of travel (discourages back-and-forth/premature reversals), with a weight that decays
+        # exponentially with time-since-direction-established: strong immediately after a fresh start or an
+        # actual reversal, already low by ~2s, ~0 by ~3s. See src/nav2_mppi_controller/src/critics/direction_change_critic.cpp
+        enabled: true
+        cost_power: 1
+        cost_weight: 8.0 # first guess, tune empirically
+        time_constant: 1.0 # decay rate (seconds) -- exp(-2/1.0)=0.135 (low at 2s), exp(-3/1.0)=0.05 (~0 at 3s)
+        motion_threshold: 0.02 # m/s -- below this, robot is considered stationary (no established direction)
 
 planner_server:
   ros__parameters:

@@ -105,6 +105,7 @@ add_library(mppi_critics SHARED
   src/critics/twirling_critic.cpp
   src/critics/constraint_critic.cpp
   src/critics/velocity_deadband_critic.cpp
+  src/critics/direction_change_critic.cpp
 )
 
 set(libraries mppi_controller mppi_critics)
