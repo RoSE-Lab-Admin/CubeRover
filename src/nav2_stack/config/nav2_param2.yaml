@@ -239,7 +239,7 @@ planner_server:
       minimum_turning_radius: 0.7
       motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 4.0
-      change_penalty: 3.0 # see GridBased -- kept in sync
+      change_penalty: 10.0 # was 3.0 (matching GridBased) -- raised substantially: live testing showed 3.0 was not steep enough to reliably avoid multi-reversal paths even where a simpler alternative looked geometrically available. No longer kept in sync with GridBased -- GridBased stays at the original, untouched baseline.
       reverse_penalty: 2.0 # see GridBased -- kept in sync
       cost_penalty: 5.0
       retrospective_penalty: 0.015
@@ -247,8 +247,8 @@ planner_server:
       debug_visualizations: true
       # -- fork-only params, no equivalent in stock GridBased --
       momentum_zone_length: 0.5 # meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
-      momentum_zone_penalty: 5.0 # extra multiplier applied to turning primitives that start inside the momentum zone, on top of non_straight_penalty/change_penalty
-      extra_direction_change_penalty: 10.0 # escalating multiplier for the 2nd+ direction change on a path (1st change unaffected, 2nd gets x10, 3rd gets x100, ...) -- first guess, tune empirically
+      momentum_zone_penalty: 20.0 # was 5.0 -- raised substantially alongside the others, same reasoning
+      extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
       use_quadratic_cost_penalty: false
       goal_heading_mode: "ALL_DIRECTION"
       coarse_search_resolution: 4
