@@ -80,10 +80,14 @@ void DirectionChangeCritic::score(CriticData & data)
 
   const float decay = std::exp(-time_since_reversal_ / time_constant_);
 
-  // Candidate rollout steps proposing motion opposite to last_sign_.
-  auto opposing = (last_sign_ > 0.0f) ?
-    xt::maximum(-data.state.vx, 0) :
-    xt::maximum(data.state.vx, 0);
+  // Candidate rollout steps proposing motion opposite to last_sign_. Folded
+  // into a single expression (-last_sign_ * vx is -vx when last_sign_=+1,
+  // vx when last_sign_=-1) rather than a ternary between xt::maximum(-vx, 0)
+  // and xt::maximum(vx, 0) -- those are different xtensor lazy-expression
+  // template types (one wraps a negate xfunction, one doesn't), so `auto`
+  // can't deduce a single type across a ternary between them (compile
+  // error, confirmed live).
+  auto opposing = xt::maximum(-last_sign_ * data.state.vx, 0);
 
   if (power_ > 1u) {
     data.costs += xt::pow(
