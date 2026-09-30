@@ -372,6 +372,16 @@ bool AStarAlgorithm<NodeT>::createPath(
         neighbor->setAccumulatedCost(g_cost);
         neighbor->parent = current_node;
 
+        // current_node is now CONFIRMED as neighbor's accepted parent -- only
+        // now is it safe to commit neighbor's direction-change tracking
+        // state (see NodeHybrid::commitDirectionState()'s header comment for
+        // why this must not happen speculatively for every candidate parent
+        // that merely reaches this node, which is what getNeighbors() used
+        // to do and was a confirmed bug). No-op for Node2D/NodeLattice.
+        if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+          neighbor->commitDirectionState(current_node);
+        }
+
         // 4.3) Add to queue with heuristic cost
         addNode(g_cost + getHeuristicCost(neighbor), neighbor);
       }

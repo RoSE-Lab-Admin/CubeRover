@@ -942,18 +942,34 @@ void NodeHybrid::getNeighbors(
           motion_projections[i]._y,
           motion_projections[i]._theta));
       if (neighbor->isNodeValid(traverse_unknown, collision_checker)) {
+        // NOTE: deliberately NOT committing distance_since_momentum_reset /
+        // direction_change_count here. This runs once per CANDIDATE parent,
+        // not once per actually-accepted parent -- see commitDirectionState()
+        // for why setting them here (as this code used to) is a bug. That
+        // commit happens in a_star.cpp, only once the search has confirmed
+        // `this` (current_node) actually wins as neighbor's parent.
         neighbor->setMotionPrimitiveIndex(i, motion_projections[i]._turn_dir);
-        const bool is_reset = isMomentumReset(this, motion_projections[i]._turn_dir);
-        neighbor->setDistanceSinceMomentumReset(
-          is_reset ? 0.0f : (this->getDistanceSinceMomentumReset() + motion_table.delta_dist));
-        neighbor->setDirectionChangeCount(
-          this->getDirectionChangeCount() + (is_reset ? 1u : 0u));
         neighbors.push_back(neighbor);
       } else {
         neighbor->setPose(initial_node_coords);
       }
     }
   }
+}
+
+void NodeHybrid::commitDirectionState(NodeHybrid * parent)
+{
+  // Called from a_star.cpp only once `parent` is confirmed as this node's
+  // accepted (cheapest) predecessor -- see the header comment on
+  // commitDirectionState() for why this must NOT be done speculatively in
+  // getNeighbors(). getTurnDirection() here is still correct for the
+  // just-accepted candidate: it was set by getNeighbors() in the same
+  // search iteration this commit happens in, before any other candidate
+  // parent could have overwritten it.
+  const bool is_reset = isMomentumReset(parent, getTurnDirection());
+  setDistanceSinceMomentumReset(
+    is_reset ? 0.0f : (parent->getDistanceSinceMomentumReset() + motion_table.delta_dist));
+  setDirectionChangeCount(parent->getDirectionChangeCount() + (is_reset ? 1u : 0u));
 }
 
 bool NodeHybrid::backtracePath(CoordinateVector & path)

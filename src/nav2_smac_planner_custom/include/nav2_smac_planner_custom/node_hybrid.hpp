@@ -319,6 +319,26 @@ public:
   }
 
   /**
+   * @brief Commits this node's distance-since-momentum-reset and
+   * direction-change-count based on a CONFIRMED parent (i.e. call this only
+   * once the search has decided `parent` is actually this node's cheapest
+   * predecessor -- see a_star.cpp's `if (g_cost < neighbor->getAccumulatedCost())`
+   * block). Must NOT be called speculatively from getNeighbors() for every
+   * candidate parent that merely reaches this node: since Hybrid-A* commonly
+   * reaches the same (x, y, heading) state via multiple parent candidates,
+   * setting these fields unconditionally there let a later, LOSING candidate
+   * silently overwrite the values committed by an earlier WINNING one,
+   * leaving distance/count completely decoupled from the actual accepted
+   * parent/cost (confirmed live: this exact bug made
+   * extra_direction_change_penalty have no visible effect at any magnitude).
+   * Uses this node's OWN getTurnDirection(), which getNeighbors() already set
+   * correctly for the current candidate primitive at the point this is
+   * called (still within the same search iteration).
+   * @param parent The confirmed (accepted) parent node
+   */
+  void commitDirectionState(NodeHybrid * parent);
+
+  /**
    * @brief Gets the costmap cost at this node
    * @return costmap cost
    */
