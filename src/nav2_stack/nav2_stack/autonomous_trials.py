@@ -20,6 +20,7 @@ import argparse
 import csv
 import math
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -55,6 +56,7 @@ XY_GOAL_TOLERANCE = 0.5     # matches nav2_param2.yaml's goal_checker xy_goal_to
 STALL_WINDOW_S = 60.0       # no-progress-for-this-long => treat the trial as stuck
 MIN_IMPROVEMENT_M = 0.05    # smaller than this doesn't count as "progress" (noise floor)
 GP_EXPLORER_MAX_ATTEMPTS = 3
+NO_MOVEMENT_MAX_ATTEMPTS = 3  # retries for a trial that recorded a "no_movement" bag (see wait_for_goal)
 BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before commands flow
 
 BAG_TOPICS = [
@@ -110,6 +112,33 @@ class PoseWatcher(Node):
         self.goal_result = None
 
 
+def wait_for_node_active(nav: BasicNavigator, node_name: str, timeout_sec: float = 5.0,
+                          max_attempts: int = 60) -> bool:
+    """Bounded-timeout, bounded-retry replacement for BasicNavigator's private
+    _waitForNodeToActivate(), which loops forever with NO timeout at all
+    (rclpy.spin_until_future_complete with no timeout_sec, inside a
+    while-not-active loop with no exit condition) -- if a node's get_state
+    call ever fails to resolve cleanly (observed live: an RMW
+    response-delivery timeout on planner_server's side), the unbounded
+    version gets stuck forever with no way to recover. Same fix as
+    path_follower.py's _wait_for_node_active(), duplicated here since this
+    runs in a separate process with no shared module. Returns True once
+    node_name reports 'active', False if it never does within max_attempts."""
+    from lifecycle_msgs.srv import GetState
+    for _ in range(max_attempts):
+        client = nav.create_client(GetState, f'{node_name}/get_state')
+        try:
+            if client.wait_for_service(timeout_sec=timeout_sec):
+                future = client.call_async(GetState.Request())
+                rclpy.spin_until_future_complete(nav, future, timeout_sec=timeout_sec)
+                result = future.result()
+                if result is not None and result.current_state.label == 'active':
+                    return True
+        finally:
+            nav.destroy_client(client)
+    return False
+
+
 def wait_for_nav2_active():
     """Blocks until every lifecycle_manager_navigation-managed node reports
     itself active. Nav2 bringup -- especially controller_server, which now
@@ -122,10 +151,8 @@ def wait_for_nav2_active():
     nav = BasicNavigator()
     t0 = time.monotonic()
     for node_name in NAV2_MANAGED_NODES:
-        try:
-            nav._waitForNodeToActivate(node_name)
-        except Exception as e:
-            log(f"WARNING: error waiting for {node_name} to activate ({e}) -- continuing anyway")
+        if not wait_for_node_active(nav, node_name):
+            log(f"WARNING: {node_name} did not report active in time -- continuing anyway")
         log(f"  {node_name}: active ({time.monotonic() - t0:.1f}s elapsed)")
     nav.destroy_node()
     log(f"Nav2 fully active after {time.monotonic() - t0:.1f}s")
@@ -136,7 +163,18 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
     outcome, the real pose is within XY_GOAL_TOLERANCE of goal_xy (a
     secondary/fallback "reached" signal -- see below), no progress has been
     made for STALL_WINDOW_S, or safety_watchdog fires.
-    Returns 'reached', 'stalled', or 'safety_stop'.
+    Returns 'reached', 'stalled', 'no_movement', or 'safety_stop'.
+
+    'no_movement' is a stricter subset of 'stalled': not just no improvement
+    for the last STALL_WINDOW_S, but no meaningful progress at all across the
+    *entire* trial (distance-to-goal never dropped more than
+    MIN_IMPROVEMENT_M below its first recorded value). Distinguishes a
+    genuine "tried and got stuck partway" stall from "the rover never
+    actually moved" (observed live: path_follower's own nav2-readiness wait
+    hung -- see path_follower.py's _wait_for_node_active -- so it never even
+    issued a goal, and the whole 60s was spent doing nothing). The caller
+    uses this to discard the bag and retry the same trial instead of treating
+    it as a normal failed-but-attempted trajectory.
 
     Trusts path_follower's own /trial_goal_result over the distance poll:
     Nav2's internal goToPose result and this function's independent
@@ -150,9 +188,14 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
     goal if /trial_goal_result were ever dropped."""
     node.reset_trial_state()
     best_dist = math.inf
+    first_dist = None
     last_improve_t = time.monotonic()
     log(f"{label}: waiting for goal ({goal_xy[0]:.3f}, {goal_xy[1]:.3f})  "
         f"tolerance={XY_GOAL_TOLERANCE}m  stall_window={STALL_WINDOW_S}s")
+
+    def _made_progress() -> bool:
+        return first_dist is not None and best_dist < first_dist - MIN_IMPROVEMENT_M
+
     while True:
         rclpy.spin_once(node, timeout_sec=0.5)
         if node.safety_stop:
@@ -163,9 +206,12 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
             return "reached"
         if node.goal_result == "failed":
             log(f"{label}: path_follower reported the trajectory FAILED")
-            return "stalled"
+            return "stalled" if _made_progress() else "no_movement"
         if node.xy is not None:
             dist = math.hypot(node.xy[0] - goal_xy[0], node.xy[1] - goal_xy[1])
+            if first_dist is None:
+                first_dist = dist
+                best_dist = dist
             if dist < XY_GOAL_TOLERANCE:
                 log(f"{label}: goal reached (dist={dist:.3f}m)")
                 return "reached"
@@ -173,9 +219,11 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
                 best_dist = dist
                 last_improve_t = time.monotonic()
         if time.monotonic() - last_improve_t > STALL_WINDOW_S:
+            made_progress = _made_progress()
             log(f"{label}: STALLED (best_dist={best_dist:.3f}m, no improvement for "
-                f"{STALL_WINDOW_S}s) -- skipping this trial")
-            return "stalled"
+                f"{STALL_WINDOW_S}s) -- "
+                f"{'skipping this trial' if made_progress else 'NO MOVEMENT AT ALL, will retry'}")
+            return "stalled" if made_progress else "no_movement"
 
 
 def start_process(cmd) -> subprocess.Popen:
@@ -204,8 +252,23 @@ def read_goal_xy(pose_csv: Path):
         return float(row[0]), float(row[1])
 
 
+def next_trial_start_index(bag_dir: Path) -> int:
+    """Scans bag_dir for existing bag_NN directories (from a previous,
+    interrupted run) and returns the next unused trial index, so re-running
+    against the same bag_dir resumes/continues numbering instead of
+    restarting at bag_01 and overwriting what's already there. initial_bag
+    doesn't count (it's bootstrap-only, not numbered). Returns 1 if none
+    exist."""
+    existing = []
+    for p in bag_dir.glob("bag_*"):
+        m = re.fullmatch(r"bag_(\d+)", p.name)
+        if m:
+            existing.append(int(m.group(1)))
+    return max(existing, default=0) + 1
+
+
 def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str) -> str:
-    """Returns 'reached' or 'stalled' (see wait_for_goal)."""
+    """Returns 'reached', 'stalled', 'no_movement', or 'safety_stop' (see wait_for_goal)."""
     bag_path = bag_dir / bag_name
     bag_proc = start_process(["ros2", "bag", "record", *BAG_TOPICS, "-o", str(bag_path)])
     time.sleep(BAG_START_DELAY_S)
@@ -566,8 +629,19 @@ def main():
             origin_csv = bag_dir / "initial_goal.csv"
             with open(origin_csv, "w") as f:
                 f.write("x,y,z\n0.0,0.0,0.0\n")
-            outcome = run_one_trial(bag_dir, "initial_bag", origin_csv, (0.0, 0.0), pose_node,
-                                    "initial_bag")
+            for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
+                outcome = run_one_trial(bag_dir, "initial_bag", origin_csv, (0.0, 0.0), pose_node,
+                                        "initial_bag")
+                if outcome != "no_movement":
+                    break
+                log(f"initial_bag: no movement detected (attempt {attempt}/"
+                    f"{NO_MOVEMENT_MAX_ATTEMPTS}) -- discarding {initial_bag} and retrying")
+                shutil.rmtree(initial_bag, ignore_errors=True)
+            else:
+                log(f"initial_bag: no movement detected {NO_MOVEMENT_MAX_ATTEMPTS} times in a "
+                    f"row -- giving up, treating as a normal stall")
+                outcome = "stalled"
+
             if outcome == "reached":
                 log("initial_bag: waypoint reached")
             elif outcome == "safety_stop":
@@ -580,18 +654,43 @@ def main():
         else:
             log(f"found existing {initial_bag}, skipping bootstrap")
 
+        start_i = next_trial_start_index(bag_dir)
+        if start_i > 1:
+            log(f"found existing bags up to bag_{start_i - 1:02d} in {bag_dir} -- resuming "
+                f"at trial {start_i} (target is {args.n_trajectories} total) instead of "
+                f"restarting from trial 1")
+        if start_i > args.n_trajectories:
+            log(f"{start_i - 1} bags already exist, meeting or exceeding the "
+                f"{args.n_trajectories}-trial target -- nothing new to run")
+
         n_success = 0
-        for i in range(1, args.n_trajectories + 1):
+        n_run = 0
+        for i in range(start_i, args.n_trajectories + 1):
+            n_run += 1
             traj_name = f"traj_{i:02d}"
             bag_name = f"bag_{i:02d}"
             log(f"=== trial {i}/{args.n_trajectories} ({traj_name}) ===")
 
-            if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
-                sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} times "
-                         f"for {traj_name} -- aborting entire run")
+            bag_path = bag_dir / bag_name
+            for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
+                if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
+                    sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} "
+                             f"times for {traj_name} -- aborting entire run")
 
-            goal_xy = read_goal_xy(pose_csv)
-            outcome = run_one_trial(bag_dir, bag_name, pose_csv, goal_xy, pose_node, traj_name)
+                goal_xy = read_goal_xy(pose_csv)
+                outcome = run_one_trial(bag_dir, bag_name, pose_csv, goal_xy, pose_node, traj_name)
+                if outcome != "no_movement":
+                    break
+                log(f"trial {i}/{args.n_trajectories} ({traj_name}): no movement detected "
+                    f"(attempt {attempt}/{NO_MOVEMENT_MAX_ATTEMPTS}) -- discarding {bag_path} "
+                    f"and re-planning this trial")
+                shutil.rmtree(bag_path, ignore_errors=True)
+            else:
+                log(f"trial {i}/{args.n_trajectories} ({traj_name}): no movement detected "
+                    f"{NO_MOVEMENT_MAX_ATTEMPTS} times in a row -- giving up on this trial, "
+                    f"treating as a normal stall")
+                outcome = "stalled"
+
             if outcome == "reached":
                 n_success += 1
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): waypoint reached")
@@ -608,8 +707,13 @@ def main():
                 maybe_train_from_scratch(pose_node, fs_cfg, bag_dir, bag_dir / bag_name,
                                           f"trial{i:02d}")
 
-        log(f"all {args.n_trajectories} trials complete: "
-            f"{n_success}/{args.n_trajectories} successful")
+        if start_i > 1:
+            log(f"all trials complete: reached the {args.n_trajectories}-trial target "
+                f"(ran {n_run} new trial(s) this session, {n_success}/{n_run} successful; "
+                f"{start_i - 1} already existed from before)")
+        else:
+            log(f"all {args.n_trajectories} trials complete: "
+                f"{n_success}/{args.n_trajectories} successful")
     finally:
         pose_node.destroy_node()
         rclpy.shutdown()

@@ -6,6 +6,7 @@ from rclpy.time import Time
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped, Vector3
 from std_msgs.msg import String
+from lifecycle_msgs.srv import GetState
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
@@ -243,11 +244,35 @@ class PathFollower(Node):
         return velx, vely, omega
 
 
+    def _wait_for_node_active(self, node_name: str, timeout_sec: float = 5.0) -> bool:
+        """Bounded-timeout replacement for BasicNavigator's private
+        _waitForNodeToActivate(), which loops forever with NO timeout at all
+        (rclpy.spin_until_future_complete with no timeout_sec, inside a
+        while-not-active loop with no exit condition) -- if the node's
+        get_state call ever fails to resolve cleanly (observed live: an RMW
+        response-delivery timeout on planner_server's side), that left
+        check_nav2_ready() -- and therefore the whole trial -- permanently
+        stuck with no way to retry. Returns True if node_name reports
+        'active' within timeout_sec, False otherwise (caller should retry)."""
+        client = self.create_client(GetState, f'{node_name}/get_state')
+        try:
+            if not client.wait_for_service(timeout_sec=timeout_sec):
+                return False
+            future = client.call_async(GetState.Request())
+            rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+            result = future.result()
+            return result is not None and result.current_state.label == 'active'
+        finally:
+            self.destroy_client(client)
+
     def check_nav2_ready(self):
+        for node_name in ('planner_server', 'controller_server', 'bt_navigator'):
+            if not self._wait_for_node_active(node_name):
+                self.get_logger().warn(
+                    f"check_nav2_ready: {node_name} not active yet (or its get_state "
+                    f"call timed out) -- retrying in 1s")
+                return
         self.nav2_check_timer.cancel()
-        self.nav._waitForNodeToActivate('planner_server')
-        self.nav._waitForNodeToActivate('controller_server')
-        self.nav._waitForNodeToActivate('bt_navigator')
         self.nav2_ready = True
         self.get_logger().info("nav2_ready=True (planner_server/controller_server/"
                                "bt_navigator all active)")
