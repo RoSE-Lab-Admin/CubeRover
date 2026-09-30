@@ -133,6 +133,13 @@ struct HybridMotionTable
   float travel_distance_reward;
   bool downsample_obstacle_heuristic;
   bool use_quadratic_cost_penalty;
+  // Momentum-zone curvature restriction (see SearchInfo in types.hpp).
+  // delta_dist is the fixed per-primitive-step chord length shared by every
+  // base (non-interpolated) motion primitive -- used to accumulate distance
+  // since a node's last momentum reset without needing per-step geometry.
+  float momentum_zone_length;
+  float momentum_zone_penalty;
+  float delta_dist;
   ompl::base::StateSpacePtr state_space;
   std::vector<std::vector<double>> delta_xs;
   std::vector<std::vector<double>> delta_ys;
@@ -266,6 +273,26 @@ public:
   inline TurnDirection & getTurnDirection()
   {
     return _turn_dir;
+  }
+
+  /**
+   * @brief Sets the accumulated distance since this node's last momentum
+   * reset (path start, or the most recent TurnDirection change)
+   * @param reference to distance in meters
+   */
+  inline void setDistanceSinceMomentumReset(const float & dist_in)
+  {
+    _distance_since_momentum_reset = dist_in;
+  }
+
+  /**
+   * @brief Gets the accumulated distance since this node's last momentum
+   * reset (path start, or the most recent TurnDirection change)
+   * @return reference to distance in meters
+   */
+  inline float & getDistanceSinceMomentumReset()
+  {
+    return _distance_since_momentum_reset;
   }
 
   /**
@@ -496,6 +523,7 @@ private:
   bool _was_visited;
   unsigned int _motion_primitive_index;
   TurnDirection _turn_dir;
+  float _distance_since_momentum_reset{0.0f};
   bool _is_node_valid{false};
 };
 

@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <vector>
 #include <memory>
+#include <type_traits>
 
 #include "nav2_smac_planner_custom/analytic_expansion.hpp"
 
@@ -191,6 +192,38 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
   }
 
   unsigned int num_intervals = static_cast<unsigned int>(std::floor(d / sqrt_2));
+
+  if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+    if (node->motion_table.momentum_zone_length > 0.0f &&
+      node->getDistanceSinceMomentumReset() < node->motion_table.momentum_zone_length)
+    {
+      // Rover has little/no momentum at this node (see
+      // SearchInfo::momentum_zone_length in types.hpp). The main search's
+      // per-primitive cost function (NodeHybrid::getTraversalCost) already
+      // discourages turning primitives in this zone, but analytic
+      // expansion's own shortcut-acceptance scoring (below, scoringFn) never
+      // looks at that at all -- it only weighs distance and costmap cost.
+      // So an accepted shortcut here could still start by turning sharply
+      // with no momentum. Reject it if so, approximated by checking whether
+      // heading has already changed meaningfully by the first interpolated
+      // sub-step -- a precise Reeds-Shepp per-segment-type check would be
+      // more exact but isn't implemented here; this conservative stand-in
+      // only needs to detect *whether* the shortcut turns immediately, not
+      // by how much.
+      state_space->interpolate(from(), to(), 1.0 / num_intervals, s());
+      double probe_theta = s.reals()[2];
+      probe_theta = (probe_theta < 0.0) ? (probe_theta + 2.0 * M_PI) : probe_theta;
+      probe_theta = (probe_theta > 2.0 * M_PI) ? (probe_theta - 2.0 * M_PI) : probe_theta;
+      const float start_theta = node->motion_table.getAngleFromBin(node->pose.theta);
+      float heading_delta = std::fabs(static_cast<float>(probe_theta) - start_theta);
+      if (heading_delta > M_PI) {
+        heading_delta = 2.0f * static_cast<float>(M_PI) - heading_delta;
+      }
+      if (heading_delta > 0.01f) {
+        return AnalyticExpansionNodes();
+      }
+    }
+  }
 
   AnalyticExpansionNodes possible_nodes;
   // When "from" and "to" are zero or one cell away,

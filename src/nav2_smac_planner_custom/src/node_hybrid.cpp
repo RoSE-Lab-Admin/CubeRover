@@ -34,6 +34,49 @@ using namespace std::chrono;  // NOLINT
 namespace nav2_smac_planner_custom
 {
 
+namespace
+{
+// Momentum-zone helpers (nav2_smac_planner_custom addition). A "momentum
+// reset" is any transition between consecutive primitives that the rover
+// cannot carry momentum through: a gear flip (forward<->reverse, whether or
+// not either primitive is itself turning), or a curve-direction flip within
+// the same gear (LEFT<->RIGHT or REV_LEFT<->REV_RIGHT -- the same condition
+// change_penalty already reacts to). A same-gear turning<->straight
+// transition (e.g. LEFT -> FORWARD) is NOT a reset -- momentum carries
+// through fine there.
+inline bool isReverseGear(const TurnDirection & d)
+{
+  return d == TurnDirection::REVERSE || d == TurnDirection::REV_LEFT ||
+         d == TurnDirection::REV_RIGHT;
+}
+
+inline bool isTurningPrimitive(const TurnDirection & d)
+{
+  return d == TurnDirection::LEFT || d == TurnDirection::RIGHT ||
+         d == TurnDirection::REV_LEFT || d == TurnDirection::REV_RIGHT;
+}
+
+// `parent` is the node the primitive starts from (has a valid TurnDirection
+// only if it has an incoming primitive of its own, i.e. isn't the true path
+// start). `child_turn_dir` is the TurnDirection of the primitive being
+// evaluated (parent -> child).
+inline bool isMomentumReset(NodeHybrid * parent, const TurnDirection & child_turn_dir)
+{
+  if (parent->getMotionPrimitiveIndex() == std::numeric_limits<unsigned int>::max()) {
+    // True path start -- nothing to compare against, and the start node's
+    // own distance-since-reset is already 0 from construction, so this
+    // isn't treated as a reset event itself (no double-counting).
+    return false;
+  }
+  const TurnDirection & parent_turn_dir = parent->getTurnDirection();
+  if (isReverseGear(parent_turn_dir) != isReverseGear(child_turn_dir)) {
+    return true;
+  }
+  return isTurningPrimitive(parent_turn_dir) && isTurningPrimitive(child_turn_dir) &&
+         parent_turn_dir != child_turn_dir;
+}
+}  // namespace
+
 // defining static member for all instance to share
 LookupTable NodeHybrid::obstacle_heuristic_lookup_table;
 float NodeHybrid::travel_distance_cost = sqrtf(2.0f);
@@ -67,6 +110,8 @@ void HybridMotionTable::initDubin(
   travel_distance_reward = 1.0f - search_info.retrospective_penalty;
   downsample_obstacle_heuristic = search_info.downsample_obstacle_heuristic;
   use_quadratic_cost_penalty = search_info.use_quadratic_cost_penalty;
+  momentum_zone_length = search_info.momentum_zone_length;
+  momentum_zone_penalty = search_info.momentum_zone_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -114,6 +159,7 @@ void HybridMotionTable::initDubin(
   // to delta Y is R * cos (angle). If we subtract R, we get the actual value
   const float delta_y = min_turning_radius - (min_turning_radius * cos(angle));
   const float delta_dist = hypotf(delta_x, delta_y);
+  this->delta_dist = delta_dist;
 
   projections.clear();
   projections.reserve(3);
@@ -194,6 +240,8 @@ void HybridMotionTable::initReedsShepp(
   travel_distance_reward = 1.0f - search_info.retrospective_penalty;
   downsample_obstacle_heuristic = search_info.downsample_obstacle_heuristic;
   use_quadratic_cost_penalty = search_info.use_quadratic_cost_penalty;
+  momentum_zone_length = search_info.momentum_zone_length;
+  momentum_zone_penalty = search_info.momentum_zone_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -222,6 +270,7 @@ void HybridMotionTable::initReedsShepp(
   const float delta_x = min_turning_radius * sin(angle);
   const float delta_y = min_turning_radius - (min_turning_radius * cos(angle));
   const float delta_dist = hypotf(delta_x, delta_y);
+  this->delta_dist = delta_dist;
 
   projections.clear();
   projections.reserve(6);
@@ -367,6 +416,7 @@ void NodeHybrid::reset()
   _accumulated_cost = std::numeric_limits<float>::max();
   _was_visited = false;
   _motion_primitive_index = std::numeric_limits<unsigned int>::max();
+  _distance_since_momentum_reset = 0.0f;
   pose.x = 0.0f;
   pose.y = 0.0f;
   pose.theta = 0.0f;
@@ -397,12 +447,26 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
             "cost without a known SE2 collision cost!");
   }
 
+  const TurnDirection & child_turn_dir = child->getTurnDirection();
+
+  // Momentum-zone: does this primitive begin with little/no momentum, either
+  // because it's itself a momentum-reset transition (gear flip or
+  // curve-direction flip -- see isMomentumReset()) or because this node's
+  // own accumulated distance since an earlier reset is still short? No-op
+  // (starts_in_momentum_zone always false) unless momentum_zone_length is
+  // configured (>0), so this is a no-op on any planner that doesn't set it.
+  const bool starts_in_momentum_zone = motion_table.momentum_zone_length > 0.0f &&
+    isTurningPrimitive(child_turn_dir) &&
+    (isMomentumReset(this, child_turn_dir) ||
+    getDistanceSinceMomentumReset() < motion_table.momentum_zone_length);
+
   // this is the first node
   if (getMotionPrimitiveIndex() == std::numeric_limits<unsigned int>::max()) {
-    return NodeHybrid::travel_distance_cost;
+    return starts_in_momentum_zone ?
+      NodeHybrid::travel_distance_cost * motion_table.momentum_zone_penalty :
+      NodeHybrid::travel_distance_cost;
   }
 
-  const TurnDirection & child_turn_dir = child->getTurnDirection();
   float travel_cost_raw = motion_table.travel_costs[child->getMotionPrimitiveIndex()];
   float travel_cost = 0.0;
 
@@ -435,6 +499,13 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
   {
     // reverse direction
     travel_cost *= motion_table.reverse_penalty;
+  }
+
+  if (starts_in_momentum_zone) {
+    // On top of the above -- the rover has little/no momentum here, so a
+    // turning primitive at minimum_turning_radius is unrealistic to execute
+    // cleanly (see SearchInfo::momentum_zone_length in types.hpp).
+    travel_cost *= motion_table.momentum_zone_penalty;
   }
 
   return travel_cost;
@@ -861,6 +932,9 @@ void NodeHybrid::getNeighbors(
           motion_projections[i]._theta));
       if (neighbor->isNodeValid(traverse_unknown, collision_checker)) {
         neighbor->setMotionPrimitiveIndex(i, motion_projections[i]._turn_dir);
+        neighbor->setDistanceSinceMomentumReset(
+          isMomentumReset(this, motion_projections[i]._turn_dir) ?
+          0.0f : (this->getDistanceSinceMomentumReset() + motion_table.delta_dist));
         neighbors.push_back(neighbor);
       } else {
         neighbor->setPose(initial_node_coords);

@@ -186,6 +186,8 @@ planner_server:
       minimum_turning_radius: 0.7 # was 0.56 previously 0.4 - min turning radius of path in m (must be >= vx_max/wz_max = 0.25/0.45 ≈ 0.56)
       motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 4.0 # heuristic penalty to apply to SE2 node if searching in a non straight direction
+      change_penalty: 3.0 # cost added when consecutive primitives change TurnDirection (curve flip or gear reversal) -- was implicitly 0.0 (unset), first tuning guess, see plan doc
+      reverse_penalty: 2.0 # cost multiplier for reverse-direction primitives -- pinning the previous implicit default explicitly, unchanged
       cost_penalty: 5.0 # heuristic penalty to apply to SE2 node for cost at pose
       retrospective_penalty: 0.015 # heurstic penality to apply to SE2 node penality
       lookup_table_size: 20.0
@@ -227,10 +229,15 @@ planner_server:
       minimum_turning_radius: 0.7
       motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 4.0
+      change_penalty: 3.0 # see GridBased -- kept in sync
+      reverse_penalty: 2.0 # see GridBased -- kept in sync
       cost_penalty: 5.0
       retrospective_penalty: 0.015
       lookup_table_size: 20.0
       debug_visualizations: true
+      # -- fork-only params, no equivalent in stock GridBased --
+      momentum_zone_length: 0.5 # meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
+      momentum_zone_penalty: 5.0 # extra multiplier applied to turning primitives that start inside the momentum zone, on top of non_straight_penalty/change_penalty
       use_quadratic_cost_penalty: false
       goal_heading_mode: "ALL_DIRECTION"
       coarse_search_resolution: 4

@@ -41,6 +41,17 @@ struct SearchInfo
   float cost_penalty{2.0};
   float retrospective_penalty{0.015};
   float rotation_penalty{5.0};
+  // Momentum-zone curvature restriction (nav2_smac_planner_custom addition,
+  // no upstream equivalent): within momentum_zone_length meters of a path's
+  // start or of a TurnDirection change (i.e. right after a reversal), the
+  // rover has little to no actual momentum, so a turning primitive at the
+  // configured minimum_turning_radius is unrealistic to execute cleanly.
+  // momentum_zone_penalty is an extra multiplier (on top of
+  // non_straight_penalty/change_penalty) applied to turning primitives that
+  // start inside that zone -- see NodeHybrid::getTraversalCost(). Zero-value
+  // defaults here mean this is a no-op unless explicitly configured.
+  float momentum_zone_length{0.0};
+  float momentum_zone_penalty{1.0};
   float analytic_expansion_ratio{3.5};
   float analytic_expansion_max_length{60.0};
   float analytic_expansion_max_cost{200.0};
