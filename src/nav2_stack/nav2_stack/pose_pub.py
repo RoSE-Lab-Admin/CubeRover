@@ -100,7 +100,12 @@ def main(args=None):
         pass
     finally:
         pose_pub.destroy_node()
-        rclpy.shutdown()
+        # rclpy.spin() already triggers shutdown internally on SIGINT in
+        # newer rclpy, so a plain rclpy.shutdown() here double-shuts-down and
+        # raises RCLError: "rcl_shutdown already called on the given
+        # context" (observed live). try_shutdown() is the idempotent
+        # variant -- a safe no-op if shutdown already happened.
+        rclpy.try_shutdown()
 
 if __name__ == "__main__":
     main()
