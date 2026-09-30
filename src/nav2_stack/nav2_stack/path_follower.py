@@ -255,28 +255,31 @@ class PathFollower(Node):
         stuck with no way to retry. Returns True if node_name reports
         'active' within timeout_sec, False otherwise (caller should retry).
 
-        Uses self.executor.spin_until_future_complete(), NOT the bare global
-        rclpy.spin_until_future_complete(self, ...) -- the latter creates its
-        OWN temporary executor internally when called without an explicit
-        executor argument, which conflicts with this node already being
-        owned by main()'s MultiThreadedExecutor (two executors managing the
-        same node's wait-set at once). Confirmed live: with the bare global
-        version, this call still worked (check_nav2_ready's retry WARN and
-        even the eventual nav2_ready=True did appear), but *other* callbacks
-        on this same node -- specifically waypoint_callback, subscribed to
-        /sim_waypoints -- stopped firing entirely for the rest of the
-        process's life, so a path was never received and no goal was ever
-        issued. self.executor is set explicitly in main() before spin()."""
-        client = self.create_client(GetState, f'{node_name}/get_state')
+        Spins self.nav (the existing BasicNavigator instance), NOT self
+        (PathFollower) -- self is already owned by main()'s
+        MultiThreadedExecutor, and calling a blocking spin from within one of
+        its OWN callbacks doesn't work either way: the bare global
+        rclpy.spin_until_future_complete(self, ...) creates its own SEPARATE
+        temporary executor for the same node, which silently starves this
+        node's OTHER callbacks (confirmed live: waypoint_callback stopped
+        firing entirely, so a path was never received); and
+        self.executor.spin_until_future_complete(...) raises `RuntimeError:
+        Executor is already spinning` outright, since rclpy explicitly
+        forbids re-entering an executor's own spin from inside one of its own
+        callbacks (also confirmed live). self.nav is a genuinely separate
+        node that's never added to any persistent executor (matching how the
+        original _waitForNodeToActivate calls it used self.nav too), so
+        spinning it independently via the bare global function is safe."""
+        client = self.nav.create_client(GetState, f'{node_name}/get_state')
         try:
             if not client.wait_for_service(timeout_sec=timeout_sec):
                 return False
             future = client.call_async(GetState.Request())
-            self.executor.spin_until_future_complete(future, timeout_sec=timeout_sec)
+            rclpy.spin_until_future_complete(self.nav, future, timeout_sec=timeout_sec)
             result = future.result()
             return result is not None and result.current_state.label == 'active'
         finally:
-            self.destroy_client(client)
+            self.nav.destroy_client(client)
 
     def check_nav2_ready(self):
         for node_name in ('planner_server', 'controller_server', 'bt_navigator'):
