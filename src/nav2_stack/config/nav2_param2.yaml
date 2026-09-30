@@ -252,7 +252,7 @@ planner_server:
       use_quadratic_cost_penalty: false
       goal_heading_mode: "ALL_DIRECTION"
       coarse_search_resolution: 4
-      smooth_path: true
+      smooth_path: false # temporarily disabled (was true) -- isolation test: does the multi-reversal shape in /plan survive with smoothing off? The smoother has no direction/turning-radius awareness at all, so if this is the culprit, no amount of search-time cost tuning would ever have shown up in the final path.
 
       smoother:
         max_iterations: 1000
