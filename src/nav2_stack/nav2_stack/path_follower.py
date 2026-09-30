@@ -253,13 +253,26 @@ class PathFollower(Node):
         response-delivery timeout on planner_server's side), that left
         check_nav2_ready() -- and therefore the whole trial -- permanently
         stuck with no way to retry. Returns True if node_name reports
-        'active' within timeout_sec, False otherwise (caller should retry)."""
+        'active' within timeout_sec, False otherwise (caller should retry).
+
+        Uses self.executor.spin_until_future_complete(), NOT the bare global
+        rclpy.spin_until_future_complete(self, ...) -- the latter creates its
+        OWN temporary executor internally when called without an explicit
+        executor argument, which conflicts with this node already being
+        owned by main()'s MultiThreadedExecutor (two executors managing the
+        same node's wait-set at once). Confirmed live: with the bare global
+        version, this call still worked (check_nav2_ready's retry WARN and
+        even the eventual nav2_ready=True did appear), but *other* callbacks
+        on this same node -- specifically waypoint_callback, subscribed to
+        /sim_waypoints -- stopped firing entirely for the rest of the
+        process's life, so a path was never received and no goal was ever
+        issued. self.executor is set explicitly in main() before spin()."""
         client = self.create_client(GetState, f'{node_name}/get_state')
         try:
             if not client.wait_for_service(timeout_sec=timeout_sec):
                 return False
             future = client.call_async(GetState.Request())
-            rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
+            self.executor.spin_until_future_complete(future, timeout_sec=timeout_sec)
             result = future.result()
             return result is not None and result.current_state.label == 'active'
         finally:
