@@ -140,6 +140,8 @@ struct HybridMotionTable
   float momentum_zone_length;
   float momentum_zone_penalty;
   float delta_dist;
+  // Escalating multi-reversal penalty (see SearchInfo in types.hpp).
+  float extra_direction_change_penalty;
   ompl::base::StateSpacePtr state_space;
   std::vector<std::vector<double>> delta_xs;
   std::vector<std::vector<double>> delta_ys;
@@ -293,6 +295,27 @@ public:
   inline float & getDistanceSinceMomentumReset()
   {
     return _distance_since_momentum_reset;
+  }
+
+  /**
+   * @brief Sets the total count of momentum-reset (TurnDirection change)
+   * events on the path to this node so far -- unlike
+   * distance_since_momentum_reset, this never resets; it only grows.
+   * @param reference to count
+   */
+  inline void setDirectionChangeCount(const unsigned int & count_in)
+  {
+    _direction_change_count = count_in;
+  }
+
+  /**
+   * @brief Gets the total count of momentum-reset (TurnDirection change)
+   * events on the path to this node so far
+   * @return reference to count
+   */
+  inline unsigned int & getDirectionChangeCount()
+  {
+    return _direction_change_count;
   }
 
   /**
@@ -524,6 +547,7 @@ private:
   unsigned int _motion_primitive_index;
   TurnDirection _turn_dir;
   float _distance_since_momentum_reset{0.0f};
+  unsigned int _direction_change_count{0};
   bool _is_node_valid{false};
 };
 

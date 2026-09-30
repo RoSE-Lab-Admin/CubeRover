@@ -248,6 +248,7 @@ planner_server:
       # -- fork-only params, no equivalent in stock GridBased --
       momentum_zone_length: 0.5 # meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
       momentum_zone_penalty: 5.0 # extra multiplier applied to turning primitives that start inside the momentum zone, on top of non_straight_penalty/change_penalty
+      extra_direction_change_penalty: 10.0 # escalating multiplier for the 2nd+ direction change on a path (1st change unaffected, 2nd gets x10, 3rd gets x100, ...) -- first guess, tune empirically
       use_quadratic_cost_penalty: false
       goal_heading_mode: "ALL_DIRECTION"
       coarse_search_resolution: 4

@@ -112,6 +112,7 @@ void HybridMotionTable::initDubin(
   use_quadratic_cost_penalty = search_info.use_quadratic_cost_penalty;
   momentum_zone_length = search_info.momentum_zone_length;
   momentum_zone_penalty = search_info.momentum_zone_penalty;
+  extra_direction_change_penalty = search_info.extra_direction_change_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -242,6 +243,7 @@ void HybridMotionTable::initReedsShepp(
   use_quadratic_cost_penalty = search_info.use_quadratic_cost_penalty;
   momentum_zone_length = search_info.momentum_zone_length;
   momentum_zone_penalty = search_info.momentum_zone_penalty;
+  extra_direction_change_penalty = search_info.extra_direction_change_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -417,6 +419,7 @@ void NodeHybrid::reset()
   _was_visited = false;
   _motion_primitive_index = std::numeric_limits<unsigned int>::max();
   _distance_since_momentum_reset = 0.0f;
+  _direction_change_count = 0;
   pose.x = 0.0f;
   pose.y = 0.0f;
   pose.theta = 0.0f;
@@ -487,9 +490,17 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
       // Turning motion but keeps in same direction: encourages to commit to turning if starting it
       travel_cost = travel_cost_raw * motion_table.non_straight_penalty;
     } else {
-      // Turning motion and changing direction: penalizes wiggling
+      // Turning motion and changing direction: penalizes wiggling. Escalate
+      // steeply for the 2nd+ such change on this path (see
+      // SearchInfo::extra_direction_change_penalty in types.hpp) --
+      // getDirectionChangeCount() is the PARENT's count (changes before this
+      // one), so the first change on a path always gets ^0 = no extra
+      // multiplier, only change_penalty as before.
+      const float escalation = pow(
+        motion_table.extra_direction_change_penalty,
+        static_cast<float>(getDirectionChangeCount()));
       travel_cost = travel_cost_raw *
-        (motion_table.non_straight_penalty + motion_table.change_penalty);
+        (motion_table.non_straight_penalty + motion_table.change_penalty) * escalation;
     }
   }
 
@@ -932,9 +943,11 @@ void NodeHybrid::getNeighbors(
           motion_projections[i]._theta));
       if (neighbor->isNodeValid(traverse_unknown, collision_checker)) {
         neighbor->setMotionPrimitiveIndex(i, motion_projections[i]._turn_dir);
+        const bool is_reset = isMomentumReset(this, motion_projections[i]._turn_dir);
         neighbor->setDistanceSinceMomentumReset(
-          isMomentumReset(this, motion_projections[i]._turn_dir) ?
-          0.0f : (this->getDistanceSinceMomentumReset() + motion_table.delta_dist));
+          is_reset ? 0.0f : (this->getDistanceSinceMomentumReset() + motion_table.delta_dist));
+        neighbor->setDirectionChangeCount(
+          this->getDirectionChangeCount() + (is_reset ? 1u : 0u));
         neighbors.push_back(neighbor);
       } else {
         neighbor->setPose(initial_node_coords);

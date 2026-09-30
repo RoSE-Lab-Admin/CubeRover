@@ -52,6 +52,18 @@ struct SearchInfo
   // defaults here mean this is a no-op unless explicitly configured.
   float momentum_zone_length{0.0};
   float momentum_zone_penalty{1.0};
+  // Escalating penalty for a path taking MORE than one TurnDirection change
+  // (nav2_smac_planner_custom addition, no upstream equivalent): the FIRST
+  // change on a path costs whatever change_penalty already costs; the
+  // second and any subsequent change is ADDITIONALLY multiplied by
+  // extra_direction_change_penalty^(changes before this one) -- see
+  // NodeHybrid::getTraversalCost(). This is deliberately a steep soft
+  // penalty, not a hard cap: a genuinely necessary multi-reversal path (e.g.
+  // a tight corner) still gets planned, just heavily discouraged relative to
+  // a same-goal alternative with fewer reversals, if one exists. Default 1.0
+  // means this is a no-op (no extra cost beyond change_penalty) unless
+  // explicitly configured above 1.0.
+  float extra_direction_change_penalty{1.0};
   float analytic_expansion_ratio{3.5};
   float analytic_expansion_max_length{60.0};
   float analytic_expansion_max_cost{200.0};
