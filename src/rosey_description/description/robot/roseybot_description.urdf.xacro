@@ -632,7 +632,7 @@
     name="realsense_link">
     <inertial>
       <origin
-        xyz="0.0122023502976824 -0.0474592338080081 -0.0126678739124035"
+        xyz="-0.0091476 -0.047459 -0.012668"
         rpy="0 0 0" />
       <mass
         value="2.5457871005553" />
@@ -645,8 +645,9 @@
         izz="0.00477606793112727" />
     </inertial>
     <visual>
+      <!-- offset compensates for realsense_link origin moved +21.347 mm along link x; STL is referenced to the old origin -->
       <origin
-        xyz="0 0 0"
+        xyz="-0.021347 0 0"
         rpy="0 0 0" />
       <geometry>
         <mesh
@@ -660,7 +661,7 @@
     </visual>
     <collision>
       <origin
-        xyz="0 0 0"
+        xyz="-0.021347 0 0"
         rpy="0 0 0" />
       <geometry>
         <mesh
@@ -672,7 +673,7 @@
     name="realsense_joint"
     type="fixed">
     <origin
-      xyz="0.21558 0.04725 0.22826"
+      xyz="0.236602527122989 0.0472499999999953 0.224551697487006"
       rpy="0 0.17453 0" />
     <parent
       link="base_link" />
