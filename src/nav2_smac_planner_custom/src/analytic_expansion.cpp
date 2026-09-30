@@ -201,11 +201,11 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
     // without an explicit check here, a shortcut can reach the final path
     // completely bypassing those penalties. OMPL's ReedsSheppStateSpace
     // exposes the exact segment/cusp decomposition of a candidate path via
-    // getPath() -- precise, replacing an earlier cruder approximation that
-    // inferred "does it turn immediately" from interpolated headings.
+    // reedsShepp() -- precise, replacing an earlier cruder approximation
+    // that inferred "does it turn immediately" from interpolated headings.
     if (node->motion_table.motion_model == MotionModel::REEDS_SHEPP) {
       auto rs_space = std::static_pointer_cast<ompl::base::ReedsSheppStateSpace>(state_space);
-      const auto rs_path = rs_space->getPath(from(), to());
+      const auto rs_path = rs_space->reedsShepp(from(), to());
 
       int cusps = 0;
       int last_sign = 0;
