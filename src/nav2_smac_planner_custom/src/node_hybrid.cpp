@@ -60,6 +60,17 @@ inline bool isTurningPrimitive(const TurnDirection & d)
 // only if it has an incoming primitive of its own, i.e. isn't the true path
 // start). `child_turn_dir` is the TurnDirection of the primitive being
 // evaluated (parent -> child).
+// Turning radius of motion primitive `index` in grid cells (max float for a
+// straight one): every primitive is a chord of delta_dist that turns
+// |_theta| angle bins.
+inline float primitiveRadius(const HybridMotionTable & motion_table, const unsigned int index)
+{
+  const float half_angle =
+    0.5f * std::fabs(motion_table.projections[index]._theta) * motion_table.bin_size;
+  return half_angle > 1e-6f ?
+         motion_table.delta_dist / (2.0f * sinf(half_angle)) : std::numeric_limits<float>::max();
+}
+
 inline bool isMomentumReset(NodeHybrid * parent, const TurnDirection & child_turn_dir)
 {
   if (parent->getMotionPrimitiveIndex() == std::numeric_limits<unsigned int>::max()) {
@@ -112,17 +123,24 @@ void HybridMotionTable::initDubin(
   use_quadratic_cost_penalty = search_info.use_quadratic_cost_penalty;
   momentum_zone_length = search_info.momentum_zone_length;
   momentum_zone_penalty = search_info.momentum_zone_penalty;
+  momentum_zone_min_radius = search_info.momentum_zone_min_radius;
+  curvature_penalty = search_info.curvature_penalty;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
+  escalate_only_on_reset = search_info.escalate_only_on_reset;
   ignore_goal_heading = search_info.ignore_goal_heading;
   motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
     min_turning_radius == search_info.minimum_turning_radius &&
-    motion_model == MotionModel::DUBIN)
+    motion_model == MotionModel::DUBIN &&
+    allow_primitive_interpolation == search_info.allow_primitive_interpolation)
   {
     return;
   }
+  // (fork: the interpolation flag is part of the check so toggling it at
+  // runtime actually rebuilds the primitives)
+  allow_primitive_interpolation = search_info.allow_primitive_interpolation;
 
   num_angle_quantization = num_angle_quantization_in;
   num_angle_quantization_float = static_cast<float>(num_angle_quantization);
@@ -245,17 +263,24 @@ void HybridMotionTable::initReedsShepp(
   use_quadratic_cost_penalty = search_info.use_quadratic_cost_penalty;
   momentum_zone_length = search_info.momentum_zone_length;
   momentum_zone_penalty = search_info.momentum_zone_penalty;
+  momentum_zone_min_radius = search_info.momentum_zone_min_radius;
+  curvature_penalty = search_info.curvature_penalty;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
+  escalate_only_on_reset = search_info.escalate_only_on_reset;
   ignore_goal_heading = search_info.ignore_goal_heading;
   motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
     min_turning_radius == search_info.minimum_turning_radius &&
-    motion_model == MotionModel::REEDS_SHEPP)
+    motion_model == MotionModel::REEDS_SHEPP &&
+    allow_primitive_interpolation == search_info.allow_primitive_interpolation)
   {
     return;
   }
+  // (fork: the interpolation flag is part of the check so toggling it at
+  // runtime actually rebuilds the primitives)
+  allow_primitive_interpolation = search_info.allow_primitive_interpolation;
 
   num_angle_quantization = num_angle_quantization_in;
   num_angle_quantization_float = static_cast<float>(num_angle_quantization);
@@ -462,16 +487,37 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
   // own accumulated distance since an earlier reset is still short? No-op
   // (starts_in_momentum_zone always false) unless momentum_zone_length is
   // configured (>0), so this is a no-op on any planner that doesn't set it.
-  const bool starts_in_momentum_zone = motion_table.momentum_zone_length > 0.0f &&
+  bool starts_in_momentum_zone = motion_table.momentum_zone_length > 0.0f &&
     isTurningPrimitive(child_turn_dir) &&
     (isMomentumReset(this, child_turn_dir) ||
     getDistanceSinceMomentumReset() < motion_table.momentum_zone_length);
+  if (starts_in_momentum_zone && motion_table.momentum_zone_min_radius > 0.0f) {
+    // Progressive zone: only turns tighter than the radius allowed at this
+    // distance into the zone are penalized (see SearchInfo in types.hpp).
+    const float d = isMomentumReset(this, child_turn_dir) ? 0.0f :
+      std::max(0.0f, getDistanceSinceMomentumReset());
+    const float frac = std::min(1.0f, d / motion_table.momentum_zone_length);
+    const float r_min = motion_table.min_turning_radius;
+    const float r_allowed = std::max(
+      r_min, motion_table.momentum_zone_min_radius -
+      (motion_table.momentum_zone_min_radius - r_min) * frac);
+    starts_in_momentum_zone =
+      primitiveRadius(motion_table, child->getMotionPrimitiveIndex()) < 0.999f * r_allowed;
+  }
+
+  // Curvature-weighted turning cost (see SearchInfo in types.hpp)
+  float curvature_factor = 1.0f;
+  if (motion_table.curvature_penalty > 0.0f && isTurningPrimitive(child_turn_dir)) {
+    const float ratio = motion_table.min_turning_radius /
+      primitiveRadius(motion_table, child->getMotionPrimitiveIndex());
+    curvature_factor = 1.0f + motion_table.curvature_penalty * ratio * ratio;
+  }
 
   // this is the first node
   if (getMotionPrimitiveIndex() == std::numeric_limits<unsigned int>::max()) {
-    return starts_in_momentum_zone ?
-      NodeHybrid::travel_distance_cost * motion_table.momentum_zone_penalty :
-      NodeHybrid::travel_distance_cost;
+    return curvature_factor * (starts_in_momentum_zone ?
+           NodeHybrid::travel_distance_cost * motion_table.momentum_zone_penalty :
+           NodeHybrid::travel_distance_cost);
   }
 
   float travel_cost_raw = motion_table.travel_costs[child->getMotionPrimitiveIndex()];
@@ -486,9 +532,20 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
       (motion_table.travel_distance_reward + motion_table.cost_penalty * normalized_cost);
   }
 
+  // escalate_only_on_reset: escalate exactly on momentum resets (see
+  // SearchInfo in types.hpp); otherwise on every TurnDirection change into a
+  // turn, as before.
+  const bool is_reset = isMomentumReset(this, child_turn_dir);
+
   if (child_turn_dir == TurnDirection::FORWARD || child_turn_dir == TurnDirection::REVERSE) {
     // New motion is a straight motion, no additional costs to be applied
     travel_cost = travel_cost_raw;
+    if (motion_table.escalate_only_on_reset && is_reset) {
+      // gear flip into a straight primitive: a direction change too
+      travel_cost *= pow(
+        motion_table.extra_direction_change_penalty,
+        static_cast<float>(getDirectionChangeCount()));
+    }
   } else {
     if (getTurnDirection() == child_turn_dir) {
       // Turning motion but keeps in same direction: encourages to commit to turning if starting it
@@ -500,13 +557,16 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
       // getDirectionChangeCount() is the PARENT's count (changes before this
       // one), so the first change on a path always gets ^0 = no extra
       // multiplier, only change_penalty as before.
-      const float escalation = pow(
+      const float escalation = (motion_table.escalate_only_on_reset && !is_reset) ? 1.0f :
+        pow(
         motion_table.extra_direction_change_penalty,
         static_cast<float>(getDirectionChangeCount()));
       travel_cost = travel_cost_raw *
         (motion_table.non_straight_penalty + motion_table.change_penalty) * escalation;
     }
   }
+
+  travel_cost *= curvature_factor;
 
   if (child_turn_dir == TurnDirection::REV_RIGHT ||
     child_turn_dir == TurnDirection::REV_LEFT ||

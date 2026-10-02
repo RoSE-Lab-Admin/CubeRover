@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "Eigen/Core"
+#include "angles/angles.h"
 #include "nav2_smac_planner_custom/smac_planner_hybrid.hpp"
 
 // #define BENCHMARK_TESTING
@@ -124,9 +125,44 @@ void SmacPlannerHybrid::configure(
     node, name + ".momentum_zone_penalty", rclcpp::ParameterValue(1.0));
   node->get_parameter(name + ".momentum_zone_penalty", _search_info.momentum_zone_penalty);
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".momentum_zone_min_radius", rclcpp::ParameterValue(0.0));
+  node->get_parameter(name + ".momentum_zone_min_radius", _momentum_zone_min_radius_m);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".curvature_penalty", rclcpp::ParameterValue(0.0));
+  node->get_parameter(name + ".curvature_penalty", _search_info.curvature_penalty);
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".extra_direction_change_penalty", rclcpp::ParameterValue(1.0));
   node->get_parameter(
     name + ".extra_direction_change_penalty", _search_info.extra_direction_change_penalty);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".escalate_only_on_reset", rclcpp::ParameterValue(false));
+  node->get_parameter(name + ".escalate_only_on_reset", _search_info.escalate_only_on_reset);
+
+  // Constant-curvature arc mode (fork-only, off by default): plan the single
+  // arc tangent to the start heading through the goal when it is feasible,
+  // Hybrid-A* otherwise -- see tryArcPlan().
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_mode_enabled", rclcpp::ParameterValue(false));
+  node->get_parameter(name + ".arc_mode_enabled", _arc_mode_enabled);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_min_radius", rclcpp::ParameterValue(-1.0));
+  node->get_parameter(name + ".arc_min_radius", _arc_min_radius);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_max_length", rclcpp::ParameterValue(10.0));
+  node->get_parameter(name + ".arc_max_length", _arc_max_length);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_max_cost", rclcpp::ParameterValue(-1.0));
+  node->get_parameter(name + ".arc_max_cost", _arc_max_cost);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_path_resolution", rclcpp::ParameterValue(0.05));
+  node->get_parameter(name + ".arc_path_resolution", _arc_path_resolution);
+  if (_arc_path_resolution <= 0.0) {
+    _arc_path_resolution = 0.05;
+  }
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_max_sweep", rclcpp::ParameterValue(180.0));
+  node->get_parameter(name + ".arc_max_sweep", _arc_max_sweep);
+
   nav2_util::declare_parameter_if_not_declared(
     node, name + ".ignore_goal_heading", rclcpp::ParameterValue(false));
   node->get_parameter(name + ".ignore_goal_heading", _search_info.ignore_goal_heading);
@@ -258,6 +294,8 @@ void SmacPlannerHybrid::configure(
   _momentum_zone_length_m = _search_info.momentum_zone_length;
   _search_info.momentum_zone_length =
     _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor);
+  _search_info.momentum_zone_min_radius = static_cast<float>(
+    _momentum_zone_min_radius_m / (_costmap->getResolution() * _downsampling_factor));
   _search_info.motion_reversal_penalty =
     _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor);
   _search_resolution = _costmap->getResolution();
@@ -472,9 +510,11 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
   // real direction change (isMomentumReset(), motion_reversal_penalty, the
   // analytic-expansion junction check) instead of being free. At rest the
   // start keeps the "no previous primitive" sentinel, as before.
+  int moving_gear = 0;
   if (_motion_pose_sub) {
     double displacement = 0.0;
     const int gear = currentGear(displacement);
+    moving_gear = gear;
     NodeHybrid * start_node = _a_star->getStart();
     const TurnDirection wanted = gear > 0 ? TurnDirection::FORWARD : TurnDirection::REVERSE;
     unsigned int seed_index = std::numeric_limits<unsigned int>::max();
@@ -549,6 +589,18 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
     }
 
     return plan;
+  }
+
+  // Constant-curvature arc mode: one arc for the whole path when feasible
+  if (_arc_mode_enabled) {
+    std::string reason;
+    if (tryArcPlan(start, goal, costmap, moving_gear, plan, reason)) {
+      if (_raw_plan_publisher->get_subscription_count() > 0) {
+        _raw_plan_publisher->publish(plan);
+      }
+      return plan;
+    }
+    RCLCPP_INFO(_logger, "%s: arc rejected (%s), using Hybrid-A*", _name.c_str(), reason.c_str());
   }
 
   // Compute plan
@@ -741,12 +793,30 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       } else if (name == _name + ".motion_stale_timeout") {
         std::lock_guard<std::mutex> lock(_motion_mutex);
         _motion_stale_timeout = parameter.as_double();
+      } else if (name == _name + ".curvature_penalty") {
+        reinit_a_star = true;
+        _search_info.curvature_penalty = static_cast<float>(parameter.as_double());
+      } else if (name == _name + ".momentum_zone_min_radius") {
+        reinit_a_star = true;
+        _momentum_zone_min_radius_m = parameter.as_double();  // -> cells in reinitialize()
       } else if (name == _name + ".momentum_zone_penalty") {
         reinit_a_star = true;
         _search_info.momentum_zone_penalty = static_cast<float>(parameter.as_double());
       } else if (name == _name + ".extra_direction_change_penalty") {
         reinit_a_star = true;
         _search_info.extra_direction_change_penalty = static_cast<float>(parameter.as_double());
+      } else if (name == _name + ".arc_min_radius") {
+        _arc_min_radius = parameter.as_double();
+      } else if (name == _name + ".arc_max_length") {
+        _arc_max_length = parameter.as_double();
+      } else if (name == _name + ".arc_max_cost") {
+        _arc_max_cost = parameter.as_double();
+      } else if (name == _name + ".arc_max_sweep") {
+        _arc_max_sweep = parameter.as_double();
+      } else if (name == _name + ".arc_path_resolution") {
+        if (parameter.as_double() > 0.0) {
+          _arc_path_resolution = parameter.as_double();
+        }
       } else if (name == _name + ".non_straight_penalty") {
         reinit_a_star = true;
         _search_info.non_straight_penalty = static_cast<float>(parameter.as_double());
@@ -783,6 +853,11 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _search_info.cache_obstacle_heuristic = parameter.as_bool();
       } else if (name == _name + ".allow_primitive_interpolation") {
         _search_info.allow_primitive_interpolation = parameter.as_bool();
+        reinit_a_star = true;
+      } else if (name == _name + ".arc_mode_enabled") {
+        _arc_mode_enabled = parameter.as_bool();
+      } else if (name == _name + ".escalate_only_on_reset") {
+        _search_info.escalate_only_on_reset = parameter.as_bool();
         reinit_a_star = true;
       } else if (name == _name + ".ignore_goal_heading") {
         _search_info.ignore_goal_heading = parameter.as_bool();
@@ -851,6 +926,144 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
   return result;
 }
 
+bool SmacPlannerHybrid::tryArcPlan(
+  const geometry_msgs::msg::PoseStamped & start,
+  const geometry_msgs::msg::PoseStamped & goal,
+  nav2_costmap_2d::Costmap2D * costmap, int moving_gear,
+  nav_msgs::msg::Path & plan, std::string & reason)
+{
+  const double x0 = start.pose.position.x;
+  const double y0 = start.pose.position.y;
+  const double th0 = tf2::getYaw(start.pose.orientation);
+  const double gx = goal.pose.position.x - x0;
+  const double gy = goal.pose.position.y - y0;
+  // goal in the start frame
+  const double dx = std::cos(th0) * gx + std::sin(th0) * gy;
+  const double dy = -std::sin(th0) * gx + std::cos(th0) * gy;
+  const double d2 = dx * dx + dy * dy;
+  if (d2 < 1e-6) {
+    reason = "goal at start";
+    return false;
+  }
+  const int gear = dx >= 0.0 ? 1 : -1;  // goal ahead: forward, behind: reverse
+  if (moving_gear != 0 && moving_gear != gear) {
+    reason = std::string("arc would reverse the rover, moving ") +
+      (moving_gear > 0 ? "forward" : "in reverse");
+    return false;
+  }
+
+  // Circle tangent to the heading through both points: curvature
+  // k = 2 dy / d^2. Along it, pose(s) = (sin(ks)/k, (1 - cos(ks))/k, th0 + ks)
+  // for signed arc length s (s < 0 in reverse); the goal is where
+  // ks/2 = atan(dy/dx), so the heading sweep 2*atan(dy/dx) stays under 180 deg.
+  const double k = 2.0 * dy / d2;
+  const double min_radius =
+    _arc_min_radius > 0.0 ? _arc_min_radius : _minimum_turning_radius_global_coords;
+  if (std::fabs(k) * min_radius > 1.0) {
+    reason = "radius " + std::to_string(1.0 / std::fabs(k)) + " m < " +
+      std::to_string(min_radius) + " m";
+    return false;
+  }
+  double s_goal;
+  if (std::fabs(k) < 1e-9) {
+    s_goal = dx;
+  } else if (std::fabs(dx) < 1e-9) {
+    reason = "goal abeam";  // half circle, already rejected by radius unless huge
+    return false;
+  } else {
+    s_goal = 2.0 * std::atan(dy / dx) / k;
+  }
+  // heading change along the arc = 2 * the goal's angle off the driving
+  // direction, so a cap of e.g. 90 deg keeps goals within +/-45 deg of the
+  // nose (forward) or tail (reverse); wider swings go to Hybrid-A*, which can
+  // pick a three-point turn instead
+  const double sweep_deg = std::fabs(2.0 * std::atan(dy / dx)) * 180.0 / M_PI;
+  if (sweep_deg > _arc_max_sweep) {
+    reason = "sweep " + std::to_string(sweep_deg) + " deg > " + std::to_string(_arc_max_sweep) +
+      " deg";
+    return false;
+  }
+  const double length = std::fabs(s_goal);
+  if (length > _arc_max_length) {
+    reason = "length " + std::to_string(length) + " m > " + std::to_string(_arc_max_length) + " m";
+    return false;
+  }
+
+  const int n = std::max(1, static_cast<int>(std::ceil(length / _arc_path_resolution)));
+  // sample i of n along the arc: world pose, map coords and angle bin
+  auto sample = [&](int i, double & s, double & wx, double & wy, double & th,
+      float & mx, float & my, float & bin) {
+      s = s_goal * static_cast<double>(i) / static_cast<double>(n);
+      double lx, ly;
+      if (std::fabs(k) < 1e-9) {
+        lx = s;
+        ly = 0.0;
+      } else {
+        lx = std::sin(k * s) / k;
+        ly = (1.0 - std::cos(k * s)) / k;
+      }
+      wx = x0 + std::cos(th0) * lx - std::sin(th0) * ly;
+      wy = y0 + std::sin(th0) * lx + std::cos(th0) * ly;
+      th = angles::normalize_angle(th0 + k * s);
+      double b = (th < 0.0 ? th + 2.0 * M_PI : th) / _angle_bin_size;
+      if (b >= static_cast<double>(_angle_quantizations)) {
+        b -= static_cast<double>(_angle_quantizations);
+      }
+      bin = static_cast<float>(b);
+      return costmap->worldToMapContinuous(wx, wy, mx, my);
+    };
+
+  // Cost cap: arc_max_cost, raised to the start's and goal's own cost so a
+  // start or goal inside inflation does not by itself reject the arc (the
+  // analytic expansion has a similar goal exemption). Collisions always reject.
+  double max_cost =
+    _arc_max_cost >= 0.0 ? _arc_max_cost : _search_info.analytic_expansion_max_cost;
+  for (int i : {0, n}) {
+    double s, wx, wy, th;
+    float mx, my, bin;
+    if (sample(i, s, wx, wy, th, mx, my, bin) &&
+      !_collision_checker.inCollision(mx, my, bin, _allow_unknown))
+    {
+      max_cost = std::max(max_cost, static_cast<double>(_collision_checker.getCost()));
+    }
+  }
+
+  geometry_msgs::msg::PoseStamped pose;
+  pose.header = plan.header;
+  std::vector<geometry_msgs::msg::PoseStamped> poses;
+  poses.reserve(n + 1);
+  for (int i = 0; i <= n; ++i) {
+    double s, wx, wy, th;
+    float mx, my, bin;
+    if (!sample(i, s, wx, wy, th, mx, my, bin)) {
+      reason = "leaves the costmap";
+      return false;
+    }
+    if (_collision_checker.inCollision(mx, my, bin, _allow_unknown)) {
+      reason = "collision at s=" + std::to_string(std::fabs(s)) + " m";
+      return false;
+    }
+    if (_collision_checker.getCost() > max_cost) {
+      reason = "cost " + std::to_string(_collision_checker.getCost()) + " > " +
+        std::to_string(max_cost) + " at s=" + std::to_string(std::fabs(s)) + " m";
+      return false;
+    }
+    pose.pose.position.x = wx;
+    pose.pose.position.y = wy;
+    pose.pose.position.z = 0.0;
+    pose.pose.orientation = getWorldOrientation(static_cast<float>(th));
+    poses.push_back(pose);
+  }
+
+  plan.poses = std::move(poses);
+  RCLCPP_INFO(
+    _logger, "%s: arc plan, %s, radius %.2f m, length %.2f m, sweep %.0f deg", _name.c_str(),
+    gear > 0 ? "forward" : "reverse",
+    std::fabs(k) < 1e-9 ? std::numeric_limits<double>::infinity() : 1.0 / std::fabs(k), length,
+    sweep_deg);
+  return true;
+}
+
 int SmacPlannerHybrid::currentGear(double & displacement)
 {
   displacement = std::numeric_limits<double>::quiet_NaN();
@@ -890,6 +1103,8 @@ void SmacPlannerHybrid::reinitialize(
       _minimum_turning_radius_global_coords / (_costmap->getResolution() * _downsampling_factor);
     _search_info.momentum_zone_length = static_cast<float>(
       _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor));
+    _search_info.momentum_zone_min_radius = static_cast<float>(
+      _momentum_zone_min_radius_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.motion_reversal_penalty = static_cast<float>(
       _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.analytic_expansion_max_length =

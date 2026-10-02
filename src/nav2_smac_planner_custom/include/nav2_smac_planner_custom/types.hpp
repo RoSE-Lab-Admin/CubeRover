@@ -52,6 +52,23 @@ struct SearchInfo
   // defaults here mean this is a no-op unless explicitly configured.
   float momentum_zone_length{0.0};
   float momentum_zone_penalty{1.0};
+  // Progressive momentum zone (nav2_smac_planner_custom addition): when > 0,
+  // a turn inside the momentum zone is only penalized if it is tighter than
+  // the radius allowed at that point -- momentum_zone_min_radius right at the
+  // reset, shrinking linearly to minimum_turning_radius at the end of the
+  // zone -- so gentle turns are allowed right away and tighter ones as
+  // momentum builds. Needs allow_primitive_interpolation for gentle turning
+  // primitives to exist. Configured in meters, held here in grid cells.
+  // 0.0 = original behavior (every turn in the zone is penalized).
+  float momentum_zone_min_radius{0.0};
+  // Curvature-weighted turning cost (nav2_smac_planner_custom addition): a
+  // turning primitive of radius R costs an extra factor
+  // (1 + curvature_penalty * (minimum_turning_radius / R)^2) -- the tightest
+  // turns pay the full curvature_penalty, gentle ones (only present with
+  // allow_primitive_interpolation) almost nothing. Unlike the flat
+  // non_straight_penalty this spreads turning out into gentler arcs instead
+  // of squeezing it into a few sharp primitives. 0.0 = no-op.
+  float curvature_penalty{0.0};
   // Escalating penalty for a path taking MORE than one TurnDirection change
   // (nav2_smac_planner_custom addition, no upstream equivalent): the FIRST
   // change on a path costs whatever change_penalty already costs; the
@@ -64,6 +81,14 @@ struct SearchInfo
   // means this is a no-op (no extra cost beyond change_penalty) unless
   // explicitly configured above 1.0.
   float extra_direction_change_penalty{1.0};
+  // nav2_smac_planner_custom addition: when true, the
+  // extra_direction_change_penalty escalation is applied exactly on momentum
+  // resets (gear flips -- including into a straight primitive -- and
+  // same-gear curve flips), instead of on every TurnDirection change. The
+  // default (false) keeps the original behavior, where every straight->turn
+  // entry after an earlier change is also escalated, which biases paths
+  // after a cusp toward one turn plus long straights.
+  bool escalate_only_on_reset{false};
   // Direction-aware replanning (nav2_smac_planner_custom addition): when the
   // search start is seeded with the gear the rover is already moving in
   // (SmacPlannerHybrid motion_pose_topic), a first primitive in the opposite

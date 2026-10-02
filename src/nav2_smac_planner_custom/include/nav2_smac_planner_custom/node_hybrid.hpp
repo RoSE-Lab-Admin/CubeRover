@@ -139,9 +139,13 @@ struct HybridMotionTable
   // since a node's last momentum reset without needing per-step geometry.
   float momentum_zone_length;
   float momentum_zone_penalty;
+  float momentum_zone_min_radius;  // grid cells, see SearchInfo in types.hpp
+  float curvature_penalty;  // see SearchInfo in types.hpp
+  bool allow_primitive_interpolation{false};
   float delta_dist;
   // Escalating multi-reversal penalty (see SearchInfo in types.hpp).
   float extra_direction_change_penalty;
+  bool escalate_only_on_reset;
   // Cost of reversing a moving rover at a seeded start, grid cells (see SearchInfo in types.hpp).
   float motion_reversal_penalty;
   // Position-only goal (see SearchInfo in types.hpp).

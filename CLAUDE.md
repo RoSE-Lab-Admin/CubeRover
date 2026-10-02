@@ -1,9 +1,8 @@
 # CLAUDE.md
 
-Durable, project-level context for any Claude session working in this repo. Keep this
-file to facts and conventions that stay true regardless of which specific task or bug is
-currently being worked on — investigation-specific state (what's broken right now, where
-a debugging session left off) belongs in a one-time handoff doc instead, not here.
+## Personal Preferences
+Ask me about design choices and and make sure to tell me when you make any changes to the codebase that
+effect behaviour of live deployment. Verify that I agree with the changes before you make them (even in auto mode).
 
 ## Environment
 

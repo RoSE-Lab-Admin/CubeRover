@@ -115,6 +115,20 @@ protected:
    */
   int currentGear(double & displacement);
 
+  /**
+   * @brief Constant-curvature arc mode (fork-only): the single circular arc
+   * that starts at the start pose, tangent to its heading (forward if the
+   * goal is ahead, reverse if behind), and ends at the goal position.
+   * @param plan output, filled only on success (world frame)
+   * @param reason output, why the arc was rejected
+   * @return true if the arc is feasible (radius, length, cost, gear)
+   */
+  bool tryArcPlan(
+    const geometry_msgs::msg::PoseStamped & start,
+    const geometry_msgs::msg::PoseStamped & goal,
+    nav2_costmap_2d::Costmap2D * costmap, int moving_gear,
+    nav_msgs::msg::Path & plan, std::string & reason);
+
   std::unique_ptr<AStarAlgorithm<NodeHybrid>> _a_star;
   GridCollisionChecker _collision_checker;
   std::unique_ptr<Smoother> _smoother;
@@ -143,8 +157,19 @@ protected:
   // the costmap to its own resolution); _search_resolution is the resolution
   // the current conversions in _search_info were made at.
   double _momentum_zone_length_m{0.0};
+  double _momentum_zone_min_radius_m{0.0};
   double _analytic_expansion_max_length_m{3.0};
   double _motion_reversal_penalty_m{0.0};
+
+  // Constant-curvature arc mode (fork-only, see tryArcPlan()). Negative
+  // _arc_min_radius / _arc_max_cost mean "use minimum_turning_radius /
+  // analytic_expansion_max_cost".
+  bool _arc_mode_enabled{false};
+  double _arc_min_radius{-1.0};
+  double _arc_max_length{10.0};
+  double _arc_max_cost{-1.0};
+  double _arc_path_resolution{0.05};
+  double _arc_max_sweep{180.0};  // degrees of heading change; >= 180 = no cap
 
   // Direction-aware replanning (fork-only): pose samples from
   // motion_pose_topic, stamped with receive time, used by currentGear() to
