@@ -113,6 +113,7 @@ void HybridMotionTable::initDubin(
   momentum_zone_length = search_info.momentum_zone_length;
   momentum_zone_penalty = search_info.momentum_zone_penalty;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
+  ignore_goal_heading = search_info.ignore_goal_heading;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -244,6 +245,7 @@ void HybridMotionTable::initReedsShepp(
   momentum_zone_length = search_info.momentum_zone_length;
   momentum_zone_penalty = search_info.momentum_zone_penalty;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
+  ignore_goal_heading = search_info.ignore_goal_heading;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -528,6 +530,13 @@ float NodeHybrid::getHeuristicCost(
 {
   const float obstacle_heuristic =
     getObstacleHeuristic(node_coords, goal_coords, motion_table.cost_penalty);
+  // The distance lookup table is relative to the goal's heading, so it would
+  // steer the search toward the requested goal yaw -- skip it when any final
+  // heading is acceptable. The obstacle heuristic is heading-free and
+  // remains admissible.
+  if (motion_table.ignore_goal_heading) {
+    return obstacle_heuristic;
+  }
   const float dist_heuristic = getDistanceHeuristic(node_coords, goal_coords, obstacle_heuristic);
   return std::max(obstacle_heuristic, dist_heuristic);
 }

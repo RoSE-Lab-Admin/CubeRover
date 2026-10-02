@@ -142,6 +142,8 @@ struct HybridMotionTable
   float delta_dist;
   // Escalating multi-reversal penalty (see SearchInfo in types.hpp).
   float extra_direction_change_penalty;
+  // Position-only goal (see SearchInfo in types.hpp).
+  bool ignore_goal_heading;
   ompl::base::StateSpacePtr state_space;
   std::vector<std::vector<double>> delta_xs;
   std::vector<std::vector<double>> delta_ys;

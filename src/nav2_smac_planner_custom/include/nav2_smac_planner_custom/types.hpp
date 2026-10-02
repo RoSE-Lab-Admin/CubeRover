@@ -64,6 +64,16 @@ struct SearchInfo
   // means this is a no-op (no extra cost beyond change_penalty) unless
   // explicitly configured above 1.0.
   float extra_direction_change_penalty{1.0};
+  // Position-only goal (nav2_smac_planner_custom addition; stock 1.3.x has
+  // no goal_heading_mode -- that param only exists in later Nav2 releases
+  // and is silently ignored here). When true: any heading bin in the goal
+  // cell counts as reaching the goal (AStarAlgorithm::isGoal()), the
+  // goal-heading-dependent Reeds-Shepp distance heuristic is skipped in
+  // favor of the heading-free obstacle heuristic, and analytic expansion
+  // tries candidate final headings in order of shortest Reeds-Shepp length
+  // instead of only the requested goal yaw. Hybrid-A* only. Default false
+  // is a no-op.
+  bool ignore_goal_heading{false};
   float analytic_expansion_ratio{3.5};
   float analytic_expansion_max_length{60.0};
   float analytic_expansion_max_cost{200.0};

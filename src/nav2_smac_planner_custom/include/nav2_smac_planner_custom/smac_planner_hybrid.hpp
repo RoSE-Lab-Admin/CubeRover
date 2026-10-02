@@ -97,6 +97,14 @@ protected:
   rcl_interfaces::msg::SetParametersResult
   dynamicParametersCallback(std::vector<rclcpp::Parameter> parameters);
 
+  /**
+   * @brief Re-derive grid-cell parameters from the current costmap resolution
+   * and rebuild the requested components. Caller must hold _mutex.
+   */
+  void reinitialize(
+    bool reinit_collision_checker, bool reinit_a_star,
+    bool reinit_downsampler, bool reinit_smoother);
+
   std::unique_ptr<AStarAlgorithm<NodeHybrid>> _a_star;
   GridCollisionChecker _collision_checker;
   std::unique_ptr<Smoother> _smoother;
@@ -120,6 +128,13 @@ protected:
   double _max_planning_time;
   double _lookup_table_size;
   double _minimum_turning_radius_global_coords;
+  // Meter-valued params kept so grid-cell conversions can be redone if the
+  // costmap resolution changes after configure() (e.g. a static map resizes
+  // the costmap to its own resolution); _search_resolution is the resolution
+  // the current conversions in _search_info were made at.
+  double _momentum_zone_length_m{0.0};
+  double _analytic_expansion_max_length_m{3.0};
+  double _search_resolution{0.0};
   bool _debug_visualizations;
   std::string _motion_model_for_search;
   MotionModel _motion_model;

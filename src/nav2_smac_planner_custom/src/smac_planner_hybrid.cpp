@@ -128,6 +128,9 @@ void SmacPlannerHybrid::configure(
   node->get_parameter(
     name + ".extra_direction_change_penalty", _search_info.extra_direction_change_penalty);
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".ignore_goal_heading", rclcpp::ParameterValue(false));
+  node->get_parameter(name + ".ignore_goal_heading", _search_info.ignore_goal_heading);
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".non_straight_penalty", rclcpp::ParameterValue(1.2));
   node->get_parameter(name + ".non_straight_penalty", _search_info.non_straight_penalty);
   nav2_util::declare_parameter_if_not_declared(
@@ -160,6 +163,7 @@ void SmacPlannerHybrid::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, name + ".analytic_expansion_max_length", rclcpp::ParameterValue(3.0));
   node->get_parameter(name + ".analytic_expansion_max_length", analytic_expansion_max_length_m);
+  _analytic_expansion_max_length_m = analytic_expansion_max_length_m;
   _search_info.analytic_expansion_max_length =
     analytic_expansion_max_length_m / _costmap->getResolution();
 
@@ -212,6 +216,16 @@ void SmacPlannerHybrid::configure(
   }
   _search_info.minimum_turning_radius =
     _minimum_turning_radius_global_coords / (_costmap->getResolution() * _downsampling_factor);
+  // momentum_zone_length is configured in meters but compared against
+  // NodeHybrid's distance-since-reset, which accumulates in grid cells
+  _momentum_zone_length_m = _search_info.momentum_zone_length;
+  _search_info.momentum_zone_length =
+    _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor);
+  _search_resolution = _costmap->getResolution();
+  RCLCPP_INFO(
+    _logger, "%s: costmap resolution %.3f m, minimum_turning_radius %.2f cells, "
+    "momentum_zone_length %.2f cells", _name.c_str(), _costmap->getResolution(),
+    _search_info.minimum_turning_radius, _search_info.momentum_zone_length);
   _lookup_table_dim =
     static_cast<float>(_lookup_table_size) /
     static_cast<float>(_costmap->getResolution() * _downsampling_factor);
@@ -361,6 +375,19 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
 {
   std::lock_guard<std::mutex> lock_reinit(_mutex);
   steady_clock::time_point a = steady_clock::now();
+
+  // Grid-cell params (turning radius, momentum zone, analytic expansion
+  // length, lookup table) are converted with the resolution the costmap had
+  // when they were computed. A static layer resizes the costmap to the map's
+  // own resolution after configure(), without changing the "resolution"
+  // parameter the remote handler watches -- so re-derive them here.
+  if (_costmap->getResolution() != _search_resolution) {
+    RCLCPP_INFO(
+      _logger, "%s: costmap resolution changed %.3f -> %.3f m since grid parameters "
+      "were derived, reinitializing.", _name.c_str(), _search_resolution,
+      _costmap->getResolution());
+    reinitialize(true, true, true, _smoother != nullptr);
+  }
 
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> lock(*(_costmap->getMutex()));
 
@@ -627,7 +654,7 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _search_info.change_penalty = static_cast<float>(parameter.as_double());
       } else if (name == _name + ".momentum_zone_length") {
         reinit_a_star = true;
-        _search_info.momentum_zone_length = static_cast<float>(parameter.as_double());
+        _momentum_zone_length_m = parameter.as_double();  // -> cells in reinitialize()
       } else if (name == _name + ".momentum_zone_penalty") {
         reinit_a_star = true;
         _search_info.momentum_zone_penalty = static_cast<float>(parameter.as_double());
@@ -645,8 +672,7 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _search_info.analytic_expansion_ratio = static_cast<float>(parameter.as_double());
       } else if (name == _name + ".analytic_expansion_max_length") {
         reinit_a_star = true;
-        _search_info.analytic_expansion_max_length =
-          static_cast<float>(parameter.as_double()) / _costmap->getResolution();
+        _analytic_expansion_max_length_m = parameter.as_double();  // -> cells in reinitialize()
       } else if (name == _name + ".analytic_expansion_max_cost") {
         reinit_a_star = true;
         _search_info.analytic_expansion_max_cost = static_cast<float>(parameter.as_double());
@@ -671,6 +697,9 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _search_info.cache_obstacle_heuristic = parameter.as_bool();
       } else if (name == _name + ".allow_primitive_interpolation") {
         _search_info.allow_primitive_interpolation = parameter.as_bool();
+        reinit_a_star = true;
+      } else if (name == _name + ".ignore_goal_heading") {
+        _search_info.ignore_goal_heading = parameter.as_bool();
         reinit_a_star = true;
       } else if (name == _name + ".smooth_path") {
         if (parameter.as_bool()) {
@@ -731,6 +760,15 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
   }
 
   // Re-init if needed with mutex lock (to avoid re-init while creating a plan)
+  reinitialize(reinit_collision_checker, reinit_a_star, reinit_downsampler, reinit_smoother);
+  result.successful = true;
+  return result;
+}
+
+void SmacPlannerHybrid::reinitialize(
+  bool reinit_collision_checker, bool reinit_a_star,
+  bool reinit_downsampler, bool reinit_smoother)
+{
   if (reinit_a_star || reinit_downsampler || reinit_collision_checker || reinit_smoother) {
     // convert to grid coordinates
     if (!_downsample_costmap) {
@@ -738,6 +776,11 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
     }
     _search_info.minimum_turning_radius =
       _minimum_turning_radius_global_coords / (_costmap->getResolution() * _downsampling_factor);
+    _search_info.momentum_zone_length = static_cast<float>(
+      _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor));
+    _search_info.analytic_expansion_max_length =
+      static_cast<float>(_analytic_expansion_max_length_m / _costmap->getResolution());
+    _search_resolution = _costmap->getResolution();
     _lookup_table_dim =
       static_cast<float>(_lookup_table_size) /
       static_cast<float>(_costmap->getResolution() * _downsampling_factor);
@@ -796,8 +839,6 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       _smoother->initialize(_minimum_turning_radius_global_coords);
     }
   }
-  result.successful = true;
-  return result;
 }
 
 }  // namespace nav2_smac_planner_custom

@@ -399,6 +399,15 @@ bool AStarAlgorithm<NodeT>::createPath(
 template<typename NodeT>
 bool AStarAlgorithm<NodeT>::isGoal(NodePtr & node)
 {
+  // Position-only goal (see SearchInfo::ignore_goal_heading in types.hpp):
+  // indices are theta + angles * (x + size_x * y), so dividing out dim_3
+  // compares just the (x, y) cell.
+  if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+    if (_search_info.ignore_goal_heading) {
+      return node == getGoal() ||
+             node->getIndex() / getSizeDim3() == getGoal()->getIndex() / getSizeDim3();
+    }
+  }
   return node == getGoal();
 }
 

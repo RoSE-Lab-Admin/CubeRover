@@ -81,8 +81,52 @@ typename AnalyticExpansion<NodeT>::NodePtr AnalyticExpansion<NodeT>::tryAnalytic
     if (analytic_iterations <= 0) {
       // Reset the counter and try the analytic path expansion
       analytic_iterations = desired_iterations;
-      AnalyticExpansionNodes analytic_nodes =
-        getAnalyticPath(current_node, goal_node, getter, current_node->motion_table.state_space);
+      AnalyticExpansionNodes analytic_nodes;
+      bool goal_heading_chosen = false;
+      if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+        if (_search_info.ignore_goal_heading) {
+          // Position-only goal (see SearchInfo::ignore_goal_heading in
+          // types.hpp): try every final heading bin, shortest Reeds-Shepp /
+          // Dubins length first, and keep the first that passes
+          // getAnalyticPath()'s checks. The winner is written into
+          // goal_node->pose.theta so the refinement passes below (and the
+          // final path's last pose) use it; restored if none succeed.
+          // setGoal() resets the goal pose on every new plan.
+          goal_heading_chosen = true;
+          const float original_goal_theta = goal_node->pose.theta;
+          const auto & state_space = current_node->motion_table.state_space;
+          ompl::base::ScopedState<> from(state_space), to(state_space);
+          from[0] = current_node->pose.x;
+          from[1] = current_node->pose.y;
+          from[2] = current_node->motion_table.getAngleFromBin(current_node->pose.theta);
+          to[0] = goal_node->pose.x;
+          to[1] = goal_node->pose.y;
+          std::vector<std::pair<float, unsigned int>> candidates;
+          candidates.reserve(_dim_3_size);
+          for (unsigned int bin = 0; bin < _dim_3_size; ++bin) {
+            to[2] = current_node->motion_table.getAngleFromBin(bin);
+            const float d = state_space->distance(from(), to());
+            if (d <= _search_info.analytic_expansion_max_length) {
+              candidates.emplace_back(d, bin);
+            }
+          }
+          std::sort(candidates.begin(), candidates.end());
+          for (const auto & candidate : candidates) {
+            goal_node->pose.theta = static_cast<float>(candidate.second);
+            analytic_nodes = getAnalyticPath(current_node, goal_node, getter, state_space);
+            if (!analytic_nodes.empty()) {
+              break;
+            }
+          }
+          if (analytic_nodes.empty()) {
+            goal_node->pose.theta = original_goal_theta;
+          }
+        }
+      }
+      if (!goal_heading_chosen) {
+        analytic_nodes =
+          getAnalyticPath(current_node, goal_node, getter, current_node->motion_table.state_space);
+      }
       if (!analytic_nodes.empty()) {
         // If we have a valid path, attempt to refine it
         NodePtr node = current_node;
@@ -207,33 +251,47 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
       auto rs_space = std::static_pointer_cast<ompl::base::ReedsSheppStateSpace>(state_space);
       const auto rs_path = rs_space->reedsShepp(from(), to());
 
+      // Walk the shortcut's segments, carrying the search node's
+      // distance-since-momentum-reset (grid cells) forward. A reversal --
+      // between two shortcut segments, or at the junction between the search
+      // path's last primitive and the shortcut's first segment (same rule as
+      // isMomentumReset() in node_hybrid.cpp) -- resets it to 0. A turning
+      // segment that begins before momentum_zone_length has been covered
+      // straight since the last reset is rejected: with no momentum the rover
+      // must first drive straight along its current heading.
+      const bool at_path_start =
+        node->getMotionPrimitiveIndex() == std::numeric_limits<unsigned int>::max();
+      const TurnDirection & node_dir = node->getTurnDirection();
+      const int node_sign = (node_dir == TurnDirection::REVERSE ||
+        node_dir == TurnDirection::REV_LEFT || node_dir == TurnDirection::REV_RIGHT) ? -1 : 1;
+      // distance() == rho * length(), so this recovers rho in grid cells
+      const double rho = rs_path.length() > 1e-9 ? d / rs_path.length() : 0.0;
+      const float zone = node->motion_table.momentum_zone_length;
+      float since_reset = node->getDistanceSinceMomentumReset();
+      int last_sign = at_path_start ? 0 : node_sign;
       int cusps = 0;
-      int last_sign = 0;
-      bool first_segment_turns = false;
-      bool found_first = false;
       for (int i = 0; i < 5; ++i) {
-        if (rs_path.type_[i] == ompl::base::ReedsSheppStateSpace::RS_NOP) {
+        // OMPL pads RS words with zero-length segments (e.g. a pure straight
+        // reverse can come back as L(0) S(-d) R(0)); those are not motion and
+        // must not count as a turn or carry a gear sign.
+        if (rs_path.type_[i] == ompl::base::ReedsSheppStateSpace::RS_NOP ||
+          std::fabs(rs_path.length_[i]) < 1e-6)
+        {
           continue;
-        }
-        if (!found_first) {
-          first_segment_turns =
-            (rs_path.type_[i] != ompl::base::ReedsSheppStateSpace::RS_STRAIGHT);
-          found_first = true;
         }
         const int seg_sign = (rs_path.length_[i] > 0.0) ? 1 : -1;
         if (last_sign != 0 && seg_sign != last_sign) {
           ++cusps;
+          since_reset = 0.0f;
         }
         last_sign = seg_sign;
-      }
 
-      // (1) Momentum zone: this node has little/no momentum, and the
-      // shortcut's first segment would turn immediately -- unrealistic to
-      // execute cleanly (see SearchInfo::momentum_zone_length in types.hpp).
-      if (node->motion_table.momentum_zone_length > 0.0f && first_segment_turns &&
-        node->getDistanceSinceMomentumReset() < node->motion_table.momentum_zone_length)
-      {
-        return AnalyticExpansionNodes();
+        // (1) Momentum zone (see SearchInfo::momentum_zone_length in types.hpp)
+        const bool turns = rs_path.type_[i] != ompl::base::ReedsSheppStateSpace::RS_STRAIGHT;
+        if (zone > 0.0f && turns && since_reset < zone) {
+          return AnalyticExpansionNodes();
+        }
+        since_reset += static_cast<float>(std::fabs(rs_path.length_[i]) * rho);
       }
 
       // (2) Multi-reversal: accepting this shortcut would bring the path's
