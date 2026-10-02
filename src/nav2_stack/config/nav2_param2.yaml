@@ -249,6 +249,11 @@ planner_server:
       momentum_zone_length: 0.5 # meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
       momentum_zone_penalty: 20.0 # was 5.0 -- raised substantially alongside the others, same reasoning
       extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
+      motion_reversal_penalty: 1.0 # fork-only: extra cost (meters of equivalent driving) for a replan whose first move reverses the rover's current motion (see motion_pose_topic); planned cusps are not charged
+      motion_pose_topic: "/FitRosey_V1/pose" # fork-only: replans start in the gear the rover is already moving in (from mocap pose deltas), so a replan reversing a moving rover counts as a direction change. "" disables.
+      motion_window: 0.5 # fork-only: seconds of pose history the displacement is measured over
+      motion_threshold: 0.02 # fork-only: meters of displacement along the heading within motion_window to count as moving; below = at rest (plans as from rest)
+      motion_stale_timeout: 0.5 # fork-only: seconds without a pose before the gear is treated as unknown
       ignore_goal_heading: true # fork-only: goal is position-only -- any final heading in the goal cell is accepted, so the planner picks the end yaw (e.g. lets a 3-point turn end however it naturally ends instead of forcing the caller's arc-derived yaw)
       use_quadratic_cost_penalty: false
       # NOTE: goal_heading_mode / coarse_search_resolution do not exist in

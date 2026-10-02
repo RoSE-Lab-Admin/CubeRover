@@ -114,6 +114,7 @@ void HybridMotionTable::initDubin(
   momentum_zone_penalty = search_info.momentum_zone_penalty;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   ignore_goal_heading = search_info.ignore_goal_heading;
+  motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -246,6 +247,7 @@ void HybridMotionTable::initReedsShepp(
   momentum_zone_penalty = search_info.momentum_zone_penalty;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   ignore_goal_heading = search_info.ignore_goal_heading;
+  motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
   if (num_angle_quantization_in == num_angle_quantization &&
@@ -519,6 +521,18 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
     // turning primitive at minimum_turning_radius is unrealistic to execute
     // cleanly (see SearchInfo::momentum_zone_length in types.hpp).
     travel_cost *= motion_table.momentum_zone_penalty;
+  }
+
+  if (motion_table.motion_reversal_penalty > 0.0f && parent == nullptr &&
+    isReverseGear(getTurnDirection()) != isReverseGear(child_turn_dir))
+  {
+    // First primitive out of a start seeded with the rover's measured gear
+    // (only a seeded start reaches here with no parent; the unseeded start
+    // returned above) reverses the rover's current motion -- see
+    // SearchInfo::motion_reversal_penalty in types.hpp. Planned cusps later
+    // in the path are deliberately not charged this. Added after the
+    // multipliers above so it stays a plain per-replan cost.
+    travel_cost += motion_table.motion_reversal_penalty;
   }
 
   return travel_cost;

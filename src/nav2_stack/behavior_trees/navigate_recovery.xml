@@ -4,11 +4,16 @@
 
       <!-- Main pipeline sequence -->
       <PipelineSequence name="NavigateWithReplanning">
-        <RateController hz="0.5">
+        <!-- Replan at 1 Hz so drift (e.g. while training dynamics models) gets
+             corrected. GridBasedCustom seeds each replan with the gear the
+             rover is already moving in (motion_pose_topic), so a replan only
+             reverses the rover when that is clearly cheaper, instead of
+             flipping between near-equal path shapes. -->
+        <RateController hz="1.0">
           <RecoveryNode number_of_retries="1" name="ComputePathRecovery">
             <!-- planner_id is overwritten at launch by nav2.launch.py with the
                  first entry of planner_server's planner_plugins in
-                 nav2_param2.yaml -- edit that list, not this attribute. -->
+                 nav2_param2.yaml; edit that list, not this attribute. -->
             <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
             <ClearCostmapAroundRobot name="ClearGlobalCostmap-Context"
                         service_name="global_costmap/clear_around_global_costmap"

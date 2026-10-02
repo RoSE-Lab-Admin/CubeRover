@@ -15,7 +15,9 @@
 #ifndef NAV2_SMAC_PLANNER_CUSTOM__SMAC_PLANNER_HYBRID_HPP_
 #define NAV2_SMAC_PLANNER_CUSTOM__SMAC_PLANNER_HYBRID_HPP_
 
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <string>
 
@@ -105,6 +107,14 @@ protected:
     bool reinit_collision_checker, bool reinit_a_star,
     bool reinit_downsampler, bool reinit_smoother);
 
+  /**
+   * @brief Rover's current gear from mocap pose deltas: signed displacement
+   * along the current heading over the last motion_window seconds.
+   * @param displacement output, meters (NaN when unknown)
+   * @return +1 forward, -1 reverse, 0 at rest / unknown / stale
+   */
+  int currentGear(double & displacement);
+
   std::unique_ptr<AStarAlgorithm<NodeHybrid>> _a_star;
   GridCollisionChecker _collision_checker;
   std::unique_ptr<Smoother> _smoother;
@@ -134,6 +144,21 @@ protected:
   // the current conversions in _search_info were made at.
   double _momentum_zone_length_m{0.0};
   double _analytic_expansion_max_length_m{3.0};
+  double _motion_reversal_penalty_m{0.0};
+
+  // Direction-aware replanning (fork-only): pose samples from
+  // motion_pose_topic, stamped with receive time, used by currentGear() to
+  // seed the search start with the gear the rover is already moving in.
+  struct MotionSample
+  {
+    double t, x, y, yaw;
+  };
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr _motion_pose_sub;
+  std::deque<MotionSample> _motion_samples;
+  std::mutex _motion_mutex;  // guards _motion_samples and the three params below
+  double _motion_window{0.5};
+  double _motion_threshold{0.02};
+  double _motion_stale_timeout{0.5};
   double _search_resolution{0.0};
   bool _debug_visualizations;
   std::string _motion_model_for_search;

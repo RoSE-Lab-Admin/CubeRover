@@ -64,6 +64,14 @@ struct SearchInfo
   // means this is a no-op (no extra cost beyond change_penalty) unless
   // explicitly configured above 1.0.
   float extra_direction_change_penalty{1.0};
+  // Direction-aware replanning (nav2_smac_planner_custom addition): when the
+  // search start is seeded with the gear the rover is already moving in
+  // (SmacPlannerHybrid motion_pose_topic), a first primitive in the opposite
+  // gear -- i.e. a replan that reverses the moving rover -- costs this extra,
+  // straight or turning. Only that start transition: planned cusps later in
+  // the path are unaffected, so at-rest plans don't change. Configured in
+  // meters-equivalent of driving, held here in grid cells. 0.0 = no-op.
+  float motion_reversal_penalty{0.0};
   // Position-only goal (nav2_smac_planner_custom addition; stock 1.3.x has
   // no goal_heading_mode -- that param only exists in later Nav2 releases
   // and is silently ignored here). When true: any heading bin in the goal

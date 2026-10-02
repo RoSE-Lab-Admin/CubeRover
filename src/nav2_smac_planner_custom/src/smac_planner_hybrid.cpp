@@ -131,6 +131,43 @@ void SmacPlannerHybrid::configure(
     node, name + ".ignore_goal_heading", rclcpp::ParameterValue(false));
   node->get_parameter(name + ".ignore_goal_heading", _search_info.ignore_goal_heading);
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".motion_reversal_penalty", rclcpp::ParameterValue(0.0));
+  node->get_parameter(name + ".motion_reversal_penalty", _motion_reversal_penalty_m);
+
+  // Direction-aware replanning (fork-only, off unless motion_pose_topic is
+  // set): seed each search's start with the gear the rover is already
+  // moving in, measured from mocap pose deltas -- see currentGear().
+  std::string motion_pose_topic;
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".motion_pose_topic", rclcpp::ParameterValue(std::string("")));
+  node->get_parameter(name + ".motion_pose_topic", motion_pose_topic);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".motion_window", rclcpp::ParameterValue(0.5));
+  node->get_parameter(name + ".motion_window", _motion_window);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".motion_threshold", rclcpp::ParameterValue(0.02));
+  node->get_parameter(name + ".motion_threshold", _motion_threshold);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".motion_stale_timeout", rclcpp::ParameterValue(0.5));
+  node->get_parameter(name + ".motion_stale_timeout", _motion_stale_timeout);
+  if (!motion_pose_topic.empty()) {
+    _motion_pose_sub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
+      motion_pose_topic, rclcpp::SensorDataQoS(),
+      [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {
+        // receive time, not header stamp: the mocap clock may not be synced
+        const double now = _clock->now().seconds();
+        std::lock_guard<std::mutex> lock(_motion_mutex);
+        _motion_samples.push_back(
+          {now, msg->pose.position.x, msg->pose.position.y, tf2::getYaw(msg->pose.orientation)});
+        // keep one sample at or beyond the window edge so the delta spans it
+        while (_motion_samples.size() > 2 && now - _motion_samples[1].t >= _motion_window) {
+          _motion_samples.pop_front();
+        }
+      });
+    RCLCPP_INFO(
+      _logger, "%s: direction-aware replanning from %s", name.c_str(), motion_pose_topic.c_str());
+  }
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".non_straight_penalty", rclcpp::ParameterValue(1.2));
   node->get_parameter(name + ".non_straight_penalty", _search_info.non_straight_penalty);
   nav2_util::declare_parameter_if_not_declared(
@@ -221,6 +258,8 @@ void SmacPlannerHybrid::configure(
   _momentum_zone_length_m = _search_info.momentum_zone_length;
   _search_info.momentum_zone_length =
     _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor);
+  _search_info.motion_reversal_penalty =
+    _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor);
   _search_resolution = _costmap->getResolution();
   RCLCPP_INFO(
     _logger, "%s: costmap resolution %.3f m, minimum_turning_radius %.2f cells, "
@@ -427,6 +466,41 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
     orientation_bin -= static_cast<float>(_angle_quantizations);
   }
   _a_star->setStart(mx_start, my_start, static_cast<unsigned int>(orientation_bin));
+
+  // Direction-aware replanning: if the rover is already moving, start the
+  // search in that gear with momentum, so a replan reversing it counts as a
+  // real direction change (isMomentumReset(), motion_reversal_penalty, the
+  // analytic-expansion junction check) instead of being free. At rest the
+  // start keeps the "no previous primitive" sentinel, as before.
+  if (_motion_pose_sub) {
+    double displacement = 0.0;
+    const int gear = currentGear(displacement);
+    NodeHybrid * start_node = _a_star->getStart();
+    const TurnDirection wanted = gear > 0 ? TurnDirection::FORWARD : TurnDirection::REVERSE;
+    unsigned int seed_index = std::numeric_limits<unsigned int>::max();
+    if (gear != 0) {
+      const auto & projections = NodeHybrid::motion_table.projections;
+      for (unsigned int i = 0; i < projections.size(); ++i) {
+        if (projections[i]._turn_dir == wanted) {
+          seed_index = i;
+          break;
+        }
+      }
+    }
+    if (seed_index != std::numeric_limits<unsigned int>::max()) {
+      start_node->setMotionPrimitiveIndex(seed_index, wanted);
+      start_node->setDistanceSinceMomentumReset(NodeHybrid::motion_table.momentum_zone_length);
+    } else {
+      start_node->setMotionPrimitiveIndex(
+        std::numeric_limits<unsigned int>::max(), TurnDirection::UNKNOWN);
+      start_node->setDistanceSinceMomentumReset(0.0f);
+    }
+    start_node->setDirectionChangeCount(0);
+    RCLCPP_INFO(
+      _logger, "%s: start gear: %s (d=%.3f m)", _name.c_str(),
+      seed_index == std::numeric_limits<unsigned int>::max() ? "rest" :
+      (gear > 0 ? "forward" : "reverse"), displacement);
+  }
 
   // Set goal point, in A* bin search coordinates
   if (!costmap->worldToMapContinuous(
@@ -655,6 +729,18 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       } else if (name == _name + ".momentum_zone_length") {
         reinit_a_star = true;
         _momentum_zone_length_m = parameter.as_double();  // -> cells in reinitialize()
+      } else if (name == _name + ".motion_reversal_penalty") {
+        reinit_a_star = true;
+        _motion_reversal_penalty_m = parameter.as_double();  // -> cells in reinitialize()
+      } else if (name == _name + ".motion_window") {
+        std::lock_guard<std::mutex> lock(_motion_mutex);
+        _motion_window = parameter.as_double();
+      } else if (name == _name + ".motion_threshold") {
+        std::lock_guard<std::mutex> lock(_motion_mutex);
+        _motion_threshold = parameter.as_double();
+      } else if (name == _name + ".motion_stale_timeout") {
+        std::lock_guard<std::mutex> lock(_motion_mutex);
+        _motion_stale_timeout = parameter.as_double();
       } else if (name == _name + ".momentum_zone_penalty") {
         reinit_a_star = true;
         _search_info.momentum_zone_penalty = static_cast<float>(parameter.as_double());
@@ -765,6 +851,32 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
   return result;
 }
 
+int SmacPlannerHybrid::currentGear(double & displacement)
+{
+  displacement = std::numeric_limits<double>::quiet_NaN();
+  const double now = _clock->now().seconds();
+  std::lock_guard<std::mutex> lock(_motion_mutex);
+  if (_motion_samples.empty() || now - _motion_samples.back().t > _motion_stale_timeout) {
+    return 0;  // no recent pose: unknown, plan as from rest
+  }
+  const MotionSample & oldest = _motion_samples.front();
+  const MotionSample & newest = _motion_samples.back();
+  if (newest.t - oldest.t < 0.5 * _motion_window) {
+    return 0;  // not enough history yet for a meaningful delta
+  }
+  // displacement over the window projected on the current heading (a delta,
+  // not a velocity estimate): >0 driving forward, <0 reversing
+  displacement = (newest.x - oldest.x) * std::cos(newest.yaw) +
+    (newest.y - oldest.y) * std::sin(newest.yaw);
+  if (displacement > _motion_threshold) {
+    return 1;
+  }
+  if (displacement < -_motion_threshold) {
+    return -1;
+  }
+  return 0;
+}
+
 void SmacPlannerHybrid::reinitialize(
   bool reinit_collision_checker, bool reinit_a_star,
   bool reinit_downsampler, bool reinit_smoother)
@@ -778,6 +890,8 @@ void SmacPlannerHybrid::reinitialize(
       _minimum_turning_radius_global_coords / (_costmap->getResolution() * _downsampling_factor);
     _search_info.momentum_zone_length = static_cast<float>(
       _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor));
+    _search_info.motion_reversal_penalty = static_cast<float>(
+      _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.analytic_expansion_max_length =
       static_cast<float>(_analytic_expansion_max_length_m / _costmap->getResolution());
     _search_resolution = _costmap->getResolution();

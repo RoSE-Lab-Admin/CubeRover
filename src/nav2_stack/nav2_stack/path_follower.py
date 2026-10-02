@@ -27,9 +27,16 @@ class PathFollower(Node):
         self.declare_parameter('use_opti', True)
         self.declare_parameter('opti_topic', '/FitRosey_V1/pose')
         self.declare_parameter('robot_frame', 'FitRosey_V1')
+        # Re-send the current goal mid-drive when the arc heading drifts. Off by
+        # default: every re-send forces a fresh replan from the current pose,
+        # which made the rover flip between path shapes instead of committing
+        # to one, and GridBasedCustom (ignore_goal_heading) ignores the goal
+        # yaw anyway.
+        self.declare_parameter('reissue_on_heading_change', False)
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
+        self.reissue_on_heading_change = self.get_parameter('reissue_on_heading_change').value
 
         # create callback group so it can execute while nav2 blocks
         self.opti_group = ReentrantCallbackGroup()
@@ -360,6 +367,8 @@ class PathFollower(Node):
             return
 
         if not self.nav.isTaskComplete():
+            if not self.reissue_on_heading_change:
+                return
             now = self.get_clock().now()
             elapsed = (now - self.last_goal_time).nanoseconds / 1e9
             if elapsed > self.goal_replan_interval:
