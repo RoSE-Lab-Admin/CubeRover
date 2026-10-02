@@ -5,6 +5,31 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
+import os
+import re
+import tempfile
+
+import yaml
+
+
+def select_planner_in_bt(bt_xml_path, nav2_config_path):
+    # Single source of truth for which planner navigation uses: the first entry
+    # of planner_server's planner_plugins in the nav2 yaml. Writes a copy of the
+    # BT with every ComputePathToPose planner_id set to it, returns its path.
+    with open(nav2_config_path) as f:
+        config = yaml.safe_load(f)
+    planner_id = config['planner_server']['ros__parameters']['planner_plugins'][0]
+    with open(bt_xml_path) as f:
+        xml = f.read()
+    xml = re.sub(r'(<ComputePathToPose\b[^>]*\bplanner_id=")[^"]*(")',
+                 rf'\g<1>{planner_id}\g<2>', xml)
+    out_dir = tempfile.mkdtemp(prefix='nav2_stack_bt_')
+    out_path = os.path.join(out_dir, os.path.basename(bt_xml_path))
+    with open(out_path, 'w') as f:
+        f.write(xml)
+    print(f'[nav2.launch.py] ComputePathToPose planner_id -> {planner_id} ({out_path})')
+    return out_path
+
 
 def launch_setup(context):
     robot_frame = LaunchConfiguration('robot_frame').perform(context)
@@ -20,6 +45,8 @@ def launch_setup(context):
         'config',
         'nav2_param2.yaml'
     ])
+
+    bt_xml = select_planner_in_bt(bt_xml.perform(context), nav2_config.perform(context))
 
     map_config = PathJoinSubstitution([
         FindPackageShare('nav2_stack'),

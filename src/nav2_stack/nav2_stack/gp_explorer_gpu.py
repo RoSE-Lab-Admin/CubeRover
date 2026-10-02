@@ -35,6 +35,7 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import ComputePathToPose
+from rcl_interfaces.srv import GetParameters
 from scipy.ndimage import distance_transform_edt
 from scipy.spatial.transform import Rotation
 from rosbags.rosbag2 import Reader
@@ -49,7 +50,7 @@ INFLATION  = 0.75
 
 # ── Nav2 settings ─────────────────────────────────────────────────────────────
 GLOBAL_FRAME = 'world'
-PLANNER_ID   = 'GridBased'
+PLANNER_ID   = 'GridBased'  # fallback only -- see GPExplorer._resolve_planner_id()
 
 # ── Internal constants ─────────────────────────────────────────────────────────
 POSE_TOPIC         = '/FitRosey_V1/pose'
@@ -320,7 +321,29 @@ class GPExplorer(Node):
         super().__init__('gp_explorer_gpu')
         self._ac   = ActionClient(self, ComputePathToPose, 'compute_path_to_pose')
         self._pose = None
+        self._planner_id = None
         self.create_subscription(PoseStamped, POSE_TOPIC, self._pose_cb, 10)
+
+    def _resolve_planner_id(self) -> str:
+        # Single source of truth: the first entry of planner_server's
+        # planner_plugins (nav2_param2.yaml), queried from the live node so this
+        # always matches what is actually loaded. Falls back to PLANNER_ID.
+        if self._planner_id is not None:
+            return self._planner_id
+        self._planner_id = PLANNER_ID
+        cli = self.create_client(GetParameters, '/planner_server/get_parameters')
+        if cli.wait_for_service(timeout_sec=5.0):
+            future = cli.call_async(GetParameters.Request(names=['planner_plugins']))
+            rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
+            res = future.result()
+            if res is not None and res.values and res.values[0].string_array_value:
+                self._planner_id = res.values[0].string_array_value[0]
+        else:
+            self.get_logger().warn(
+                f'planner_server/get_parameters unavailable, using fallback {PLANNER_ID}')
+        self.destroy_client(cli)
+        print(f'  planner_id: {self._planner_id}', flush=True)
+        return self._planner_id
 
     def _pose_cb(self, msg: PoseStamped):
         self._pose = msg
@@ -343,7 +366,7 @@ class GPExplorer(Node):
             sys.exit(1)
         goal = ComputePathToPose.Goal()
         goal.use_start  = True
-        goal.planner_id = PLANNER_ID
+        goal.planner_id = self._resolve_planner_id()
         for pose, (px, py) in ((goal.start, (sx, sy)), (goal.goal, (gx, gy))):
             pose.header.frame_id    = GLOBAL_FRAME
             pose.header.stamp       = self.get_clock().now().to_msg()

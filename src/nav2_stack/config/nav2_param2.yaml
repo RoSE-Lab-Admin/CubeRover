@@ -249,9 +249,13 @@ planner_server:
       momentum_zone_length: 0.5 # meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
       momentum_zone_penalty: 20.0 # was 5.0 -- raised substantially alongside the others, same reasoning
       extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
+      ignore_goal_heading: true # fork-only: goal is position-only -- any final heading in the goal cell is accepted, so the planner picks the end yaw (e.g. lets a 3-point turn end however it naturally ends instead of forcing the caller's arc-derived yaw)
       use_quadratic_cost_penalty: false
-      goal_heading_mode: "ALL_DIRECTION"
-      coarse_search_resolution: 4
+      # NOTE: goal_heading_mode / coarse_search_resolution do not exist in
+      # nav2_smac_planner 1.3.x (Jazzy) -- they are read by neither this fork
+      # nor stock, and have no effect. Use ignore_goal_heading above instead.
+      # goal_heading_mode: "ALL_DIRECTION"
+      # coarse_search_resolution: 4
       smooth_path: false # temporarily disabled (was true) -- isolation test: does the multi-reversal shape in /plan survive with smoothing off? The smoother has no direction/turning-radius awareness at all, so if this is the culprit, no amount of search-time cost tuning would ever have shown up in the final path.
 
       smoother:
