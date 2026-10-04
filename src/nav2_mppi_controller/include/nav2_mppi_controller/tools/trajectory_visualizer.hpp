@@ -96,6 +96,21 @@ public:
   void visualize(const nav_msgs::msg::Path & plan);
 
   /**
+    * @brief Whether anyone subscribes to optimal_trajectory_model (so the
+    * extra rollout can be skipped otherwise)
+    */
+  bool modelTrajectoryRequested() const;
+
+  /**
+    * @brief Publish the optimal sequence as predicted by the configured
+    * dynamics model on optimal_trajectory_model
+    * @param trajectory (time_steps x 3) [x, y, yaw]
+    * @param cmd_stamp Stamp of the command it belongs to
+    */
+  void publishModelTrajectory(
+    const xt::xtensor<float, 2> & trajectory, const builtin_interfaces::msg::Time & cmd_stamp);
+
+  /**
     * @brief Reset object
     */
   void reset();
@@ -106,6 +121,8 @@ protected:
   trajectories_publisher_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>> transformed_path_pub_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>> optimal_path_pub_;
+  std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<nav_msgs::msg::Path>>
+  optimal_model_path_pub_;
 
   std::unique_ptr<nav_msgs::msg::Path> optimal_path_;
   std::unique_ptr<visualization_msgs::msg::MarkerArray> points_;

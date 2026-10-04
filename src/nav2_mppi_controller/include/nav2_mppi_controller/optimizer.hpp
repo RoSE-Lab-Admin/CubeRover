@@ -112,6 +112,16 @@ public:
   xt::xtensor<float, 2> getOptimizedTrajectory();
 
   /**
+   * @brief Get the optimal control sequence rolled out through the dynamics
+   * selected by dynamics_mode (kinematics / linear / neural_network), without
+   * noise -- what the controller believes the chosen commands will do.
+   * getOptimizedTrajectory() integrates the same commands kinematically.
+   * For visualization only.
+   * @return (time_steps x 3) [x, y, yaw] trajectory
+   */
+  xt::xtensor<float, 2> getOptimizedTrajectoryModel();
+
+  /**
    * @brief Set the maximum speed based on the speed limits callback
    * @param speed_limit Limit of the speed for use
    * @param percentage Whether the speed limit is absolute or relative

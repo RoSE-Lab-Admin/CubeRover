@@ -288,7 +288,9 @@ void NNDynamics::integrateNeuralNetwork(
   torch::Tensor rxyz_cpu;
   {
     torch::NoGradGuard no_grad;
-    if (graph_captured_) {
+    // the captured graph has the fixed rollout batch size; any other batch
+    // (e.g. the single optimal sequence for visualization) runs eagerly
+    if (graph_captured_ && batch_size == static_cast<int>(cfg_.batch_size)) {
       static_input_.copy_(cmd_cpu.to(device_));
       graph_.replay();
       rxyz_cpu = static_output_.to(torch::kCPU).contiguous();

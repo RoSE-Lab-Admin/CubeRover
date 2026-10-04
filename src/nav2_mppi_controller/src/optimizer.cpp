@@ -484,6 +484,34 @@ xt::xtensor<float, 2> Optimizer::getOptimizedTrajectory()
   return std::move(trajectories);
 }
 
+xt::xtensor<float, 2> Optimizer::getOptimizedTrajectoryModel()
+{
+  // Same path the candidates were scored with (updateStateVelocities ->
+  // NNDynamics::integrateTrajectories, which switches on dynamics_mode), for a
+  // batch of one: the noise-free optimal control sequence.
+  const unsigned int steps = settings_.time_steps;
+  models::State state;
+  state.reset(1, steps);
+  state.pose = state_.pose;
+  state.speed = state_.speed;
+  xt::noalias(xt::view(state.cvx, 0, xt::all())) = control_sequence_.vx;
+  xt::noalias(xt::view(state.cwz, 0, xt::all())) = control_sequence_.wz;
+  if (isHolonomic()) {
+    xt::noalias(xt::view(state.cvy, 0, xt::all())) = control_sequence_.vy;
+  }
+  updateStateVelocities(state);
+
+  models::Trajectories trajectories;
+  trajectories.reset(1, steps);
+  nn_dynamics_->integrateTrajectories(trajectories, state, settings_.model_dt);
+
+  auto && out = xt::xtensor<float, 2>::from_shape({steps, 3});
+  xt::noalias(xt::view(out, xt::all(), 0)) = xt::view(trajectories.x, 0, xt::all());
+  xt::noalias(xt::view(out, xt::all(), 1)) = xt::view(trajectories.y, 0, xt::all());
+  xt::noalias(xt::view(out, xt::all(), 2)) = xt::view(trajectories.yaws, 0, xt::all());
+  return std::move(out);
+}
+
 void Optimizer::updateControlSequence()
 {
   const bool is_holo = isHolonomic();

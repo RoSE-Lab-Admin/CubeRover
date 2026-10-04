@@ -62,6 +62,7 @@ BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before comman
 BAG_TOPICS = [
     "/FitRosey_V1/pose", "/dynamic_joint_states", "/cmd_vel",
     "/roseybot_base_controller/cmd_vel_out", "/plan", "/optimal_trajectory",
+    "/optimal_trajectory_model",
 ]
 
 
@@ -426,6 +427,18 @@ def reload_controller(node: PoseWatcher):
     call_manage_nodes(node, 0, "STARTUP")
 
 
+def record_outcome(bag_dir: Path, bag_name: str, outcome: str, goal_xy):
+    """Append this trial's outcome to bag_dir/trial_outcomes.csv -- read by
+    dynamics_retrain to always train on failed trials and (with
+    failure_weighting) weight them up."""
+    path = bag_dir / "trial_outcomes.csv"
+    new = not path.exists()
+    with open(path, "a") as f:
+        if new:
+            f.write("bag,outcome,goal_x,goal_y\n")
+        f.write(f"{bag_name},{outcome},{goal_xy[0]:.4f},{goal_xy[1]:.4f}\n")
+
+
 def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_path: Path):
     if retrain_cfg is None:
         return
@@ -439,7 +452,8 @@ def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_p
             model_type=retrain_cfg["model_type"], width=retrain_cfg.get("width"),
             warm_start=retrain_cfg["warm_start"], subset=retrain_cfg["subset"],
             subset_fraction=retrain_cfg["subset_fraction"],
-            fmean=retrain_cfg["fmean"], fstd=retrain_cfg["fstd"])
+            fmean=retrain_cfg["fmean"], fstd=retrain_cfg["fstd"],
+            failure_weighting=retrain_cfg["failure_weighting"])
     except Exception as e:
         log(f"WARNING: retrain failed ({e}) -- keeping the currently deployed weights")
         return
@@ -480,7 +494,8 @@ def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new
             warm_start=not is_first, subset=fs_cfg["subset"],
             subset_fraction=fs_cfg["subset_fraction"],
             fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
-            warm_start_path=fs_cfg["current_weights_path"], save_path=save_path)
+            warm_start_path=fs_cfg["current_weights_path"], save_path=save_path,
+            failure_weighting=fs_cfg["failure_weighting"])
     except Exception as e:
         log(f"WARNING: train_from_scratch retrain failed ({e}) -- keeping the "
             f"currently deployed from-scratch weights")
@@ -539,6 +554,10 @@ def main():
                              "Weights are stored per-iteration under bag_dir/from_scratch_weights/ "
                              "and the shared deployed model is never read from or written to. "
                              "Takes over from --retrain-dynamics if both are set. Default: false")
+    parser.add_argument("--failure-weighting", default="true", type=parse_bool,
+                        help="When retraining (retrain_dynamics or train_from_scratch), weight "
+                             "samples from failed trials x2 and no-progress stretches x3 (cap x5) "
+                             "in the MLP loss. Default: true")
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
                         help="Number of initial kinematics-only trials to collect before the "
                              "first from-scratch fit. Default: 5")
@@ -570,6 +589,7 @@ def main():
             "subset_fraction": args.retrain_subset_fraction,
             "fmean": np.array(parsed["fmean"], dtype=np.float32),
             "fstd": np.array(parsed["fstd"], dtype=np.float32),
+            "failure_weighting": args.failure_weighting,
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
         log(f"train_from_scratch enabled: first {fs_cfg['n_bootstrap']} trials (including "
@@ -592,6 +612,7 @@ def main():
                 "subset_fraction": args.retrain_subset_fraction,
                 "fmean": np.array(parsed["fmean"], dtype=np.float32),
                 "fstd": np.array(parsed["fstd"], dtype=np.float32),
+                "failure_weighting": args.failure_weighting,
             }
             log(f"online retraining enabled: model={model_type}"
                 f"{retrain_cfg['width'] or ''}  warm_start={args.warm_start}  "
@@ -642,6 +663,7 @@ def main():
                     f"row -- giving up, treating as a normal stall")
                 outcome = "stalled"
 
+            record_outcome(bag_dir, "initial_bag", outcome, (0.0, 0.0))
             if outcome == "reached":
                 log("initial_bag: waypoint reached")
             elif outcome == "safety_stop":
@@ -691,6 +713,7 @@ def main():
                     f"treating as a normal stall")
                 outcome = "stalled"
 
+            record_outcome(bag_dir, bag_name, outcome, goal_xy)
             if outcome == "reached":
                 n_success += 1
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): waypoint reached")

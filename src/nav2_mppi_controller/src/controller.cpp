@@ -113,6 +113,10 @@ void MPPIController::visualize(
 {
   trajectory_visualizer_.add(optimizer_.getGeneratedTrajectories(), "Candidate Trajectories");
   trajectory_visualizer_.add(optimizer_.getOptimizedTrajectory(), "Optimal Trajectory", cmd_stamp);
+  if (trajectory_visualizer_.modelTrajectoryRequested()) {
+    trajectory_visualizer_.publishModelTrajectory(
+      optimizer_.getOptimizedTrajectoryModel(), cmd_stamp);
+  }
   trajectory_visualizer_.visualize(std::move(transformed_plan));
 }
 

@@ -49,10 +49,16 @@ Do a short manual drive while recording a bag so the GP has some training data:
 
 **Terminal 3** — record a bag:
 ```bash
-ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory /imu/data -o initial_bag
+ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory /optimal_trajectory_model /imu/data -o initial_bag
 ```
 
 Stop recording (`Ctrl+C`) after the drive.
+
+`/optimal_trajectory` is MPPI's chosen command sequence drawn as if the rover
+followed the commands exactly; `/optimal_trajectory_model` is the same sequence
+as predicted by the dynamics model selected by `dynamics_mode` (kinematics,
+linear or neural network) -- i.e. what the controller believes will happen.
+They are identical in kinematics mode.
 
 ---
 
@@ -93,7 +99,7 @@ The script saves the best `(x, y)` into `src/nav2_stack/pose.csv`.
 
 **Terminal 4** (same terminal, after updating pose.csv) — record a new bag and drive:
 ```bash
-ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory -o bag_01 &
+ros2 bag record /FitRosey_V1/pose /dynamic_joint_states /cmd_vel /roseybot_base_controller/cmd_vel_out /plan /optimal_trajectory /optimal_trajectory_model -o bag_01 &
 ros2 launch nav2_stack waypoint.launch.py
 ```
 
