@@ -141,6 +141,7 @@ struct HybridMotionTable
   float momentum_zone_penalty;
   float momentum_zone_min_radius;  // grid cells, see SearchInfo in types.hpp
   float curvature_penalty;  // see SearchInfo in types.hpp
+  float cusp_tail_length;  // grid cells, see SearchInfo in types.hpp
   bool allow_primitive_interpolation{false};
   float delta_dist;
   // Escalating multi-reversal penalty (see SearchInfo in types.hpp).
@@ -325,6 +326,43 @@ public:
   {
     return _direction_change_count;
   }
+
+  /**
+   * @brief Sets the distance driven since the last gear flip on the path to
+   * this node (grid cells; very large = no gear flip yet, e.g. at the start)
+   */
+  inline void setDistanceSinceGearFlip(const float & dist_in)
+  {
+    _distance_since_gear_flip = dist_in;
+  }
+
+  /**
+   * @brief Gets the distance driven since the last gear flip (grid cells)
+   */
+  inline float & getDistanceSinceGearFlip()
+  {
+    return _distance_since_gear_flip;
+  }
+
+  /**
+   * @brief Sets the "straight run": distance driven since the last gear flip
+   * or tight turn (radius < momentum_zone_min_radius), grid cells
+   */
+  inline void setStraightRun(const float & dist_in)
+  {
+    _straight_run = dist_in;
+  }
+
+  /**
+   * @brief Gets the straight run (grid cells), see setStraightRun()
+   */
+  inline float & getStraightRun()
+  {
+    return _straight_run;
+  }
+
+  /// "No gear flip yet" value for getDistanceSinceGearFlip()
+  static constexpr float kNoGearFlip = 1.0e6f;
 
   /**
    * @brief Commits this node's distance-since-momentum-reset and
@@ -576,6 +614,8 @@ private:
   TurnDirection _turn_dir;
   float _distance_since_momentum_reset{0.0f};
   unsigned int _direction_change_count{0};
+  float _distance_since_gear_flip{kNoGearFlip};
+  float _straight_run{0.0f};
   bool _is_node_valid{false};
 };
 

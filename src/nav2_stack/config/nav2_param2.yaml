@@ -72,7 +72,7 @@ controller_server:
       # ── Dynamics correction ──────────────────────────────────────────────────
       # dynamics_mode: "kinematics" (default, no correction) | "linear" | "neural_network"
       # Set once, requires a relaunch to change (not a live-reconfigurable param).
-      dynamics_mode: "kinematics"
+      dynamics_mode: "neural_network"
       # nn_hidden_width: one of 8/16/32/64/128 -- only used when dynamics_mode == "neural_network".
       # Selects which exported model to load: models/ar_mlp/mlp<width>_ar_velocity_teacher.pt
       nn_hidden_width: 128
@@ -250,6 +250,7 @@ planner_server:
       momentum_zone_penalty: 20.0 # was 5.0 -- raised substantially alongside the others, same reasoning
       momentum_zone_min_radius: 2.0 # fork-only: progressive zone -- right after a stop/cusp only turns with radius >= 2.0 m avoid the penalty; the allowed radius shrinks linearly to minimum_turning_radius over momentum_zone_length (needs allow_primitive_interpolation)
       curvature_penalty: 4.0 # fork-only: turning primitive cost x (1 + 4 * (minimum_turning_radius / R)^2) -- tightest turns pay the most, gentle ones almost nothing
+      cusp_tail_length: 0.6 # fork-only: at every gear change (cusp) the rover drives >= 0.6 m without a tight turn (radius < momentum_zone_min_radius) right before and right after it, so three-point turns turn away from the cusp with more room (bag 19, 10/04). Counts what the rover already drove in its current gear (from motion_pose_topic). 0 = off
       allow_primitive_interpolation: true # adds gentle turning primitives (~R 3.3 / 1.7 / 1.1 m) next to the minimum-radius one
       extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
       motion_reversal_penalty: 3.0 # was 1.0 -- fork-only: extra cost (meters of equivalent driving) for a replan whose first move reverses the rover's current motion (see motion_pose_topic); 1.0 let near-tie replans next to walls flip the rover's gear

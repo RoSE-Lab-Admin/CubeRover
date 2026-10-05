@@ -116,6 +116,12 @@ protected:
   int currentGear(double & displacement);
 
   /**
+   * @brief Advance the cusp-tail measurement (TailTracker) with a pose
+   * sample. Caller holds _motion_mutex.
+   */
+  void updateTailTracker(double now, double x, double y, double yaw);
+
+  /**
    * @brief Constant-curvature arc mode (fork-only): the single circular arc
    * that starts at the start pose, tangent to its heading (forward if the
    * goal is ahead, reverse if behind), and ends at the goal position.
@@ -158,6 +164,7 @@ protected:
   // the current conversions in _search_info were made at.
   double _momentum_zone_length_m{0.0};
   double _momentum_zone_min_radius_m{0.0};
+  double _cusp_tail_length_m{0.0};
   double _analytic_expansion_max_length_m{3.0};
   double _motion_reversal_penalty_m{0.0};
 
@@ -184,6 +191,20 @@ protected:
   double _motion_window{0.5};
   double _motion_threshold{0.02};
   double _motion_stale_timeout{0.5};
+  // Cusp tails (see SearchInfo::cusp_tail_length): what the rover has already
+  // driven in its current gear, measured from the same pose samples in 0.1 s
+  // steps -- total distance since the last gear change, and the "straight
+  // run" since the last gear change or tight turn. Seeds the start node so a
+  // tail the rover is in the middle of is not demanded again on every replan.
+  // Guarded by _motion_mutex.
+  struct TailTracker
+  {
+    bool init{false};
+    double t{0.0}, x{0.0}, y{0.0}, yaw{0.0};
+    int gear{0};
+    double gear_dist{0.0}, run{0.0};
+  };
+  TailTracker _tail;
   double _search_resolution{0.0};
   bool _debug_visualizations;
   std::string _motion_model_for_search;

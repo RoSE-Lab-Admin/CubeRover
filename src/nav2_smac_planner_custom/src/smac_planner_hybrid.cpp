@@ -128,6 +128,9 @@ void SmacPlannerHybrid::configure(
     node, name + ".momentum_zone_min_radius", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".momentum_zone_min_radius", _momentum_zone_min_radius_m);
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".cusp_tail_length", rclcpp::ParameterValue(0.0));
+  node->get_parameter(name + ".cusp_tail_length", _cusp_tail_length_m);
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".curvature_penalty", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".curvature_penalty", _search_info.curvature_penalty);
   nav2_util::declare_parameter_if_not_declared(
@@ -199,6 +202,8 @@ void SmacPlannerHybrid::configure(
         while (_motion_samples.size() > 2 && now - _motion_samples[1].t >= _motion_window) {
           _motion_samples.pop_front();
         }
+        updateTailTracker(
+          now, msg->pose.position.x, msg->pose.position.y, tf2::getYaw(msg->pose.orientation));
       });
     RCLCPP_INFO(
       _logger, "%s: direction-aware replanning from %s", name.c_str(), motion_pose_topic.c_str());
@@ -296,6 +301,8 @@ void SmacPlannerHybrid::configure(
     _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor);
   _search_info.momentum_zone_min_radius = static_cast<float>(
     _momentum_zone_min_radius_m / (_costmap->getResolution() * _downsampling_factor));
+  _search_info.cusp_tail_length = static_cast<float>(
+    _cusp_tail_length_m / (_costmap->getResolution() * _downsampling_factor));
   _search_info.motion_reversal_penalty =
     _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor);
   _search_resolution = _costmap->getResolution();
@@ -527,19 +534,39 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
         }
       }
     }
+    // cusp tails: what the rover already drove in this gear (see TailTracker)
+    double tail_run_m = 0.0, tail_gear_m = -1.0;
+    if (seed_index != std::numeric_limits<unsigned int>::max()) {
+      std::lock_guard<std::mutex> lock(_motion_mutex);
+      if (_tail.gear == gear) {
+        tail_run_m = _tail.run;
+        tail_gear_m = _tail.gear_dist;
+      }
+    }
+    const double cell_m = _costmap->getResolution() * _downsampling_factor;
     if (seed_index != std::numeric_limits<unsigned int>::max()) {
       start_node->setMotionPrimitiveIndex(seed_index, wanted);
       start_node->setDistanceSinceMomentumReset(NodeHybrid::motion_table.momentum_zone_length);
+      start_node->setStraightRun(static_cast<float>(tail_run_m / cell_m));
+      start_node->setDistanceSinceGearFlip(
+        tail_gear_m >= 0.0 ? static_cast<float>(tail_gear_m / cell_m) : NodeHybrid::kNoGearFlip);
     } else {
       start_node->setMotionPrimitiveIndex(
         std::numeric_limits<unsigned int>::max(), TurnDirection::UNKNOWN);
       start_node->setDistanceSinceMomentumReset(0.0f);
+      start_node->setStraightRun(0.0f);
+      start_node->setDistanceSinceGearFlip(NodeHybrid::kNoGearFlip);
     }
     start_node->setDirectionChangeCount(0);
+    std::string tail_msg;
+    if (_cusp_tail_length_m > 0.0) {
+      tail_msg = ", driven in gear " + std::to_string(std::max(0.0, tail_gear_m)) +
+        " m, straight run " + std::to_string(tail_run_m) + " m";
+    }
     RCLCPP_INFO(
-      _logger, "%s: start gear: %s (d=%.3f m)", _name.c_str(),
+      _logger, "%s: start gear: %s (d=%.3f m)%s", _name.c_str(),
       seed_index == std::numeric_limits<unsigned int>::max() ? "rest" :
-      (gear > 0 ? "forward" : "reverse"), displacement);
+      (gear > 0 ? "forward" : "reverse"), displacement, tail_msg.c_str());
   }
 
   // Set goal point, in A* bin search coordinates
@@ -796,6 +823,9 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       } else if (name == _name + ".curvature_penalty") {
         reinit_a_star = true;
         _search_info.curvature_penalty = static_cast<float>(parameter.as_double());
+      } else if (name == _name + ".cusp_tail_length") {
+        reinit_a_star = true;
+        _cusp_tail_length_m = parameter.as_double();  // -> cells in reinitialize()
       } else if (name == _name + ".momentum_zone_min_radius") {
         reinit_a_star = true;
         _momentum_zone_min_radius_m = parameter.as_double();  // -> cells in reinitialize()
@@ -1064,6 +1094,44 @@ bool SmacPlannerHybrid::tryArcPlan(
   return true;
 }
 
+void SmacPlannerHybrid::updateTailTracker(double now, double x, double y, double yaw)
+{
+  // caller holds _motion_mutex
+  auto & tt = _tail;
+  if (!tt.init) {
+    tt.init = true;
+    tt.t = now;
+    tt.x = x;
+    tt.y = y;
+    tt.yaw = yaw;
+    return;
+  }
+  if (now - tt.t < 0.1) {
+    return;
+  }
+  // signed displacement along the heading over this ~0.1 s step
+  const double d = (x - tt.x) * std::cos(yaw) + (y - tt.y) * std::sin(yaw);
+  if (std::fabs(d) >= 0.005) {  // moving (>= ~5 cm/s)
+    const int g = d > 0.0 ? 1 : -1;
+    if (g != tt.gear) {
+      tt.gear = g;
+      tt.gear_dist = 0.0;
+      tt.run = 0.0;
+    } else {
+      tt.gear_dist += std::fabs(d);
+      // tight = tighter than the gentle radius the planner allows in tails
+      const double dyaw = std::fabs(angles::shortest_angular_distance(tt.yaw, yaw));
+      const double r_gentle = _momentum_zone_min_radius_m;
+      const bool tight = r_gentle > 0.0 ? dyaw * r_gentle > std::fabs(d) : dyaw > 0.01;
+      tt.run = tight ? 0.0 : tt.run + std::fabs(d);
+    }
+  }
+  tt.t = now;
+  tt.x = x;
+  tt.y = y;
+  tt.yaw = yaw;
+}
+
 int SmacPlannerHybrid::currentGear(double & displacement)
 {
   displacement = std::numeric_limits<double>::quiet_NaN();
@@ -1105,6 +1173,8 @@ void SmacPlannerHybrid::reinitialize(
       _momentum_zone_length_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.momentum_zone_min_radius = static_cast<float>(
       _momentum_zone_min_radius_m / (_costmap->getResolution() * _downsampling_factor));
+    _search_info.cusp_tail_length = static_cast<float>(
+      _cusp_tail_length_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.motion_reversal_penalty = static_cast<float>(
       _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.analytic_expansion_max_length =

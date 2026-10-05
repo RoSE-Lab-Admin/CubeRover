@@ -71,6 +71,26 @@ inline float primitiveRadius(const HybridMotionTable & motion_table, const unsig
          motion_table.delta_dist / (2.0f * sinf(half_angle)) : std::numeric_limits<float>::max();
 }
 
+// A forward<->reverse change between parent's and child's primitives; false
+// at the true path start (no previous primitive).
+inline bool isGearFlip(NodeHybrid * parent, const TurnDirection & child_turn_dir)
+{
+  return parent->getMotionPrimitiveIndex() != std::numeric_limits<unsigned int>::max() &&
+         isReverseGear(parent->getTurnDirection()) != isReverseGear(child_turn_dir);
+}
+
+// "Gentle" for the cusp tails: straight, or a turn no tighter than
+// momentum_zone_min_radius (any turn if that is unset).
+inline bool isGentlePrimitive(
+  const HybridMotionTable & motion_table, const TurnDirection & dir, const unsigned int index)
+{
+  if (!isTurningPrimitive(dir)) {
+    return true;
+  }
+  return motion_table.momentum_zone_min_radius > 0.0f &&
+         primitiveRadius(motion_table, index) >= 0.999f * motion_table.momentum_zone_min_radius;
+}
+
 inline bool isMomentumReset(NodeHybrid * parent, const TurnDirection & child_turn_dir)
 {
   if (parent->getMotionPrimitiveIndex() == std::numeric_limits<unsigned int>::max()) {
@@ -125,6 +145,7 @@ void HybridMotionTable::initDubin(
   momentum_zone_penalty = search_info.momentum_zone_penalty;
   momentum_zone_min_radius = search_info.momentum_zone_min_radius;
   curvature_penalty = search_info.curvature_penalty;
+  cusp_tail_length = search_info.cusp_tail_length;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   escalate_only_on_reset = search_info.escalate_only_on_reset;
   ignore_goal_heading = search_info.ignore_goal_heading;
@@ -265,6 +286,7 @@ void HybridMotionTable::initReedsShepp(
   momentum_zone_penalty = search_info.momentum_zone_penalty;
   momentum_zone_min_radius = search_info.momentum_zone_min_radius;
   curvature_penalty = search_info.curvature_penalty;
+  cusp_tail_length = search_info.cusp_tail_length;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   escalate_only_on_reset = search_info.escalate_only_on_reset;
   ignore_goal_heading = search_info.ignore_goal_heading;
@@ -449,6 +471,8 @@ void NodeHybrid::reset()
   _motion_primitive_index = std::numeric_limits<unsigned int>::max();
   _distance_since_momentum_reset = 0.0f;
   _direction_change_count = 0;
+  _distance_since_gear_flip = kNoGearFlip;
+  _straight_run = 0.0f;
   pose.x = 0.0f;
   pose.y = 0.0f;
   pose.theta = 0.0f;
@@ -487,16 +511,29 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
   // own accumulated distance since an earlier reset is still short? No-op
   // (starts_in_momentum_zone always false) unless momentum_zone_length is
   // configured (>0), so this is a no-op on any planner that doesn't set it.
-  bool starts_in_momentum_zone = motion_table.momentum_zone_length > 0.0f &&
-    isTurningPrimitive(child_turn_dir) &&
-    (isMomentumReset(this, child_turn_dir) ||
-    getDistanceSinceMomentumReset() < motion_table.momentum_zone_length);
+  const bool is_reset_here = isMomentumReset(this, child_turn_dir);
+  // distance into the momentum zone (0 at a reset)
+  float zone_d = is_reset_here ? 0.0f : std::max(0.0f, getDistanceSinceMomentumReset());
+  // Cusp tail, after the cusp (see SearchInfo::cusp_tail_length): while the
+  // most recent reset is a gear flip, hold the zone at full strength for the
+  // first cusp_tail_length, then let it shrink progressively as usual.
+  bool in_cusp_tail = false;
+  if (motion_table.cusp_tail_length > 0.0f) {
+    const float gear_d = isGearFlip(this, child_turn_dir) ? 0.0f : getDistanceSinceGearFlip();
+    if (gear_d <= zone_d + 1e-3f) {  // the last reset was this gear flip
+      in_cusp_tail = gear_d < motion_table.cusp_tail_length;
+      zone_d = std::max(0.0f, gear_d - motion_table.cusp_tail_length);
+    }
+  }
+  bool starts_in_momentum_zone = isTurningPrimitive(child_turn_dir) &&
+    ((motion_table.momentum_zone_length > 0.0f && zone_d < motion_table.momentum_zone_length) ||
+    in_cusp_tail);
   if (starts_in_momentum_zone && motion_table.momentum_zone_min_radius > 0.0f) {
     // Progressive zone: only turns tighter than the radius allowed at this
     // distance into the zone are penalized (see SearchInfo in types.hpp).
-    const float d = isMomentumReset(this, child_turn_dir) ? 0.0f :
-      std::max(0.0f, getDistanceSinceMomentumReset());
-    const float frac = std::min(1.0f, d / motion_table.momentum_zone_length);
+    const float d = zone_d;
+    const float frac = motion_table.momentum_zone_length > 0.0f ?
+      std::min(1.0f, d / motion_table.momentum_zone_length) : 0.0f;
     const float r_min = motion_table.min_turning_radius;
     const float r_allowed = std::max(
       r_min, motion_table.momentum_zone_min_radius -
@@ -581,6 +618,16 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
     // turning primitive at minimum_turning_radius is unrealistic to execute
     // cleanly (see SearchInfo::momentum_zone_length in types.hpp).
     travel_cost *= motion_table.momentum_zone_penalty;
+  }
+
+  if (motion_table.cusp_tail_length > 0.0f && isGearFlip(this, child_turn_dir) &&
+    getStraightRun() < motion_table.cusp_tail_length)
+  {
+    // Cusp tail, before the cusp (see SearchInfo::cusp_tail_length): this
+    // gear flip comes after too little gentle driving -- extra cost for the
+    // missing length (grid cells, like the other distance costs).
+    travel_cost += motion_table.momentum_zone_penalty *
+      (motion_table.cusp_tail_length - getStraightRun());
   }
 
   if (motion_table.motion_reversal_penalty > 0.0f && parent == nullptr &&
@@ -1053,6 +1100,14 @@ void NodeHybrid::commitDirectionState(NodeHybrid * parent)
   setDistanceSinceMomentumReset(
     is_reset ? 0.0f : (parent->getDistanceSinceMomentumReset() + motion_table.delta_dist));
   setDirectionChangeCount(parent->getDirectionChangeCount() + (is_reset ? 1u : 0u));
+  // cusp tails (see SearchInfo::cusp_tail_length)
+  const bool gear_flip = isGearFlip(parent, getTurnDirection());
+  setDistanceSinceGearFlip(
+    gear_flip ? 0.0f : std::min(kNoGearFlip, parent->getDistanceSinceGearFlip() +
+    motion_table.delta_dist));
+  setStraightRun(
+    (gear_flip || !isGentlePrimitive(motion_table, getTurnDirection(), getMotionPrimitiveIndex())) ?
+    0.0f : parent->getStraightRun() + motion_table.delta_dist);
 }
 
 bool NodeHybrid::backtracePath(CoordinateVector & path)

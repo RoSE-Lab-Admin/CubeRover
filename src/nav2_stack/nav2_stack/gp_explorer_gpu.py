@@ -23,6 +23,8 @@ Usage (identical to gp_explorer.py, plus --n-iter):
 """
 
 import argparse
+import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -391,6 +393,23 @@ class GPExplorer(Node):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def previous_start(bag_dir: Path, name: str):
+    """Where the previous trial started: the first point of the path planned
+    for it (<bag_dir>/traj_{NN-1}_path.csv). None for the first trial or if
+    that file is missing."""
+    m = re.fullmatch(r'(.*?)(\d+)', name)
+    if not m or int(m.group(2)) <= 1:
+        return None
+    prev = bag_dir / f'{m.group(1)}{int(m.group(2)) - 1:0{len(m.group(2))}d}_path.csv'
+    if not prev.exists():
+        return None
+    lines = prev.read_text().splitlines()
+    if len(lines) < 2:
+        return None
+    x, y = (float(v) for v in lines[1].split(',')[:2])
+    return np.array([x, y])
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='GP exploration with GPyTorch/CUDA (GPU-accelerated alternative to gp_explorer.py)')
@@ -409,7 +428,19 @@ def main():
                         help='Run name — saved as <bag-dir>/<name>_path.csv')
     parser.add_argument('--n-iter',        default=100,  type=int,
                         help='Adam iterations for GP hyperparameter training (default 100)')
+    parser.add_argument('--revisit-sigma', default=1.0,  type=float,
+                        help='Soft penalty on goals near where the previous trial started: '
+                             'score x (1 - exp(-d^2 / (2 sigma^2))), sigma in m; 0 disables '
+                             '(default 1.0)')
+    parser.add_argument('--pose-csv', default=None, type=Path,
+                        help='Where to write the chosen goal (default: <pkg>/pose.csv)')
+    parser.add_argument('--seed', default=None, type=int,
+                        help='Seed numpy/torch/random (offline testing; default: unseeded)')
     args = parser.parse_args()
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
 
     if args.min_clearance < INFLATION:
         print(f'[warn] --min-clearance {args.min_clearance} m < inflation {INFLATION} m; raising')
@@ -483,6 +514,20 @@ def main():
     scores = [alc / length
               for alc, length in zip(alc_scores, path_lengths_m)]
 
+    # don't drive back to where the previous trial started (soft, see --revisit-sigma)
+    prev_xy = previous_start(args.bag_dir, args.name) if args.revisit_sigma > 0 else None
+    if prev_xy is not None and scores:
+        d2 = np.sum((np.array(valid_goals) - prev_xy) ** 2, axis=1)
+        factors = 1.0 - np.exp(-d2 / (2.0 * args.revisit_sigma ** 2))
+        print(f'  revisit penalty: previous start ({prev_xy[0]:.2f}, {prev_xy[1]:.2f}), '
+              f'sigma {args.revisit_sigma:.2f} m; best unpenalized goal '
+              f'{valid_goals[int(np.argmax(scores))]}')
+        raw = scores
+        scores = [sc * f for sc, f in zip(scores, factors)]
+        for k in np.argsort(scores)[::-1][:5]:
+            print(f'    ({valid_goals[k][0]:5.2f}, {valid_goals[k][1]:5.2f})  score {scores[k]:.4g}  '
+                  f'(unpenalized {raw[k]:.4g}, x{factors[k]:.2f}, {np.sqrt(d2[k]):.2f} m from start)')
+
     # ── 5. Report ─────────────────────────────────────────────────────────────
     if not scores:
         print('\n[5/5] No valid path found for any candidate.')
@@ -497,7 +542,7 @@ def main():
         for px, py in valid_paths[best]:
             f.write(f'{px:.6f},{py:.6f}\n')
 
-    pose_csv = Path(__file__).resolve().parent.parent / 'pose.csv'
+    pose_csv = args.pose_csv or Path(__file__).resolve().parent.parent / 'pose.csv'
     with open(pose_csv, 'w') as f:
         f.write('x,y,z\n')
         f.write(f'{bx:.6f},{by:.6f},0.0\n')

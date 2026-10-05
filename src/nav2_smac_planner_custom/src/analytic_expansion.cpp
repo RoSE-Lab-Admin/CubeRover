@@ -294,7 +294,15 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
         since_reset += static_cast<float>(std::fabs(rs_path.length_[i]) * rho);
       }
 
-      // (2) Multi-reversal: accepting this shortcut would bring the path's
+      // (2) Cusp tails (see SearchInfo::cusp_tail_length in types.hpp): a
+      // shortcut with a cusp (inside it, or at the junction with the search
+      // path) is left to the search primitives, which enforce the straight
+      // tails around it.
+      if (node->motion_table.cusp_tail_length > 0.0f && cusps > 0) {
+        return AnalyticExpansionNodes();
+      }
+
+      // (3) Multi-reversal: accepting this shortcut would bring the path's
       // TOTAL reversal count above 1 (see
       // SearchInfo::extra_direction_change_penalty in types.hpp).
       if (node->motion_table.extra_direction_change_penalty > 1.0f &&

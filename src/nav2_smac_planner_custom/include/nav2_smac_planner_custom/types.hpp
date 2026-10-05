@@ -69,6 +69,18 @@ struct SearchInfo
   // non_straight_penalty this spreads turning out into gentler arcs instead
   // of squeezing it into a few sharp primitives. 0.0 = no-op.
   float curvature_penalty{0.0};
+  // Straight "tails" at three-point-turn cusps (nav2_smac_planner_custom
+  // addition): around every gear flip the rover should drive at least this
+  // far without a tight turn ("gentle" = radius >= momentum_zone_min_radius),
+  // so the turning toward the goal happens away from the cusp, with more room.
+  //  - before the cusp: a gear flip after less than this much gentle driving
+  //    costs momentum_zone_penalty x (missing length) extra
+  //  - after the cusp: the momentum zone is held at full strength for this
+  //    distance, then shrinks progressively as before
+  //  - Reeds-Shepp shortcuts containing a cusp are rejected
+  // The path start is not a cusp. Configured in meters, held here in grid
+  // cells. 0.0 = no-op.
+  float cusp_tail_length{0.0};
   // Escalating penalty for a path taking MORE than one TurnDirection change
   // (nav2_smac_planner_custom addition, no upstream equivalent): the FIRST
   // change on a path costs whatever change_penalty already costs; the
