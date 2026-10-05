@@ -73,9 +73,25 @@ def launch_setup(context):
         parameters=[{
             'use_sim_time': False,
             'autostart': True,
-            'node_names': ['map_server', 'planner_server', 'controller_server',
+            'node_names': ['map_server', 'planner_server',
                            'behavior_server', 'bt_navigator',
                            'waypoint_follower']
+        }]
+    )
+
+    # controller_server has its own manager so a new dynamics model can be
+    # loaded by cycling just it (autonomous_trials.reload_controller ->
+    # RESET/STARTUP on this manager) instead of the whole stack, whose
+    # planner_server alone takes ~27 s to reconfigure.
+    lifecycle_mgr_controller = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_controller',
+        output='screen',
+        parameters=[{
+            'use_sim_time': False,
+            'autostart': True,
+            'node_names': ['controller_server']
         }]
     )
 
@@ -161,6 +177,7 @@ def launch_setup(context):
         bt_nav,
         waypoint,
         lifecycle_mgr,
+        lifecycle_mgr_controller,
     ]
 
 

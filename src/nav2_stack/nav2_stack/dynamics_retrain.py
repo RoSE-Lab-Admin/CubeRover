@@ -80,6 +80,13 @@ MAX_WEIGHT = 5.0           # cap on the product
 PROGRESS_WINDOW_S = 5.0    # progress is measured over this centered window
 PROGRESS_MIN_M = 0.10      # less remaining-plan reduction than this over the window = no progress
 
+# A topic whose header stamps are more than this far from the bag's recording
+# (receive) time is treated as stamped by an unsynced clock (e.g. the rover's
+# computer booting without NTP: cmd_vel_out stamps ~20 h behind on 10/05) and
+# its recording time is used instead. All topics are recorded on the same
+# workstation, so recording times are mutually consistent.
+CLOCK_OFFSET_TOL_S = 1.0
+
 
 # ── Quaternion / binning helpers (ported verbatim) ─────────────────────────────
 def _quat_to_yaw(qx, qy, qz, qw):
@@ -172,13 +179,14 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
     from rosbags.rosbag2 import Reader
 
     pose_rows, cmdout_rows, plans = [], [], []
+    rec_t = {POSE_TOPIC: [], CMD_OUT_TOPIC: [], PLAN_TOPIC: []}  # recording times, same order
     with Reader(str(bag_path)) as reader:
         topics = {c.topic for c in reader.connections}
         if not {POSE_TOPIC, CMD_OUT_TOPIC}.issubset(topics):
             return None, False
         conns = [c for c in reader.connections
                  if c.topic in (POSE_TOPIC, CMD_OUT_TOPIC, PLAN_TOPIC)]
-        for conn, _ts, raw in reader.messages(connections=conns):
+        for conn, ts_ns, raw in reader.messages(connections=conns):
             m = typestore.deserialize_cdr(raw, conn.msgtype)
             t = m.header.stamp.sec + m.header.stamp.nanosec * 1e-9
             if conn.topic == POSE_TOPIC:
@@ -190,6 +198,21 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
                 xy = np.array([[q.pose.position.x, q.pose.position.y] for q in m.poses])
                 cum = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))])
                 plans.append((t, (xy, cum)))
+            else:
+                continue
+            rec_t[conn.topic].append(ts_ns * 1e-9)
+
+    # unsynced publisher clocks: fall back to recording time (see CLOCK_OFFSET_TOL_S)
+    for topic, rows in ((POSE_TOPIC, pose_rows), (CMD_OUT_TOPIC, cmdout_rows), (PLAN_TOPIC, plans)):
+        if not rows:
+            continue
+        offset = float(np.median([r[0] for r in rows] - np.array(rec_t[topic])))
+        if abs(offset) > CLOCK_OFFSET_TOL_S:
+            off_s = f"{offset / 3600.0:+.2f} h" if abs(offset) >= 360.0 else f"{offset:+.1f} s"
+            print(f"[dynamics_retrain] WARNING {bag_path.name}: {topic} header stamps are "
+                  f"{off_s} off the recording time (unsynced clock?) -- "
+                  f"using recording time for it", flush=True)
+            rows[:] = [(rt,) + tuple(r[1:]) for rt, r in zip(rec_t[topic], rows)]
     plans.sort(key=lambda r: r[0])
 
     if outcome is not None:
@@ -446,6 +469,10 @@ def _load_bags(bag_paths: List[Path], typestore, outcomes: Dict[str, str], weigh
         segs, failed = extract_trajectory(bag_path, typestore, outcomes.get(bag_path.name),
                                           weighting)
         loaded[bag_path] = (segs or [], failed)
+        n = sum(len(sg["data"]) for sg in segs or [])
+        print(f"[dynamics_retrain]   {bag_path.name}: {len(segs or [])} segments, {n} samples"
+              f"{' (failed trial)' if failed else ''}"
+              f"{'  <-- NO usable data' if not segs else ''}", flush=True)
     return loaded
 
 

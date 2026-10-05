@@ -38,7 +38,8 @@ from nav2_msgs.srv import ManageLifecycleNodes
 from ament_index_python.packages import get_package_share_directory
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
-# Every node lifecycle_manager_navigation brings up (nav2_param2.yaml). No amcl
+# Every node the two Nav2 lifecycle managers bring up (lifecycle_manager_navigation
+# + lifecycle_manager_controller, nav2.launch.py). No amcl
 # in this stack (ground-truth pose comes from OptiTrack instead) -- deliberately
 # NOT using BasicNavigator.waitUntilNav2Active(), whose default localizer='amcl'
 # would hang forever waiting for a node that's never launched. Matches the
@@ -47,6 +48,8 @@ from nav2_simple_commander.robot_navigator import BasicNavigator
 # 6, once, before any trial starts.
 NAV2_MANAGED_NODES = ["map_server", "planner_server", "controller_server",
                       "behavior_server", "bt_navigator", "waypoint_follower"]
+# controller_server alone is managed by this one (see nav2.launch.py)
+CONTROLLER_LIFECYCLE_MANAGER = "lifecycle_manager_controller"
 
 # dynamics_retrain (and therefore torch) is imported lazily, inside
 # maybe_retrain(), so that retrain_dynamics=false (the default) never requires
@@ -96,8 +99,10 @@ class PoseWatcher(Node):
         self.create_subscription(String, "/trial_goal_result", self._goal_result_cb, 10)
         self.set_params_client = self.create_client(
             SetParameters, "/controller_server/set_parameters")
+        # controller_server has its own lifecycle manager (nav2.launch.py), so
+        # reloading the dynamics model cycles only it, not the whole stack
         self.manage_nodes_client = self.create_client(
-            ManageLifecycleNodes, "/lifecycle_manager_navigation/manage_nodes")
+            ManageLifecycleNodes, f"/{CONTROLLER_LIFECYCLE_MANAGER}/manage_nodes")
 
     def _cb(self, msg: PoseStamped):
         self.xy = (msg.pose.position.x, msg.pose.position.y)
@@ -141,7 +146,7 @@ def wait_for_node_active(nav: BasicNavigator, node_name: str, timeout_sec: float
 
 
 def wait_for_nav2_active():
-    """Blocks until every lifecycle_manager_navigation-managed node reports
+    """Blocks until every Nav2-managed node (both lifecycle managers) reports
     itself active. Nav2 bringup -- especially controller_server, which now
     loads a TorchScript model and may capture a CUDA graph for the deployed
     dynamics model -- can take real time; without this, the very first trial
@@ -372,15 +377,15 @@ def set_controller_param(node: PoseWatcher, name: str, value, timeout_sec=15.0,
 
 def call_manage_nodes(node: PoseWatcher, command: int, label: str, timeout_sec=180.0,
                        service_wait_sec=15.0):
-    """Calls lifecycle_manager_navigation's ManageLifecycleNodes service via a
-    persistent rclpy client (see PoseWatcher docstring), with an explicit
-    timeout and a bounded retry. timeout_sec is generous (a full stack
-    RESET+STARTUP cycle has been observed to legitimately take ~60s, more if
-    controller_server needs to recapture its CUDA graph) but still bounded,
-    so a genuine hang is caught and retried instead of blocking forever."""
+    """Calls the controller's lifecycle manager (CONTROLLER_LIFECYCLE_MANAGER)
+    ManageLifecycleNodes service via a persistent rclpy client (see
+    PoseWatcher docstring), with an explicit timeout and a bounded retry.
+    timeout_sec is generous (controller_server may need to recapture its CUDA
+    graph; a full-stack cycle used to take 30-100 s) but still bounded, so a
+    genuine hang is caught and retried instead of blocking forever."""
     def _do():
         if not node.manage_nodes_client.wait_for_service(timeout_sec=service_wait_sec):
-            raise RuntimeError(f"/lifecycle_manager_navigation/manage_nodes not available "
+            raise RuntimeError(f"/{CONTROLLER_LIFECYCLE_MANAGER}/manage_nodes not available "
                                 f"after {service_wait_sec}s")
         req = ManageLifecycleNodes.Request(command=command)
         future = node.manage_nodes_client.call_async(req)
@@ -404,10 +409,13 @@ def push_linear_params_and_reload(node: PoseWatcher, weight, bias):
 
 
 def reload_controller(node: PoseWatcher):
-    """Cycles the WHOLE Nav2 stack via lifecycle_manager_navigation's own
-    ManageLifecycleNodes service (RESET=3 then STARTUP=0), so it reconstructs
-    NNDynamics fresh (re-reads the .pt file / just-pushed linear/dynamics_mode
-    params) -- weights are otherwise only ever loaded once at startup.
+    """Cycles controller_server via its own lifecycle manager's
+    ManageLifecycleNodes service (CONTROLLER_LIFECYCLE_MANAGER, RESET=3 then
+    STARTUP=0), so it reconstructs NNDynamics fresh (re-reads the .pt file /
+    just-pushed linear/dynamics_mode params) -- weights are otherwise only
+    ever loaded once at startup. controller_server is the only node that
+    manager owns (nav2.launch.py), so the rest of the stack -- planner_server
+    alone takes ~27 s to reconfigure -- is not touched.
 
     Does NOT use direct per-node `ros2 lifecycle set` calls on controller_server
     -- confirmed by trial and error that lifecycle_manager_navigation reacts to
@@ -417,14 +425,13 @@ def reload_controller(node: PoseWatcher):
     errors and the whole process crashing while Nav2 silently self-healed with
     nothing left running to notice). Going through the manager's own official
     control service instead means the manager is the one making the state
-    changes, so it has no "unexpected" state to react to. This does mean all 6
-    managed nodes get reconfigured, not just controller_server -- harmless
-    (the other 5 just re-read their own unchanged params) but slower, and can
-    take a while if the model needs CUDA graph capture on activate."""
-    log("cycling the Nav2 stack via lifecycle_manager_navigation to reload the dynamics "
-        "model (RESET then STARTUP -- can take a while)")
+    changes, so it has no "unexpected" state to react to."""
+    log(f"cycling controller_server via {CONTROLLER_LIFECYCLE_MANAGER} to reload the "
+        f"dynamics model (RESET then STARTUP)")
+    t0 = time.monotonic()
     call_manage_nodes(node, 3, "RESET")
     call_manage_nodes(node, 0, "STARTUP")
+    log(f"controller_server reloaded in {time.monotonic() - t0:.1f}s")
 
 
 def record_outcome(bag_dir: Path, bag_name: str, outcome: str, goal_xy):
