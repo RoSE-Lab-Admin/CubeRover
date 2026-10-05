@@ -92,6 +92,7 @@ class PoseWatcher(Node):
     def __init__(self, opti_topic: str):
         super().__init__("autonomous_trials_pose_watcher")
         self.xy = None
+        self.yaw = None
         self.safety_stop = False
         self.goal_result = None  # None | "succeeded" | "failed"
         self.create_subscription(PoseStamped, opti_topic, self._cb, 10)
@@ -106,6 +107,11 @@ class PoseWatcher(Node):
 
     def _cb(self, msg: PoseStamped):
         self.xy = (msg.pose.position.x, msg.pose.position.y)
+        q = msg.pose.orientation
+        self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+
+    def pose(self):
+        return None if self.xy is None or self.yaw is None else (self.xy[0], self.xy[1], self.yaw)
 
     def _safety_stop_cb(self, msg: Bool):
         if msg.data:
@@ -642,6 +648,10 @@ def main():
 
     rclpy.init()
     pose_node = PoseWatcher(args.opti_topic)
+    # drives the rover out of an obstacle before planning the next trial; spins
+    # pose_node, which is never added to a persistent executor
+    from nav2_stack.escape import Escaper, default_planner_id
+    escaper = Escaper(pose_node, pose_node.pose, default_planner_id())
     wait_for_nav2_active()
 
     if fs_cfg is not None and parsed["dynamics_mode"] != "kinematics":
@@ -702,6 +712,12 @@ def main():
 
             bag_path = bag_dir / bag_name
             for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
+                # a rover left in an obstacle by the last trial would make
+                # gp_explorer find no path from it at all -- drive it out
+                # first (toward the arena centre; see escape.py)
+                ok, msg = escaper.run((0.0, 0.0))
+                if msg != "not stuck":
+                    log(f"pre-explorer escape: {'freed' if ok else 'not freed'} ({msg})")
                 if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
                     sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} "
                              f"times for {traj_name} -- aborting entire run")

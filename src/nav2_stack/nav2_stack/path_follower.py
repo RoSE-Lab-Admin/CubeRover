@@ -18,6 +18,11 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import time, signal
 
+from nav2_stack.escape import Escaper, default_planner_id
+
+STUCK_DWELL_S = 2.0          # stuck this long while navigating -> escape
+MAX_ESCAPES_PER_WAYPOINT = 2
+
 class PathFollower(Node):
     def __init__(self):
 
@@ -33,10 +38,15 @@ class PathFollower(Node):
         # to one, and GridBasedCustom (ignore_goal_heading) ignores the goal
         # yaw anyway.
         self.declare_parameter('reissue_on_heading_change', False)
+        # Drive out of an obstacle when the rover is stuck in it (see
+        # nav2_stack/escape.py): the planner and controller cannot recover
+        # from a footprint already in collision on their own.
+        self.declare_parameter('escape_when_stuck', True)
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
         self.reissue_on_heading_change = self.get_parameter('reissue_on_heading_change').value
+        self.escape_when_stuck = self.get_parameter('escape_when_stuck').value
 
         # create callback group so it can execute while nav2 blocks
         self.opti_group = ReentrantCallbackGroup()
@@ -67,6 +77,13 @@ class PathFollower(Node):
 
         # initialize nav2
         self.nav = BasicNavigator()
+        # escape helper: spins self.nav (never added to an executor), like
+        # _wait_for_node_active; pose comes from opti_callback
+        self.escaper = (Escaper(self.nav, self._current_pose, default_planner_id(),
+                                robot_frame=self.robot_frame, cmd_pub=self.cmd_vel_pub)
+                        if self.escape_when_stuck and self.use_opti else None)
+        self.stuck_since = None
+        self.escapes_this_wp = 0
 
         self.waypoints = []
         self.point_path = []
@@ -327,6 +344,43 @@ class PathFollower(Node):
             wp.pose.position.x, wp.pose.position.y
         )
 
+    def _current_pose(self):
+        if not self.use_opti or len(self.prev_poses) == 0:
+            return None
+        cur = self.prev_poses[-1]
+        q = cur.pose.orientation
+        theta = R.from_quat([q.x, q.y, q.z, q.w]).as_euler('xyz')[2]
+        return (cur.pose.position.x, cur.pose.position.y, theta)
+
+    def _cancel_nav(self, timeout_sec=3.0):
+        # BasicNavigator.cancelTask() spins without a timeout; bound it here
+        handle = getattr(self.nav, 'goal_handle', None)
+        if handle is None:
+            return
+        fut = handle.cancel_goal_async()
+        rclpy.spin_until_future_complete(self.nav, fut, timeout_sec=timeout_sec)
+
+    def _try_escape(self, reason):
+        """Stuck in an obstacle: cancel the goal, drive out until the planner
+        can plan again (escape.py), then re-send the same waypoint. Returns
+        True if an escape was attempted (the goal has been re-sent)."""
+        if self.escaper is None or self.escapes_this_wp >= MAX_ESCAPES_PER_WAYPOINT:
+            return False
+        pose = self._current_pose()
+        if pose is None or not self.escaper._load_costmap() or not self.escaper.is_stuck(pose):
+            return False
+        self.escapes_this_wp += 1
+        wp = self.point_path[self.current_wp_idx].pose.position
+        self.get_logger().warn(
+            f"rover stuck ({reason}) -- escape attempt {self.escapes_this_wp}/"
+            f"{MAX_ESCAPES_PER_WAYPOINT} toward waypoint {self.current_wp_idx + 1}")
+        self._cancel_nav()
+        ok, msg = self.escaper.run((wp.x, wp.y))
+        self.get_logger().warn(f"escape {'succeeded' if ok else 'did not free the rover'}: {msg}")
+        self.stuck_since = None
+        self._issue_goal()
+        return True
+
     def _issue_goal(self):
         wp = copy.deepcopy(self.point_path[self.current_wp_idx])
         heading = self._arc_heading()
@@ -367,6 +421,18 @@ class PathFollower(Node):
             return
 
         if not self.nav.isTaskComplete():
+            # stuck in an obstacle while navigating -> escape (see escape.py)
+            if self.escaper is not None and self.escapes_this_wp < MAX_ESCAPES_PER_WAYPOINT:
+                pose = self._current_pose()
+                if pose is not None and self.escaper._load_costmap() and self.escaper.is_stuck(pose):
+                    now_s = time.monotonic()
+                    if self.stuck_since is None:
+                        self.stuck_since = now_s
+                    elif now_s - self.stuck_since >= STUCK_DWELL_S:
+                        self._try_escape(f'in an obstacle for {STUCK_DWELL_S:.0f} s')
+                        return
+                else:
+                    self.stuck_since = None
             if not self.reissue_on_heading_change:
                 return
             now = self.get_clock().now()
@@ -394,6 +460,9 @@ class PathFollower(Node):
             self.stop_nav()
             return
 
+        if result == TaskResult.FAILED and self._try_escape('goToPose failed'):
+            return  # same waypoint re-sent after the escape
+
         if result == TaskResult.FAILED:
             # NOTE: previously fell through and was silently treated the same
             # as success (current_wp_idx still advanced) -- now at least logged
@@ -409,6 +478,8 @@ class PathFollower(Node):
 
         # advance to next waypoint
         self.current_wp_idx += 1
+        self.escapes_this_wp = 0
+        self.stuck_since = None
         if self.current_wp_idx >= len(self.point_path):
             self.get_logger().info("trajectory completed")
             self.started = False

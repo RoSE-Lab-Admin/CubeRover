@@ -41,11 +41,18 @@ class DynamicBridge:
         self.bridged: set = set()
         self.lock = threading.Lock()
 
-        # Main→Pi: /cmd_vel (only topic the Pi needs from the workstation)
-        qos_cmd = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
-                             durability=DurabilityPolicy.VOLATILE, depth=10)
-        pub_cmd = self.n1.create_publisher(TwistStamped, '/cmd_vel', qos_cmd)
-        self.n0.create_subscription(TwistStamped, '/cmd_vel', pub_cmd.publish, qos_cmd)
+        # Main→Pi: /cmd_vel (only topic the Pi needs from the workstation).
+        # Keep only the newest command on both sides: with a deeper reliable
+        # queue, bursty publishers (joystick axis events) built up a ~1 s
+        # backlog here, and the base controller drops commands older than
+        # its cmd_vel_timeout (0.5 s). The Pi side stays RELIABLE so it still
+        # matches the base controller's reliable subscription.
+        qos_cmd_in = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
+                                durability=DurabilityPolicy.VOLATILE, depth=1)
+        qos_cmd_out = QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
+                                 durability=DurabilityPolicy.VOLATILE, depth=1)
+        pub_cmd = self.n1.create_publisher(TwistStamped, '/cmd_vel', qos_cmd_out)
+        self.n0.create_subscription(TwistStamped, '/cmd_vel', pub_cmd.publish, qos_cmd_in)
         print('[bridge] Main→Pi: /cmd_vel [geometry_msgs/msg/TwistStamped]')
 
         # Timer: discover and bridge new Pi topics every 2 s

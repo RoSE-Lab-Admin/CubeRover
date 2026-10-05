@@ -62,8 +62,24 @@ MIN_SEG_LEN = LOOKBACK + HORIZON + 1
 GAP_FACTOR = 3.0
 MAX_POS_JUMP = 0.05
 AVG_WINDOW_S = 0.1
-MOTION_POS_THRESH = 0.01
+MOTION_POS_THRESH = 0.01  # (no longer gates samples, see "commanded but stuck" below)
 LOOKBACK_PAD = 10
+
+# ── Which commanded samples are used ──────────────────────────────────────────
+# Every sample where the base controller applied a non-zero command
+# (cmd_vel_out) is used -- including when the rover did not move: small
+# commands below the motors' deadband are exactly what the model must learn
+# (10/05 bag_07: 0.04 m/s commands, wheels ~still, rover stalled). Excluded:
+#  - blocked: wheels turning (ground speed >= BLOCKED_WHEEL_SPEED) while the
+#    body, rotation included, barely moves (< BLOCKED_BODY_SPEED) -- pushing
+#    against a wall is not the rover's dynamics
+#  - mocap trouble: pose gaps > MOCAP_GAP_S or frozen (identical) poses
+JOINT_TOPIC = "/dynamic_joint_states"
+WHEEL_RADIUS = 0.158       # m, roseybot_controllers.yaml
+WHEEL_SEPARATION = 0.3365  # m, roseybot_controllers.yaml
+BLOCKED_WHEEL_SPEED = 0.10  # m/s of wheel ground speed
+BLOCKED_BODY_SPEED = 0.02   # m/s, translation + rotation x half the track
+MOCAP_GAP_S = 0.25
 
 VALID_WIDTHS = {8, 16, 32, 64, 128}
 
@@ -176,18 +192,27 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
     """Returns (segments or None, failed). failed comes from the recorded
     outcome if given, else from the bag: final pose farther than GOAL_TOL from
     the last /plan's endpoint."""
-    from rosbags.rosbag2 import Reader
+    # AnyReader decodes types missing from the typestore (control_msgs'
+    # DynamicJointState) from the definitions stored in the bag itself
+    from rosbags.highlevel import AnyReader
 
-    pose_rows, cmdout_rows, plans = [], [], []
+    pose_rows, cmdout_rows, plans, joint_rows = [], [], [], []
     rec_t = {POSE_TOPIC: [], CMD_OUT_TOPIC: [], PLAN_TOPIC: []}  # recording times, same order
-    with Reader(str(bag_path)) as reader:
+    with AnyReader([bag_path], default_typestore=typestore) as reader:
         topics = {c.topic for c in reader.connections}
         if not {POSE_TOPIC, CMD_OUT_TOPIC}.issubset(topics):
             return None, False
         conns = [c for c in reader.connections
-                 if c.topic in (POSE_TOPIC, CMD_OUT_TOPIC, PLAN_TOPIC)]
+                 if c.topic in (POSE_TOPIC, CMD_OUT_TOPIC, PLAN_TOPIC, JOINT_TOPIC)]
         for conn, ts_ns, raw in reader.messages(connections=conns):
-            m = typestore.deserialize_cdr(raw, conn.msgtype)
+            m = reader.deserialize(raw, conn.msgtype)
+            if conn.topic == JOINT_TOPIC:
+                # recording time: same clock as the (possibly corrected) others below
+                speeds = [iv.values[list(iv.interface_names).index("velocity")]
+                          for iv in m.interface_values if "velocity" in iv.interface_names]
+                if speeds:
+                    joint_rows.append((ts_ns * 1e-9, float(np.mean(np.abs(speeds)))))
+                continue
             t = m.header.stamp.sec + m.header.stamp.nanosec * 1e-9
             if conn.topic == POSE_TOPIC:
                 p, o = m.pose.position, m.pose.orientation
@@ -256,11 +281,33 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
         dfwd, dlat, dyaw, dx, dy, w,
     ]).astype(np.float32)
 
-    segs = _split_segments(data, ct, bag_path.name)
+    # samples to leave out (see "Which commanded samples are used" at the top)
+    step_t = np.maximum(np.concatenate([[DT], np.diff(ct)]), 1e-3)
+    body_speed = (np.hypot(dx, dy) + np.abs(dyaw) * WHEEL_SEPARATION / 2.0) / step_t
+    if joint_rows:
+        joints = np.array(sorted(joint_rows))
+        wheel_speed = np.interp(ct, joints[:, 0], joints[:, 1]) * WHEEL_RADIUS
+        blocked = (wheel_speed >= BLOCKED_WHEEL_SPEED) & (body_speed < BLOCKED_BODY_SPEED)
+    else:
+        blocked = np.zeros(len(ct), dtype=bool)
+    mocap_bad = np.zeros(len(ct), dtype=bool)
+    frozen = np.all(np.diff(pose[:, 1:], axis=0) == 0.0, axis=1)
+    for i in np.flatnonzero((np.diff(pt) > MOCAP_GAP_S) | frozen):
+        mocap_bad |= (ct >= pt[i]) & (ct <= pt[i + 1])
+    cmd_moving = (np.abs(cmdout[:, 1]) > STAT_VX) | (np.abs(cmdout[:, 2]) > STAT_WZ)
+    stuck = cmd_moving & (body_speed < MOTION_POS_THRESH / DT) & ~blocked & ~mocap_bad
+    if stuck.any() or blocked.any() or mocap_bad.any():
+        print(f"[dynamics_retrain]   {bag_path.name}: {int(stuck.sum())} commanded-but-stuck "
+              f"samples kept, excluded {int((cmd_moving & blocked).sum())} blocked (wheels "
+              f"turning, body still) and {int(mocap_bad.sum())} with mocap gaps/freezes",
+              flush=True)
+
+    segs = _split_segments(data, ct, bag_path.name, usable=~blocked & ~mocap_bad)
     return (segs if segs else None), failed
 
 
-def _split_segments(data: np.ndarray, times: np.ndarray, name: str) -> List[Dict]:
+def _split_segments(data: np.ndarray, times: np.ndarray, name: str,
+                    usable: Optional[np.ndarray] = None) -> List[Dict]:
     dt_arr = np.diff(times)
     med_dt = float(np.median(dt_arr)) if len(dt_arr) > 0 else DT
     gap_mask = np.concatenate([[False], dt_arr > GAP_FACTOR * med_dt])
@@ -270,8 +317,9 @@ def _split_segments(data: np.ndarray, times: np.ndarray, name: str) -> List[Dict
 
     cmd_moving = ((np.abs(data[:, COL_VX_CMD]) > STAT_VX) |
                  (np.abs(data[:, COL_WZ_CMD]) > STAT_WZ))
-    pos_moving = np.concatenate([[False], pos_step > MOTION_POS_THRESH])
-    moving = cmd_moving & pos_moving
+    # every commanded sample, moving or not (the rover not responding to a
+    # command is dynamics too), minus the excluded ones (see extract_trajectory)
+    moving = cmd_moving if usable is None else cmd_moving & usable
 
     segments = []
     block_start = 0
