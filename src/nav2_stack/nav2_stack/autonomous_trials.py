@@ -466,7 +466,8 @@ def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_p
             warm_start=retrain_cfg["warm_start"], subset=retrain_cfg["subset"],
             subset_fraction=retrain_cfg["subset_fraction"],
             fmean=retrain_cfg["fmean"], fstd=retrain_cfg["fstd"],
-            failure_weighting=retrain_cfg["failure_weighting"])
+            failure_weighting=retrain_cfg["failure_weighting"],
+            symmetry_augmentation=retrain_cfg["symmetry_augmentation"])
     except Exception as e:
         log(f"WARNING: retrain failed ({e}) -- keeping the currently deployed weights")
         return
@@ -520,7 +521,8 @@ def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new
             subset_fraction=fs_cfg["subset_fraction"],
             fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
             warm_start_path=fs_cfg["current_weights_path"], save_path=save_path,
-            failure_weighting=fs_cfg["failure_weighting"])
+            failure_weighting=fs_cfg["failure_weighting"],
+            symmetry_augmentation=fs_cfg["symmetry_augmentation"])
     except Exception as e:
         log(f"WARNING: train_from_scratch retrain failed ({e}) -- keeping the "
             f"currently deployed from-scratch weights")
@@ -583,6 +585,10 @@ def main():
                         help="When retraining (retrain_dynamics or train_from_scratch), weight "
                              "samples from failed trials x2 and no-progress stretches x3 (cap x5) "
                              "in the MLP loss. Default: true")
+    parser.add_argument("--symmetry-augmentation", default="false", type=parse_bool,
+                        help="When retraining, also train on mirrored copies of the data "
+                             "(left/right x0.5, forward/backward x0.25, both x0.25; see "
+                             "dynamics_retrain.SYM_WEIGHTS). Default: false")
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
                         help="Number of initial kinematics-only trials to collect before the "
                              "first from-scratch fit. Default: 5")
@@ -615,6 +621,7 @@ def main():
             "fmean": np.array(parsed["fmean"], dtype=np.float32),
             "fstd": np.array(parsed["fstd"], dtype=np.float32),
             "failure_weighting": args.failure_weighting,
+            "symmetry_augmentation": args.symmetry_augmentation,
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
         fs_cfg["current_weights_path"] = latest_from_scratch_checkpoint(
@@ -645,6 +652,7 @@ def main():
                 "fmean": np.array(parsed["fmean"], dtype=np.float32),
                 "fstd": np.array(parsed["fstd"], dtype=np.float32),
                 "failure_weighting": args.failure_weighting,
+            "symmetry_augmentation": args.symmetry_augmentation,
             }
             log(f"online retraining enabled: model={model_type}"
                 f"{retrain_cfg['width'] or ''}  warm_start={args.warm_start}  "

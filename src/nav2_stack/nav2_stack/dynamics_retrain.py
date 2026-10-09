@@ -509,6 +509,41 @@ def train_mlp_ar_teacher(hidden: int, n_layers: int, train_segs, val_segs, norm:
     return model, best_val
 
 
+# ── Symmetry augmentation ──────────────────────────────────────────────────────
+# Mirrored copies of the training data (10/09 analysis of all bags: the steady
+# yaw gain matches for left/right turns and for forward/reverse; the only
+# asymmetry was a ~0.004 rad/s drift, negligible for control, not modelled).
+#   left/right    : wz -> -wz; yaw, lateral (and world y, dy, yaw) flip sign
+#   forward/back  : the rover turned by 180 deg: vx -> -vx; forward and
+#                   lateral motion flip sign, yaw change stays
+# Copies get lower weights than the real data, so where real data disagrees
+# it still wins; validation always stays real data only.
+SYM_WEIGHTS = {"lr": 0.5, "fb": 0.25, "lr_fb": 0.25}
+
+
+def _mirror(data: np.ndarray, lr: bool, fb: bool, weight: float) -> np.ndarray:
+    d = data.copy()
+    if lr:
+        for c in (COL_WZ_CMD, COL_DYAW, COL_DLAT, COL_Y, COL_YAW, COL_DY):
+            d[:, c] = -d[:, c]
+    if fb:
+        for c in (COL_VX_CMD, COL_DFWD, COL_DLAT):
+            d[:, c] = -d[:, c]
+    d[:, COL_W] *= weight
+    return d
+
+
+def augment_symmetry(segments: List[Dict], weights: Dict[str, float] = SYM_WEIGHTS) -> List[Dict]:
+    """segments + their mirrored copies (see SYM_WEIGHTS); a weight <= 0 skips that copy."""
+    out = list(segments)
+    for key, (lr, fb) in (("lr", (True, False)), ("fb", (False, True)), ("lr_fb", (True, True))):
+        w = weights.get(key, 0.0)
+        if w > 0:
+            out += [{**sg, "data": _mirror(sg["data"], lr, fb, w), "name": f"{sg['name']}~{key}"}
+                    for sg in segments]
+    return out
+
+
 # ── Top-level entry point ──────────────────────────────────────────────────────
 def _load_bags(bag_paths: List[Path], typestore, outcomes: Dict[str, str], weighting: bool):
     """bag path -> (segments, failed) for every bag with usable data."""
@@ -528,7 +563,7 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
            warm_start: bool, subset: bool, subset_fraction: float,
            fmean: np.ndarray, fstd: np.ndarray,
            warm_start_path: Optional[Path] = None, save_path: Optional[Path] = None,
-           failure_weighting: bool = False) -> dict:
+           failure_weighting: bool = False, symmetry_augmentation: bool = False) -> dict:
     """
     Retrains a model (model_type="linear" or "mlp", width required for "mlp")
     on bags in bag_dir, always including new_bag_path plus either every other
@@ -594,6 +629,11 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
     val_segs = [s for b in val_bags for s in loaded[b][0]]
     if not train_segs:
         raise RuntimeError(f"no usable segments extracted from {len(use_bags)} bags in {bag_dir}")
+    if symmetry_augmentation:
+        n_real = len(train_segs)
+        train_segs = augment_symmetry(train_segs)
+        print(f"[dynamics_retrain] symmetry augmentation: {n_real} -> {len(train_segs)} training "
+              f"segments (weights {SYM_WEIGHTS}; validation stays real only)", flush=True)
 
     norm = Normalizer(fmean, fstd)
 

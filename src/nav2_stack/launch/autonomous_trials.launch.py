@@ -83,6 +83,7 @@ def launch_setup(context):
             '--train-from-scratch', train_from_scratch,
             '--from-scratch-n-bootstrap', from_scratch_n_bootstrap,
             '--failure-weighting', LaunchConfiguration('failure_weighting'),
+            '--symmetry-augmentation', LaunchConfiguration('symmetry_augmentation'),
         ],
     )
 
@@ -129,6 +130,10 @@ def generate_launch_description():
         DeclareLaunchArgument('failure_weighting', default_value='true',
                               description='Weight failed trials x2 and no-progress stretches x3 '
                                           '(cap x5) when retraining the MLP dynamics model'),
+
+        DeclareLaunchArgument('symmetry_augmentation', default_value='false',
+                              description='Also train the dynamics model on mirrored copies of '
+                                          'the data (left/right, forward/backward)'),
         DeclareLaunchArgument('start_rviz', default_value='true',
                               description='Launch rviz2 alongside everything else (replaces '
                                           'running it manually in a separate terminal)'),
