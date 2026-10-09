@@ -58,7 +58,13 @@ PLANNER_ID   = 'GridBased'  # fallback only -- see GPExplorer._resolve_planner_i
 POSE_TOPIC         = '/FitRosey_V1/pose'
 N_REF_POINTS       = 200
 MAX_PATH_PTS       = 100
-DOWNSAMPLE_FACTOR  = 20
+# GP training data: one point per GP_CELL x GP_CELL m grid cell (mean x, y, z
+# of all poses in it). Every 20th pose used to be kept instead, which grew
+# without bound (11k points after 45 bags, exact-GP cost ~ n^3); the arena has
+# only ~1600 cells at 10 cm, so this caps the GP size for good. A cell driven
+# many times counts the same as one driven once -- fine for finding
+# unexplored areas.
+GP_CELL            = 0.10
 STATIONARY_THRESH  = 0.001
 
 
@@ -244,10 +250,22 @@ def load_bags(bag_dir: Path):
 
     X = np.concatenate(X_list)
     z = np.concatenate(z_list)
-    idx = np.arange(0, len(X), DOWNSAMPLE_FACTOR)
-    X, z = X[idx], z[idx]
-    print(f'  downsampled {DOWNSAMPLE_FACTOR}x → {len(X)} training points')
+    n_poses = len(X)
+    X, z = bin_to_cells(X, z, GP_CELL)
+    print(f'  {n_poses} poses → {len(X)} training points (one per {GP_CELL * 100:.0f} cm cell)')
     return X, z
+
+
+def bin_to_cells(X: np.ndarray, z: np.ndarray, cell: float):
+    """Mean (x, y) and z of the poses in each occupied cell x cell grid cell."""
+    keys = np.floor(X / cell).astype(np.int64)
+    _, inv, counts = np.unique(keys, axis=0, return_inverse=True, return_counts=True)
+    inv = inv.ravel()
+    Xb = np.zeros((len(counts), 2))
+    zb = np.zeros(len(counts))
+    np.add.at(Xb, inv, X)
+    np.add.at(zb, inv, z)
+    return Xb / counts[:, None], zb / counts
 
 
 # ── Map utilities ──────────────────────────────────────────────────────────────
@@ -286,27 +304,38 @@ def pixel_to_world(col: int, row: int, H: int):
     return wx, wy
 
 
+# When nothing fits at --min-dist (e.g. the rover is in the middle of the
+# arena, where no free point is 2.5 m away), retry with these shorter
+# distances before giving up -- only the ones below --min-dist are used.
+MIN_DIST_FALLBACKS = (2.0, 1.5)
+
+
 def sample_candidates(free_mask: np.ndarray, current_xy: np.ndarray,
                       current_yaw: float, n: int, min_dist: float) -> np.ndarray:
     H, W = free_mask.shape
     rows, cols = np.where(free_mask)
-    perm = np.random.permutation(len(rows))
-    out = []
-    for i in perm:
-        wx, wy = pixel_to_world(cols[i], rows[i], H)
-        if np.hypot(wx - current_xy[0], wy - current_xy[1]) < min_dist:
-            continue
-        direction  = np.arctan2(wy - current_xy[1], wx - current_xy[0])
-        angle_diff = abs(np.arctan2(np.sin(direction - current_yaw),
-                                    np.cos(direction - current_yaw)))
-        if np.deg2rad(60) < angle_diff < np.deg2rad(120):
-            continue
-        out.append([wx, wy])
-        if len(out) == n:
-            break
-    if not out:
-        sys.exit('[error] No valid candidates — check map, --min-dist, --current-yaw')
-    return np.array(out)
+    for dist in [min_dist] + [d for d in MIN_DIST_FALLBACKS if d < min_dist]:
+        perm = np.random.permutation(len(rows))
+        out = []
+        for i in perm:
+            wx, wy = pixel_to_world(cols[i], rows[i], H)
+            if np.hypot(wx - current_xy[0], wy - current_xy[1]) < dist:
+                continue
+            direction  = np.arctan2(wy - current_xy[1], wx - current_xy[0])
+            angle_diff = abs(np.arctan2(np.sin(direction - current_yaw),
+                                        np.cos(direction - current_yaw)))
+            if np.deg2rad(60) < angle_diff < np.deg2rad(120):
+                continue
+            out.append([wx, wy])
+            if len(out) == n:
+                break
+        if out:
+            if dist < min_dist:
+                print(f'  [warn] no candidates >= {min_dist} m away -- relaxed min-dist to {dist} m '
+                      f'({len(out)} candidates)')
+            return np.array(out)
+    sys.exit(f'[error] No valid candidates (min-dist tried down to '
+             f'{min([min_dist] + list(MIN_DIST_FALLBACKS))} m) — check map, --current-yaw')
 
 
 def reference_grid(free_mask: np.ndarray, n: int) -> np.ndarray:
