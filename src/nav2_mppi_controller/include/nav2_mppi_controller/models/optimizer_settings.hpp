@@ -38,6 +38,10 @@ struct OptimizerSettings
   unsigned int iteration_count{0u};
   bool shift_control_sequence{false};
   size_t retry_attempt_limit{0};
+  // fork-only: model the base controller's rate limiter (see
+  // Optimizer::updateInitialStateVelocities); the limits are ax_max/ax_min/az_max
+  bool rate_limiter_enabled{false};
+  float rate_limiter_timeout{0.5f};  // s; base controller cmd_vel_timeout
 };
 
 }  // namespace mppi::models

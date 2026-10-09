@@ -17,6 +17,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -88,6 +89,11 @@ void Optimizer::getParams()
   getParam(s.sampling_std.vy, "vy_std", 0.2f);
   getParam(s.sampling_std.wz, "wz_std", 0.4f);
   getParam(s.retry_attempt_limit, "retry_attempt_limit", 1);
+  // fork-only: rollouts start from the command the base controller is applying
+  // (not the measured speed) and are rate-limited by ax_max/ax_min/az_max, which
+  // should then match the base controller's acceleration limits
+  getParam(s.rate_limiter_enabled, "rate_limiter_enabled", false);
+  getParam(s.rate_limiter_timeout, "rate_limiter_timeout", 0.5f);
 
   s.base_constraints.ax_max = std::abs(s.base_constraints.ax_max);
   if (s.base_constraints.ax_min > 0.0) {
@@ -240,6 +246,9 @@ void Optimizer::reset(bool reset_dynamic_speed_limits)
 
   costs_ = xt::zeros<float>({settings_.batch_size});
   generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
+  applied_vx_ = 0.0f;
+  applied_wz_ = 0.0f;
+  have_last_eval_ = false;
 
   noise_generator_.reset(settings_, isHolonomic());
   motion_model_->initialize(settings_.constraints, settings_.model_dt);
@@ -259,6 +268,20 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
   const geometry_msgs::msg::Pose & goal,
   nav2_core::GoalChecker * goal_checker)
 {
+  if (settings_.rate_limiter_enabled) {
+    // no command for longer than the base controller's timeout: it has
+    // stopped the rover, so nothing is being applied any more
+    const auto now = std::chrono::steady_clock::now();
+    if (!have_last_eval_ ||
+      std::chrono::duration<float>(now - last_eval_).count() > settings_.rate_limiter_timeout)
+    {
+      applied_vx_ = 0.0f;
+      applied_wz_ = 0.0f;
+    }
+    last_eval_ = now;
+    have_last_eval_ = true;
+  }
+
   prepare(robot_pose, robot_speed, plan, goal, goal_checker);
 
   do {
@@ -268,6 +291,16 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
   utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
   motion_model_->applyConstraints(control_sequence_);
   auto control = getControlFromSequenceAsTwist(plan.header.stamp);
+
+  if (settings_.rate_limiter_enabled) {
+    // what the base controller will apply from this command over the next step
+    const auto & c = settings_.constraints;
+    const float dt = settings_.model_dt;
+    applied_vx_ += std::clamp(
+      static_cast<float>(control.twist.linear.x) - applied_vx_, -c.ax_max * dt, c.ax_max * dt);
+    applied_wz_ += std::clamp(
+      static_cast<float>(control.twist.angular.z) - applied_wz_, -c.az_max * dt, c.az_max * dt);
+  }
 
   if (settings_.shift_control_sequence) {
     shiftControlSequence();
@@ -409,8 +442,13 @@ void Optimizer::updateStateVelocities(
 void Optimizer::updateInitialStateVelocities(
   models::State & state) const
 {
-  xt::noalias(xt::view(state.vx, xt::all(), 0)) = static_cast<float>(state.speed.linear.x);
-  xt::noalias(xt::view(state.wz, xt::all(), 0)) = static_cast<float>(state.speed.angular.z);
+  // rate limiter on: start from the command being applied, which the learned
+  // dynamics take as input (trained on cmd_vel_out), not from the measured speed
+  const bool rl = settings_.rate_limiter_enabled;
+  xt::noalias(xt::view(state.vx, xt::all(), 0)) =
+    rl ? applied_vx_ : static_cast<float>(state.speed.linear.x);
+  xt::noalias(xt::view(state.wz, xt::all(), 0)) =
+    rl ? applied_wz_ : static_cast<float>(state.speed.angular.z);
 
   if (isHolonomic()) {
     xt::noalias(xt::view(state.vy, xt::all(), 0)) = static_cast<float>(state.speed.linear.y);

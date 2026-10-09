@@ -15,6 +15,7 @@
 #ifndef NAV2_MPPI_CONTROLLER__OPTIMIZER_HPP_
 #define NAV2_MPPI_CONTROLLER__OPTIMIZER_HPP_
 
+#include <chrono>
 #include <string>
 #include <memory>
 
@@ -258,6 +259,13 @@ protected:
 
   std::shared_ptr<MotionModel> motion_model_;
   std::unique_ptr<NNDynamics> nn_dynamics_;
+
+  // fork-only rate limiter: the command the base controller is applying right
+  // now, tracked from our own sent commands through the same limiter
+  float applied_vx_{0.0f};
+  float applied_wz_{0.0f};
+  std::chrono::steady_clock::time_point last_eval_{};
+  bool have_last_eval_{false};
 
   ParametersHandler * parameters_handler_;
   CriticManager critic_manager_;

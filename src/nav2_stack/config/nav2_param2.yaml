@@ -64,6 +64,14 @@ controller_server:
       ax_max: 2.0 # max/min accelerations
       ax_min: -2.0
       az_max: 7.0
+      # fork-only: model the base controller's rate limiter (cmd_vel -> cmd_vel_out). When true,
+      # rollouts start from the command the base controller is applying (tracked from our own sent
+      # commands; reset after rate_limiter_timeout without a command) instead of the measured speed,
+      # and are rate-limited by ax_max/ax_min/az_max. To use it, ALSO set those three to the Pi's
+      # base controller limits: ax_max 0.5, ax_min -0.5, az_max 0.211666666667 (10/09). Sim (10/09):
+      # predictions 3.6x closer to what the rover drove, commands 10x smoother; not yet tested live.
+      rate_limiter_enabled: false
+      rate_limiter_timeout: 0.5 # s; base controller cmd_vel_timeout
       iteration_count: 1
       temperature: 0.1 # was 0.3; selectiveness of trajectories by their costs (lower = favour the best samples more, less averaging toward straight)
       gamma: 0.015 # guide says you prob wont need to change
