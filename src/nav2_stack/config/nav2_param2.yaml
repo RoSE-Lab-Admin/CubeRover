@@ -53,11 +53,11 @@ controller_server:
       
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 25
+      time_steps: 25 #was 25
       model_dt: 0.1 # should match roseybot_control frequency # previously 0.1 when roseybot_control frequency = 10 (hz)
       batch_size: 5000
       vx_std: 0.35 # speed standard deviations
-      wz_std: 0.3
+      wz_std: 0.5 # was 0.3; offline sim (10/05, trial16 model, 20% yaw): MPPI committed to planned turns 2x more, 7/8 goals vs 4/8
       vx_max: 0.2 # max/min speeds # previously 0.4
       vx_min: -0.2 # previously -0.4
       wz_max: 0.63 # # previously 5
@@ -65,7 +65,7 @@ controller_server:
       ax_min: -2.0
       az_max: 7.0
       iteration_count: 1
-      temperature: 0.3 # selectiveness of trajectories by their costs
+      temperature: 0.1 # was 0.3; selectiveness of trajectories by their costs (lower = favour the best samples more, less averaging toward straight)
       gamma: 0.015 # guide says you prob wont need to change
       motion_model: "DiffDrive"
 
@@ -318,7 +318,7 @@ local_costmap:
         cost_scaling_factor: 2.58
         inflation_radius: 0.75
       transform_tolerance: 1.0
-      always_send_full_costmap: false
+      always_send_full_costmap: true # was false; behavior_server starts ~30 s after the local costmap (separate controller lifecycle manager) and missed the one-off full map -> "No costmap received" until the rover moved. 33x33 cells, so full sends are cheap
       track_unknown_space: false
 
 global_costmap:
