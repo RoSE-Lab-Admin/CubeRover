@@ -18,6 +18,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <array>
 #include <vector>
 #include <string>
 
@@ -135,6 +136,15 @@ protected:
     nav2_costmap_2d::Costmap2D * costmap, int moving_gear,
     nav_msgs::msg::Path & plan, std::string & reason);
 
+  /**
+   * @brief Arc hold: is the rover still on the last arc planned for this goal
+   * (same goal, gear and turn direction, planned recently, start pose within
+   * arc_hold_max_offset / arc_hold_max_heading_error of it)?
+   */
+  bool arcCommitted(
+    double x, double y, double yaw, double gx, double gy, int gear, int turn,
+    double now) const;
+
   std::unique_ptr<AStarAlgorithm<NodeHybrid>> _a_star;
   GridCollisionChecker _collision_checker;
   std::unique_ptr<Smoother> _smoother;
@@ -177,6 +187,25 @@ protected:
   double _arc_max_cost{-1.0};
   double _arc_path_resolution{0.05};
   double _arc_max_sweep{180.0};  // degrees of heading change; >= 180 = no cap
+
+  // Arc hold (fork-only, see arcCommitted()): once the rover is driving an
+  // arc, re-fitted arcs for the same goal get looser limits, so a little
+  // drift does not throw it into Hybrid-A* (and a three-point turn).
+  // _arc_hold_min_radius <= 0 disables the hold (fresh limits always apply).
+  double _arc_hold_min_radius{-1.0};
+  double _arc_hold_max_sweep{-1.0};         // degrees; <0 = arc_max_sweep
+  double _arc_hold_max_offset{0.35};        // m off the committed arc
+  double _arc_hold_max_heading_error{25.0};  // degrees off the committed arc
+  double _arc_hold_end_distance{0.0};       // m; closer to the goal: no radius limit
+  double _arc_hold_timeout{3.0};            // s since the committed arc was planned
+  struct ArcCommit
+  {
+    bool valid{false};
+    double t{0.0}, gx{0.0}, gy{0.0};
+    int gear{0}, turn{0};  // turn: sign of the curvature, 0 = straight
+    std::vector<std::array<double, 3>> poses;  // x, y, heading
+  };
+  ArcCommit _arc_commit;
 
   // Direction-aware replanning (fork-only): pose samples from
   // motion_pose_topic, stamped with receive time, used by currentGear() to

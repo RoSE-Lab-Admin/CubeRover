@@ -236,7 +236,7 @@ planner_server:
       analytic_expansion_max_length: 3.0
       analytic_expansion_max_cost: 50.0
       analytic_expansion_max_cost_ovveride: false
-      minimum_turning_radius: 0.8 # was 0.7 -- the rover only achieves R~1.5-2 m in practice (yaw rate ~20-30% of commanded, skid-steer scrub), so 0.7 plans were under-driven
+      minimum_turning_radius: 1.5 # was 1.2 (10/09 arc tests: 1.3 m arcs never held, 1.5-1.7 m mostly did; when no arc is allowed, Hybrid-A* should do a 3-point turn, not a 1.2-1.5 m curve) -- was 0.8 (10/05 turning test: tightest clean real radius ~1.0 m at vx 0.2, wz 0.63; slower sharp turns stall) -- was 0.7: the rover only achieves R~1.5-2 m in practice (yaw rate ~20-30% of commanded, skid-steer scrub), so 0.7 plans were under-driven
       motion_model_for_search: "REEDS_SHEPP"
       non_straight_penalty: 1.0 # was 4.0 -- no extra cost for curving: 4.0 squeezed every turn into a few sharp primitives followed by long straights
       change_penalty: 0.0 # was 3.0 -- no extra cost for starting/flipping a turn; tight turns are priced by curvature_penalty, multi-reversals by extra_direction_change_penalty (offline tuning against hand-picked bag cases, 10/02)
@@ -264,11 +264,21 @@ planner_server:
       # stays collision free and does not reverse a moving rover, plan exactly that arc; Hybrid-A*
       # otherwise. Arc plans skip the smoother and the search cost terms above.
       arc_mode_enabled: true
-      arc_min_radius: 0.8 # meters; <0 = minimum_turning_radius
+      arc_min_radius: 1.5 # was 1.2 (was 0.8); a NEW arc must be at least this wide; <0 = minimum_turning_radius
       arc_max_length: 10.0 # meters
       arc_max_cost: -1.0 # max costmap cost along the arc (raised to the start's/goal's own cost); <0 = analytic_expansion_max_cost
       arc_path_resolution: 0.05 # meters between plan poses
       arc_max_sweep: 120.0 # degrees of heading change; wider arcs (goal more than +/-60 deg off nose/tail) go to Hybrid-A*, which can pick a three-point turn
+      # fork-only arc hold: once the rover drives an arc, re-fitted arcs for the same goal get looser
+      # limits, so slight drift does not drop it into Hybrid-A* / a 3-point turn. "Committed" = last
+      # plan was an arc for this goal, same gear and turn direction, planned < arc_hold_timeout ago,
+      # rover within arc_hold_max_offset / arc_hold_max_heading_error of it. <=0 min radius = off.
+      arc_hold_min_radius: 1.2 # m; re-fitted arcs may be this tight while committed (fresh: arc_min_radius)
+      arc_hold_max_sweep: 130.0 # deg; while committed (fresh: arc_max_sweep) -- the needed sweep grows when the rover lags (bag 33, 10/07)
+      arc_hold_end_distance: 1.0 # m; while committed this close to the goal, no radius limit (the needed radius swings wildly there)
+      arc_hold_max_offset: 0.35 # m off the committed arc
+      arc_hold_max_heading_error: 25.0 # deg off the committed arc
+      arc_hold_timeout: 3.0 # s; committed arc must be this recent (replans are 1 Hz)
       escalate_only_on_reset: true # was false -- fork-only: the extra_direction_change_penalty escalation applies exactly on gear/curve flips, incl. a gear flip into a straight primitive (which otherwise escaped it)
       use_quadratic_cost_penalty: false
       # NOTE: goal_heading_mode / coarse_search_resolution do not exist in

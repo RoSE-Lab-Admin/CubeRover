@@ -165,6 +165,25 @@ void SmacPlannerHybrid::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, name + ".arc_max_sweep", rclcpp::ParameterValue(180.0));
   node->get_parameter(name + ".arc_max_sweep", _arc_max_sweep);
+  // Arc hold (fork-only, off unless arc_hold_min_radius > 0): see arcCommitted()
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_hold_min_radius", rclcpp::ParameterValue(-1.0));
+  node->get_parameter(name + ".arc_hold_min_radius", _arc_hold_min_radius);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_hold_max_sweep", rclcpp::ParameterValue(-1.0));
+  node->get_parameter(name + ".arc_hold_max_sweep", _arc_hold_max_sweep);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_hold_max_offset", rclcpp::ParameterValue(0.35));
+  node->get_parameter(name + ".arc_hold_max_offset", _arc_hold_max_offset);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_hold_max_heading_error", rclcpp::ParameterValue(25.0));
+  node->get_parameter(name + ".arc_hold_max_heading_error", _arc_hold_max_heading_error);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_hold_end_distance", rclcpp::ParameterValue(0.0));
+  node->get_parameter(name + ".arc_hold_end_distance", _arc_hold_end_distance);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".arc_hold_timeout", rclcpp::ParameterValue(3.0));
+  node->get_parameter(name + ".arc_hold_timeout", _arc_hold_timeout);
 
   nav2_util::declare_parameter_if_not_declared(
     node, name + ".ignore_goal_heading", rclcpp::ParameterValue(false));
@@ -627,6 +646,7 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
       }
       return plan;
     }
+    _arc_commit.valid = false;  // off the arc: a new one must meet the fresh limits
     RCLCPP_INFO(_logger, "%s: arc rejected (%s), using Hybrid-A*", _name.c_str(), reason.c_str());
   }
 
@@ -843,6 +863,18 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _arc_max_cost = parameter.as_double();
       } else if (name == _name + ".arc_max_sweep") {
         _arc_max_sweep = parameter.as_double();
+      } else if (name == _name + ".arc_hold_min_radius") {
+        _arc_hold_min_radius = parameter.as_double();
+      } else if (name == _name + ".arc_hold_max_sweep") {
+        _arc_hold_max_sweep = parameter.as_double();
+      } else if (name == _name + ".arc_hold_max_offset") {
+        _arc_hold_max_offset = parameter.as_double();
+      } else if (name == _name + ".arc_hold_max_heading_error") {
+        _arc_hold_max_heading_error = parameter.as_double();
+      } else if (name == _name + ".arc_hold_end_distance") {
+        _arc_hold_end_distance = parameter.as_double();
+      } else if (name == _name + ".arc_hold_timeout") {
+        _arc_hold_timeout = parameter.as_double();
       } else if (name == _name + ".arc_path_resolution") {
         if (parameter.as_double() > 0.0) {
           _arc_path_resolution = parameter.as_double();
@@ -987,11 +1019,23 @@ bool SmacPlannerHybrid::tryArcPlan(
   // for signed arc length s (s < 0 in reverse); the goal is where
   // ks/2 = atan(dy/dx), so the heading sweep 2*atan(dy/dx) stays under 180 deg.
   const double k = 2.0 * dy / d2;
-  const double min_radius =
+  const int turn = std::fabs(k) < 1e-3 ? 0 : (k > 0.0 ? 1 : -1);
+  const double now = _clock->now().seconds();
+  // Arc hold: on the arc we are already driving, re-fits may be tighter and
+  // longer than a fresh arc, and near the goal the radius is not checked
+  // (there it swings with every centimetre of drift)
+  const bool held = arcCommitted(x0, y0, th0, goal.pose.position.x, goal.pose.position.y,
+      gear, turn, now);
+  const double fresh_min_radius =
     _arc_min_radius > 0.0 ? _arc_min_radius : _minimum_turning_radius_global_coords;
-  if (std::fabs(k) * min_radius > 1.0) {
+  const double min_radius = held ? std::min(_arc_hold_min_radius, fresh_min_radius) :
+    fresh_min_radius;
+  const double max_sweep = held && _arc_hold_max_sweep > 0.0 ?
+    std::max(_arc_hold_max_sweep, _arc_max_sweep) : _arc_max_sweep;
+  const bool end_zone = held && std::sqrt(d2) <= _arc_hold_end_distance;
+  if (!end_zone && std::fabs(k) * min_radius > 1.0) {
     reason = "radius " + std::to_string(1.0 / std::fabs(k)) + " m < " +
-      std::to_string(min_radius) + " m";
+      std::to_string(min_radius) + " m" + (held ? " (held)" : "");
     return false;
   }
   double s_goal;
@@ -1008,9 +1052,9 @@ bool SmacPlannerHybrid::tryArcPlan(
   // nose (forward) or tail (reverse); wider swings go to Hybrid-A*, which can
   // pick a three-point turn instead
   const double sweep_deg = std::fabs(2.0 * std::atan(dy / dx)) * 180.0 / M_PI;
-  if (sweep_deg > _arc_max_sweep) {
-    reason = "sweep " + std::to_string(sweep_deg) + " deg > " + std::to_string(_arc_max_sweep) +
-      " deg";
+  if (sweep_deg > max_sweep) {
+    reason = "sweep " + std::to_string(sweep_deg) + " deg > " + std::to_string(max_sweep) +
+      " deg" + (held ? " (held)" : "");
     return false;
   }
   const double length = std::fabs(s_goal);
@@ -1085,13 +1129,56 @@ bool SmacPlannerHybrid::tryArcPlan(
     poses.push_back(pose);
   }
 
+  // remember this arc: the next replan for this goal may hold on to it
+  _arc_commit.valid = _arc_hold_min_radius > 0.0;
+  _arc_commit.t = now;
+  _arc_commit.gx = goal.pose.position.x;
+  _arc_commit.gy = goal.pose.position.y;
+  _arc_commit.gear = gear;
+  _arc_commit.turn = turn;
+  _arc_commit.poses.clear();
+  _arc_commit.poses.reserve(poses.size());
+  for (const auto & p : poses) {
+    _arc_commit.poses.push_back(
+      {p.pose.position.x, p.pose.position.y, tf2::getYaw(p.pose.orientation)});
+  }
+
   plan.poses = std::move(poses);
+  const double radius =
+    std::fabs(k) < 1e-9 ? std::numeric_limits<double>::infinity() : 1.0 / std::fabs(k);
   RCLCPP_INFO(
-    _logger, "%s: arc plan, %s, radius %.2f m, length %.2f m, sweep %.0f deg", _name.c_str(),
-    gear > 0 ? "forward" : "reverse",
-    std::fabs(k) < 1e-9 ? std::numeric_limits<double>::infinity() : 1.0 / std::fabs(k), length,
-    sweep_deg);
+    _logger, "%s: arc plan, %s, radius %.2f m, length %.2f m, sweep %.0f deg%s", _name.c_str(),
+    gear > 0 ? "forward" : "reverse", radius, length, sweep_deg,
+    end_zone ? " (held, end zone)" :
+    (held && (radius < fresh_min_radius || sweep_deg > _arc_max_sweep)) ? " (held)" : "");
   return true;
+}
+
+bool SmacPlannerHybrid::arcCommitted(
+  double x, double y, double yaw, double gx, double gy, int gear, int turn, double now) const
+{
+  const auto & c = _arc_commit;
+  if (_arc_hold_min_radius <= 0.0 || !c.valid || c.poses.empty()) {
+    return false;
+  }
+  if (now - c.t > _arc_hold_timeout || std::hypot(gx - c.gx, gy - c.gy) > 0.05 ||
+    gear != c.gear || (turn != 0 && c.turn != 0 && turn != c.turn))
+  {
+    return false;
+  }
+  // nearest pose of the committed arc (poses are arc_path_resolution apart)
+  double best = std::numeric_limits<double>::infinity();
+  double best_yaw = 0.0;
+  for (const auto & p : c.poses) {
+    const double d = std::hypot(p[0] - x, p[1] - y);
+    if (d < best) {
+      best = d;
+      best_yaw = p[2];
+    }
+  }
+  const double heading_err =
+    std::fabs(angles::shortest_angular_distance(best_yaw, yaw)) * 180.0 / M_PI;
+  return best <= _arc_hold_max_offset && heading_err <= _arc_hold_max_heading_error;
 }
 
 void SmacPlannerHybrid::updateTailTracker(double now, double x, double y, double yaw)
