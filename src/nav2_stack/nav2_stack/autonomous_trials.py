@@ -488,6 +488,18 @@ def push_model_path(node: PoseWatcher, model_path: Path):
     set_controller_param(node, "FollowPath.nn_model_path", str(model_path))
 
 
+def latest_from_scratch_checkpoint(weights_dir: Path, width: int):
+    """Newest mlp{width}_trialNN.pt in weights_dir (highest NN), or None. Lets a
+    train_from_scratch session in an existing bag_dir resume from the last
+    checkpoint instead of going back to kinematics and a blank init."""
+    best, best_n = None, -1
+    for p in weights_dir.glob(f"mlp{width}_trial*.pt"):
+        m = re.fullmatch(rf"mlp{width}_trial(\d+)\.pt", p.name)
+        if m and int(m.group(1)) > best_n:
+            best, best_n = p, int(m.group(1))
+    return best
+
+
 def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new_bag_path: Path,
                               trial_label: str):
     """Called after every post-bootstrap trial once train_from_scratch is
@@ -605,10 +617,17 @@ def main():
             "failure_weighting": args.failure_weighting,
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
-        log(f"train_from_scratch enabled: first {fs_cfg['n_bootstrap']} trials (including "
-            f"initial_bag) run under kinematics, then mlp{fs_cfg['width']} trains from a "
-            f"blank init on that data and updates every trial after -- weights isolated "
-            f"under {fs_cfg['weights_dir']}, shared deployed model untouched")
+        fs_cfg["current_weights_path"] = latest_from_scratch_checkpoint(
+            fs_cfg["weights_dir"], fs_cfg["width"])
+        if fs_cfg["current_weights_path"] is not None:
+            log(f"train_from_scratch enabled, resuming from checkpoint "
+                f"{fs_cfg['current_weights_path']}: no kinematics trials, the next trial runs "
+                f"on it and training continues from it after every trial")
+        else:
+            log(f"train_from_scratch enabled: first {fs_cfg['n_bootstrap']} trials (including "
+                f"initial_bag) run under kinematics, then mlp{fs_cfg['width']} trains from a "
+                f"blank init on that data and updates every trial after -- weights isolated "
+                f"under {fs_cfg['weights_dir']}, shared deployed model untouched")
 
     retrain_cfg = None
     if args.retrain_dynamics and not args.train_from_scratch:
@@ -654,7 +673,13 @@ def main():
     escaper = Escaper(pose_node, pose_node.pose, default_planner_id())
     wait_for_nav2_active()
 
-    if fs_cfg is not None and parsed["dynamics_mode"] != "kinematics":
+    if fs_cfg is not None and fs_cfg["current_weights_path"] is not None:
+        log(f"train_from_scratch: deploying checkpoint {fs_cfg['current_weights_path']} "
+            f"(neural_network) for the first new trial")
+        push_model_path(pose_node, fs_cfg["current_weights_path"])
+        push_dynamics_mode(pose_node, "neural_network")
+        reload_controller(pose_node)
+    elif fs_cfg is not None and parsed["dynamics_mode"] != "kinematics":
         log("train_from_scratch: forcing dynamics_mode=kinematics for the bootstrap phase "
             "(regardless of what nav2_param2.yaml currently has deployed)")
         push_dynamics_mode(pose_node, "kinematics")
