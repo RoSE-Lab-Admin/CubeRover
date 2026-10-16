@@ -90,7 +90,7 @@ controller_server:
       # fork-only: past applied commands (cmd_vel_out) the MLP sees besides the current step
       # (0 = off: the current command only). dynamics_retrain/autonomous_trials train with the
       # same value; a model trained with a different value is refused (kinematics fallback).
-      nn_history_steps: 0
+      nn_history_steps: 4
       # nn_model_path: absolute path to a TorchScript .pt file, overrides the
       # nn_hidden_width-derived default path above.
       #nn_model_path: "/path/to/custom_model_scripted.pt"

@@ -26,6 +26,8 @@ to one of the repositioning spots.
 import argparse
 import csv
 import math
+import os
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -148,17 +150,79 @@ def reload_robust(node, attempts=3):
 
 
 def parse_config(s):
+    """NAME=SOURCE[:on|off]  SOURCE = kinematics | a bag folder (its newest
+    from_scratch_weights checkpoint) | a .pt file. Limiter defaults to off."""
     name, rest = s.split('=', 1)
-    path, lim = rest.rsplit(':', 1)
-    if lim not in LIMITER:
-        raise SystemExit(f'--config {s}: limiter must be on or off')
-    return name, Path(path).expanduser(), lim
+    src, lim = rest, 'off'
+    if rest.rsplit(':', 1)[-1] in LIMITER:
+        src, lim = rest.rsplit(':', 1)
+    return name, src if src == 'kinematics' else Path(src).expanduser(), lim
+
+
+def model_history(pt):
+    """history_steps recorded in a TorchScript model (0 for models without it), read with
+    the cuda_end python (this script's python has no torch)."""
+    code = ('import torch,sys; m=torch.jit.load(sys.argv[1], map_location="cpu"); '
+            'print(int(getattr(m, "history_steps", 0)))')
+    out = subprocess.run([str(Path.home() / 'cuda_end/bin/python'), '-c', code, str(pt)],
+                         capture_output=True, text=True, env={**os.environ, 'CUDA_VISIBLE_DEVICES': ''})
+    if out.returncode != 0:
+        raise SystemExit(f'cannot read {pt}: {out.stderr.strip()[-300:]}')
+    return int(out.stdout.strip().splitlines()[-1])
+
+
+class Battery:
+    """Median motor-driver voltage over the last few seconds (/dynamic_joint_states)."""
+
+    def __init__(self, node):
+        from control_msgs.msg import DynamicJointState
+        self.samples = []
+        node.create_subscription(DynamicJointState, '/dynamic_joint_states', self._cb, 10)
+
+    def _cb(self, m):
+        v = [iv.values[list(iv.interface_names).index('voltage')] for iv in m.interface_values
+             if 'voltage' in iv.interface_names]
+        if v:
+            self.samples.append((time.monotonic(), sum(v) / len(v)))
+            self.samples = [x for x in self.samples if x[0] > time.monotonic() - 5.0]
+
+    def volts(self):
+        v = sorted(x[1] for x in self.samples)
+        return v[len(v) // 2] if v else None
+
+
+def pause_point(node, battery, out, min_volt):
+    """Before each recorded run: wait while out/PAUSE exists, and stop for a battery swap
+    below min_volt (stop the rover with the joystick if needed; Enter continues)."""
+    flag = out / 'PAUSE'
+    if flag.exists():
+        at.log(f'PAUSED ({flag} exists) -- delete it to continue')
+        while flag.exists():
+            time.sleep(1.0)
+            rclpy.spin_once(node, timeout_sec=0.1)
+        at.log('continuing')
+    end = time.monotonic() + 1.0
+    while time.monotonic() < end:
+        rclpy.spin_once(node, timeout_sec=0.1)
+    v = battery.volts()
+    while v is not None and v < min_volt:
+        input(f'\n*** battery {v:.2f} V < {min_volt} V: swap the battery, then press Enter '
+              f'(Ctrl-C stops; rerunning the same command resumes) ***\n')
+        end = time.monotonic() + 6.0
+        while time.monotonic() < end:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        v = battery.volts()
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--out', required=True)
-    ap.add_argument('--config', action='append', required=True, help='NAME=BAG_DIR:on|off (repeat)')
+    ap.add_argument('--config', action='append', required=True,
+                    help='NAME=kinematics|BAG_DIR|MODEL.pt[:on|off] (repeat); on/off = rate limiter, default off')
+    ap.add_argument('--temperature', type=float, default=None, help='FollowPath.temperature for all configs')
+    ap.add_argument('--wz-std', type=float, default=None, help='FollowPath.wz_std for all configs')
+    ap.add_argument('--min-voltage', type=float, default=13.7,
+                    help='pause for a battery swap below this (V); the analysis excludes slow runs anyway')
     ap.add_argument('--repeats', type=int, default=2)
     ap.add_argument('--tests', nargs='*', help='subset of test names (default all)')
     ap.add_argument('--goal-tolerance', type=float, default=0.3)
@@ -174,19 +238,24 @@ def main():
     ctrl_get = node.create_client(GetParameters, '/controller_server/get_parameters')
     at.wait_for_nav2_active()
     width = aft.get_param(node, ctrl_get, 'FollowPath.nn_hidden_width') or 128
-    models = {}
-    for name, d, lim in configs:
-        ck = at.latest_from_scratch_checkpoint(d / 'from_scratch_weights', width)
-        if ck is None:
-            raise SystemExit(f'no mlp{width}_trialNN.pt in {d / "from_scratch_weights"}')
-        models[name] = ck
-        at.log(f'config {name}: model {ck}, rate limiter {lim}')
-    keys = ['FollowPath.nn_model_path', 'FollowPath.dynamics_mode', 'goal_checker.xy_goal_tolerance'] + \
+    models, hist = {}, {}
+    for name, src, lim in configs:
+        if src == 'kinematics':
+            models[name], hist[name] = None, 0
+        else:
+            ck = src if src.suffix == '.pt' else at.latest_from_scratch_checkpoint(src / 'from_scratch_weights', width)
+            if ck is None or not Path(ck).exists():
+                raise SystemExit(f'config {name}: no model at {src}')
+            models[name], hist[name] = Path(ck), model_history(ck)
+        at.log(f'config {name}: {models[name] or "kinematics"} (history {hist[name]}), rate limiter {lim}')
+    keys = ['FollowPath.nn_model_path', 'FollowPath.dynamics_mode', 'FollowPath.nn_history_steps',
+            'FollowPath.temperature', 'FollowPath.wz_std', 'goal_checker.xy_goal_tolerance'] + \
         [f'FollowPath.{k}' for k in LIMITER['on']]
     launched = {k: aft.get_param(node, ctrl_get, k) for k in keys}
     at.log(f'launched controller settings (restored at the end): {launched}')
     at.set_controller_param(node, 'goal_checker.xy_goal_tolerance', float(a.goal_tolerance))
     at.XY_GOAL_TOLERANCE = a.goal_tolerance
+    battery = Battery(node)
 
     runs_csv = out / 'runs.csv'
     new = not runs_csv.exists()
@@ -213,13 +282,22 @@ def main():
                     if done.get((cname, tname), 0) > rep:
                         continue
                     if active != cname:
-                        at.log(f'--- controller -> {cname} (rate limiter {lim})')
-                        at.set_controller_param(node, 'FollowPath.nn_model_path', str(models[cname]))
-                        at.set_controller_param(node, 'FollowPath.dynamics_mode', 'neural_network')
+                        at.log(f'--- controller -> {cname} (rate limiter {lim}, history {hist[cname]})')
+                        if models[cname] is None:
+                            at.set_controller_param(node, 'FollowPath.dynamics_mode', 'kinematics')
+                        else:
+                            at.set_controller_param(node, 'FollowPath.nn_model_path', str(models[cname]))
+                            at.set_controller_param(node, 'FollowPath.dynamics_mode', 'neural_network')
+                        at.set_controller_param(node, 'FollowPath.nn_history_steps', int(hist[cname]))
+                        if a.temperature is not None:
+                            at.set_controller_param(node, 'FollowPath.temperature', float(a.temperature))
+                        if a.wz_std is not None:
+                            at.set_controller_param(node, 'FollowPath.wz_std', float(a.wz_std))
                         for pk, pv in LIMITER[lim].items():
                             at.set_controller_param(node, f'FollowPath.{pk}', pv)
                         reload_robust(node)
                         active = cname
+                    pause_point(node, battery, out, a.min_voltage)   # battery swap / PAUSE file
                     pose = aft.current_pose(node)
                     fit = fits(pose, kind, p, amap)
                     for i in range(aft.MAX_REPOSITIONS):
@@ -243,7 +321,7 @@ def main():
                            f'to ({goal[0]:.2f}, {goal[1]:.2f})')
                     t0 = time.time()
                     outcome = aft.drive(node, out, run, goal, record=True)
-                    w.writerow([run, cname, lim, models[cname].name, tname, kind, p.get('R', ''),
+                    w.writerow([run, cname, lim, models[cname].name if models[cname] else 'kinematics', tname, kind, p.get('R', ''),
                                 p.get('side', ''), sweep or '', p.get('d', ''), p.get('bearing', ''),
                                 f'{pose[0]:.4f}', f'{pose[1]:.4f}', f'{math.degrees(pose[2]):.1f}',
                                 f'{goal[0]:.4f}', f'{goal[1]:.4f}', outcome, f'{t0:.3f}', f'{time.time():.3f}'])
