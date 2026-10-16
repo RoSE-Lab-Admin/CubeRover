@@ -1,0 +1,5 @@
+{
+  "off": {"rate_limiter_enabled": false, "ax_max": 2.0, "ax_min": -2.0, "az_max": 7.0},
+  "old_limiter": {"rate_limiter_enabled": true, "ax_max": 0.5, "ax_min": -0.5, "az_max": 0.211666666667, "rate_limiter_ax": 0.5, "rate_limiter_az": 0.211666666667},
+  "fixed_limiter": {"rate_limiter_enabled": true, "ax_max": 2.0, "ax_min": -2.0, "az_max": 7.0, "rate_limiter_ax": 0.5, "rate_limiter_az": 0.211666666667}
+}

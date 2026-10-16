@@ -16,3 +16,8 @@ Arduino_ROS/RoboClaw.h
 /plotting_data/
 /nav2_mppi_controller/
 scripts/planner_offline_test/
+
+# Python bytecode and offline-test outputs
+__pycache__/
+scripts/mppi_offline_test/*results*/
+scripts/mppi_offline_test/results*.log

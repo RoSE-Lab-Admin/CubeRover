@@ -1,0 +1,7 @@
+{
+  "S2a_vxstd0.15": {"vx_std": 0.15},
+  "S2b_vxstd0.15_wzstd0.15": {"vx_std": 0.15, "wz_std": 0.15},
+  "S3a_deadband_w5": {"VelocityDeadbandCritic.cost_weight": 5.0},
+  "S3b_no_dirchange": {"DirectionChangeCritic.enabled": false},
+  "S4a_pathangle_off10": {"PathAngleCritic.offset_from_furthest": 10, "PathFollowCritic.offset_from_furthest": 10}
+}

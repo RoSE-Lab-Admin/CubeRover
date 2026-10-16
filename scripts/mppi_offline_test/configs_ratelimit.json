@@ -1,0 +1,5 @@
+{
+  "current": {"rate_limiter_enabled": false, "ax_max": 2.0, "ax_min": -2.0, "az_max": 7.0},
+  "limiter": {"rate_limiter_enabled": true, "ax_max": 0.5, "ax_min": -0.5, "az_max": 0.211666666667},
+  "limits_only": {"rate_limiter_enabled": false, "ax_max": 0.5, "ax_min": -0.5, "az_max": 0.211666666667}
+}

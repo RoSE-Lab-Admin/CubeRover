@@ -1,0 +1,5 @@
+{
+  "ALIGN": {"PathAlignCritic.enabled": true},
+  "FOLLOW6": {"PathFollowCritic.offset_from_furthest": 6},
+  "ALIGN_FOLLOW6": {"PathAlignCritic.enabled": true, "PathFollowCritic.offset_from_furthest": 6}
+}

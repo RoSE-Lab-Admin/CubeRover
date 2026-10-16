@@ -1,0 +1,7 @@
+{
+  "T0.1": {"temperature": 0.1},
+  "T0.05": {"temperature": 0.05},
+  "T0.1_wzstd0.5": {"temperature": 0.1, "wz_std": 0.5},
+  "T0.1_deadband5": {"temperature": 0.1, "VelocityDeadbandCritic.cost_weight": 5.0},
+  "arcR1.5": {"GridBasedCustom.arc_min_radius": 1.5, "GridBasedCustom.minimum_turning_radius": 1.5}
+}
