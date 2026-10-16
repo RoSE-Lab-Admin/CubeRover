@@ -90,10 +90,12 @@ void Optimizer::getParams()
   getParam(s.sampling_std.wz, "wz_std", 0.4f);
   getParam(s.retry_attempt_limit, "retry_attempt_limit", 1);
   // fork-only: rollouts start from the command the base controller is applying
-  // (not the measured speed) and are rate-limited by ax_max/ax_min/az_max, which
-  // should then match the base controller's acceleration limits
+  // (not the measured speed) and the predicted velocities follow the base
+  // controller's rate limiter (rate_limiter_ax/az); sampling is not limited
   getParam(s.rate_limiter_enabled, "rate_limiter_enabled", false);
   getParam(s.rate_limiter_timeout, "rate_limiter_timeout", 0.5f);
+  getParam(s.rate_limiter_ax, "rate_limiter_ax", 0.5f);
+  getParam(s.rate_limiter_az, "rate_limiter_az", 0.211666666667f);
 
   s.base_constraints.ax_max = std::abs(s.base_constraints.ax_max);
   if (s.base_constraints.ax_min > 0.0) {
@@ -155,6 +157,34 @@ void Optimizer::getParams()
   nn_cfg.horizon    = static_cast<int>(s.time_steps);
   nn_cfg.model_dt   = s.model_dt;
   getParam(nn_cfg.use_cuda, "nn_use_cuda", true, ParameterType::Static);
+  // fork-only: past applied commands (cmd_vel_out) the MLP sees besides the
+  // current step; 0 = off. Static: nn_cfg is a local (see the comment above).
+  getParam(nn_cfg.history_steps, "nn_history_steps", 0, ParameterType::Static);
+  history_steps_ = nn_cfg.mode == NNDynamics::DynamicsMode::NeuralNetwork ?
+    std::max(0, nn_cfg.history_steps) : 0;
+  nn_cfg.history_steps = history_steps_;
+  std::string history_topic;
+  getParam(
+    history_topic, "nn_history_topic", std::string("/roseybot_base_controller/cmd_vel_out"),
+    ParameterType::Static);
+  cmd_out_sub_.reset();
+  if (history_steps_ > 0) {
+    auto node = parent_.lock();
+    cmd_out_sub_ = node->create_subscription<geometry_msgs::msg::TwistStamped>(
+      history_topic, rclcpp::SystemDefaultsQoS(),
+      [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
+        const double now = std::chrono::duration<double>(
+          std::chrono::steady_clock::now().time_since_epoch()).count();
+        std::lock_guard<std::mutex> lock(cmd_out_mutex_);
+        cmd_out_hist_.push_back({now, msg->twist.linear.x, msg->twist.angular.z});
+        while (cmd_out_hist_.size() > 50) {
+          cmd_out_hist_.pop_front();
+        }
+      });
+    RCLCPP_INFO(
+      logger_, "NNDynamics input history: %d past steps from %s", history_steps_,
+      history_topic.c_str());
+  }
 
   if (nn_cfg.mode == NNDynamics::DynamicsMode::NeuralNetwork) {
     int width;
@@ -282,6 +312,10 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
     have_last_eval_ = true;
   }
 
+  if (history_steps_ > 0) {
+    pushHistory();
+  }
+
   prepare(robot_pose, robot_speed, plan, goal, goal_checker);
 
   do {
@@ -294,12 +328,10 @@ geometry_msgs::msg::TwistStamped Optimizer::evalControl(
 
   if (settings_.rate_limiter_enabled) {
     // what the base controller will apply from this command over the next step
-    const auto & c = settings_.constraints;
-    const float dt = settings_.model_dt;
-    applied_vx_ += std::clamp(
-      static_cast<float>(control.twist.linear.x) - applied_vx_, -c.ax_max * dt, c.ax_max * dt);
-    applied_wz_ += std::clamp(
-      static_cast<float>(control.twist.angular.z) - applied_wz_, -c.az_max * dt, c.az_max * dt);
+    const float dvx = settings_.rate_limiter_ax * settings_.model_dt;
+    const float dwz = settings_.rate_limiter_az * settings_.model_dt;
+    applied_vx_ += std::clamp(static_cast<float>(control.twist.linear.x) - applied_vx_, -dvx, dvx);
+    applied_wz_ += std::clamp(static_cast<float>(control.twist.angular.z) - applied_wz_, -dwz, dwz);
   }
 
   if (settings_.shift_control_sequence) {
@@ -437,6 +469,50 @@ void Optimizer::updateStateVelocities(
 {
   updateInitialStateVelocities(state);
   propagateStateVelocitiesFromInitials(state);
+  if (settings_.rate_limiter_enabled) {
+    applyRateLimiter(state);
+  }
+}
+
+void Optimizer::pushHistory()
+{
+  // the last history_steps applied commands, oldest first; none (zeros) when the
+  // newest is older than the base controller's command timeout (rover stopped)
+  std::vector<std::array<float, 2>> hist;
+  const double now = std::chrono::duration<double>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  {
+    std::lock_guard<std::mutex> lock(cmd_out_mutex_);
+    if (!cmd_out_hist_.empty() && now - cmd_out_hist_.back()[0] <= settings_.rate_limiter_timeout) {
+      const size_t n = std::min(cmd_out_hist_.size(), static_cast<size_t>(history_steps_));
+      for (size_t i = cmd_out_hist_.size() - n; i < cmd_out_hist_.size(); ++i) {
+        hist.push_back(
+          {static_cast<float>(cmd_out_hist_[i][1]), static_cast<float>(cmd_out_hist_[i][2])});
+      }
+    }
+  }
+  nn_dynamics_->setHistory(hist);
+}
+
+void Optimizer::applyRateLimiter(models::State & state) const
+{
+  // The rollout velocities become what the base controller would apply: each
+  // step moves toward the sampled command (cvx/cwz, already within the normal
+  // ax/az constraints) by at most rate_limiter_ax/az * dt. The sampled commands
+  // themselves are left alone, so a hard turn command stays possible and the
+  // learned dynamics (trained on cmd_vel_out) see its realistic build-up.
+  const float dvx = settings_.rate_limiter_ax * settings_.model_dt;
+  const float dwz = settings_.rate_limiter_az * settings_.model_dt;
+  const unsigned int B = state.vx.shape(0), H = state.vx.shape(1);
+  for (unsigned int i = 0; i < B; ++i) {
+    float vx = state.vx(i, 0), wz = state.wz(i, 0);
+    for (unsigned int j = 1; j < H; ++j) {
+      vx += std::clamp(state.cvx(i, j - 1) - vx, -dvx, dvx);
+      wz += std::clamp(state.cwz(i, j - 1) - wz, -dwz, dwz);
+      state.vx(i, j) = vx;
+      state.wz(i, j) = wz;
+    }
+  }
 }
 
 void Optimizer::updateInitialStateVelocities(
@@ -444,6 +520,7 @@ void Optimizer::updateInitialStateVelocities(
 {
   // rate limiter on: start from the command being applied, which the learned
   // dynamics take as input (trained on cmd_vel_out), not from the measured speed
+  // (see applyRateLimiter)
   const bool rl = settings_.rate_limiter_enabled;
   xt::noalias(xt::view(state.vx, xt::all(), 0)) =
     rl ? applied_vx_ : static_cast<float>(state.speed.linear.x);

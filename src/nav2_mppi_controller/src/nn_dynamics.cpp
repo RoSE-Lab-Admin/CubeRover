@@ -9,6 +9,7 @@
 // Compile without -ffast-math so libtorch NaN/Inf checks are not optimised away.
 #pragma GCC optimize("no-fast-math")
 
+#include <algorithm>
 #include "nav2_mppi_controller/nn_dynamics.hpp"
 
 #include <cmath>
@@ -64,19 +65,32 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
     fmean_dev_ = torch::tensor({cfg_.lin_fmean[0], cfg_.lin_fmean[1]}, torch::kFloat32).to(device_);
     fstd_dev_  = torch::tensor({cfg_.lin_fstd[0],  cfg_.lin_fstd[1]},  torch::kFloat32).to(device_);
 
+    // fork-only input history: the model records how many past steps it was
+    // trained with (dynamics_retrain MLP.history_steps; older models have none = 0)
+    const int model_hist = module_.hasattr("history_steps") ?
+      static_cast<int>(module_.attr("history_steps").toInt()) : 0;
+    if (model_hist != cfg_.history_steps) {
+      RCLCPP_ERROR(
+        logger_, "NNDynamics: '%s' was trained with %d history steps but nn_history_steps is %d "
+        "-- will use pure kinematics", cfg_.model_path.c_str(), model_hist, cfg_.history_steps);
+      enabled_ = false;
+      return;
+    }
+    hist_host_.assign(static_cast<size_t>(2 * cfg_.history_steps), 0.0f);
+
     // Warm-up so CUDA kernels are JIT-compiled before graph capture / first real call.
     {
       torch::NoGradGuard no_grad;
       auto dummy = torch::zeros(
         {static_cast<int64_t>(cfg_.batch_size), static_cast<int64_t>(cfg_.horizon), 2},
         torch::TensorOptions().dtype(torch::kFloat32).device(device_));
-      arLoop(dummy);
+      arLoop(dummy, torch::zeros({cfg_.history_steps, 2}, dummy.options()));
     }
 
     enabled_ = true;
     RCLCPP_INFO(
-      logger_, "NNDynamics: mode=neural_network  loaded '%s'  batch=%u  horizon=%d  device=%s",
-      cfg_.model_path.c_str(), cfg_.batch_size, cfg_.horizon,
+      logger_, "NNDynamics: mode=neural_network  loaded '%s'  batch=%u  horizon=%d  history=%d  device=%s",
+      cfg_.model_path.c_str(), cfg_.batch_size, cfg_.horizon, cfg_.history_steps,
       device_.is_cuda() ? "cuda" : "cpu");
   } catch (const c10::Error & e) {
     RCLCPP_ERROR(
@@ -101,7 +115,20 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
   }
 }
 
-torch::Tensor NNDynamics::arLoop(const torch::Tensor & cmd) const
+void NNDynamics::setHistory(const std::vector<std::array<float, 2>> & hist)
+{
+  const size_t L = static_cast<size_t>(cfg_.history_steps);
+  hist_host_.assign(2 * L, 0.0f);
+  // right-aligned: the newest entry is the step right before the rollout
+  const size_t n = std::min(L, hist.size());
+  for (size_t i = 0; i < n; ++i) {
+    const auto & h = hist[hist.size() - n + i];
+    hist_host_[2 * (L - n + i)] = h[0];
+    hist_host_[2 * (L - n + i) + 1] = h[1];
+  }
+}
+
+torch::Tensor NNDynamics::arLoop(const torch::Tensor & cmd, const torch::Tensor & hist) const
 {
   // cmd: (batch, horizon, 2) raw [vx_cmd, wz_cmd]. Returns (batch, horizon, 3)
   // robot-frame [rx, ry, rth], matching the training-side ar_rollout's
@@ -116,12 +143,23 @@ torch::Tensor NNDynamics::arLoop(const torch::Tensor & cmd) const
   auto ys  = torch::zeros({B}, opts);
   auto ths = torch::zeros({B}, opts);
 
+  // fork-only input history: the MLP input at step k is [vx, wz] of steps
+  // k-L .. k (oldest first, as in dynamics_retrain), steps < 0 from hist (L,2)
+  const int64_t L = cfg_.history_steps;
+  torch::Tensor full_n;
+  if (L > 0) {
+    auto full = torch::cat({hist.unsqueeze(0).expand({B, L, 2}), cmd}, 1);  // (B,L+H,2)
+    full_n = (full - fmean_dev_) / fstd_dev_;
+  }
+
   std::vector<torch::Tensor> out;
   out.reserve(static_cast<size_t>(H));
 
   for (int64_t k = 0; k < H; ++k) {
     auto cmd_k = cmd.select(1, k);                  // (B,2)
-    auto x_in  = (cmd_k - fmean_dev_) / fstd_dev_;   // (B,2) normalized
+    auto x_in  = L > 0 ?
+      full_n.narrow(1, k, L + 1).reshape({B, 2 * (L + 1)}) :   // (B,2(L+1)) normalized
+      (cmd_k - fmean_dev_) / fstd_dev_;              // (B,2) normalized
     auto pred  = module_.forward({x_in}).toTensor(); // (B,2) [corr_fwd, corr_yaw]
 
     auto corrected_fwd = cmd_k.select(1, 0) * cfg_.model_dt + pred.select(1, 0);
@@ -142,18 +180,21 @@ void NNDynamics::captureGraph()
   static_input_ = torch::zeros(
     {static_cast<int64_t>(cfg_.batch_size), static_cast<int64_t>(cfg_.horizon), 2},
     torch::TensorOptions().dtype(torch::kFloat32).device(device_));
+  static_hist_ = torch::zeros(
+    {static_cast<int64_t>(cfg_.history_steps), 2},
+    torch::TensorOptions().dtype(torch::kFloat32).device(device_));
 
   torch::NoGradGuard no_grad;
   c10::cuda::CUDAStream capture_stream = c10::cuda::getStreamFromPool();
   c10::cuda::CUDAStreamGuard guard(capture_stream);
 
   for (int i = 0; i < 3; ++i) {
-    arLoop(static_input_);
+    arLoop(static_input_, static_hist_);
   }
   torch::cuda::synchronize();
 
   graph_.capture_begin();
-  static_output_ = arLoop(static_input_);
+  static_output_ = arLoop(static_input_, static_hist_);
   graph_.capture_end();
 
   // The output buffer captured inside capture_begin/capture_end is NOT yet
@@ -290,13 +331,19 @@ void NNDynamics::integrateNeuralNetwork(
     torch::NoGradGuard no_grad;
     // the captured graph has the fixed rollout batch size; any other batch
     // (e.g. the single optimal sequence for visualization) runs eagerly
+    auto hist_cpu = torch::from_blob(
+      const_cast<float *>(hist_host_.data()), {static_cast<int64_t>(cfg_.history_steps), 2},
+      torch::kFloat32).clone();
     if (graph_captured_ && batch_size == static_cast<int>(cfg_.batch_size)) {
       static_input_.copy_(cmd_cpu.to(device_));
+      if (cfg_.history_steps > 0) {
+        static_hist_.copy_(hist_cpu.to(device_));
+      }
       graph_.replay();
       rxyz_cpu = static_output_.to(torch::kCPU).contiguous();
     } else {
       auto cmd_dev = cmd_cpu.to(device_);
-      rxyz_cpu = arLoop(cmd_dev).to(torch::kCPU).contiguous();
+      rxyz_cpu = arLoop(cmd_dev, hist_cpu.to(device_)).to(torch::kCPU).contiguous();
     }
   }
 

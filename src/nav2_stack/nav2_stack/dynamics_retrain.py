@@ -43,10 +43,11 @@ COL_W = 10       # per-sample training weight (1.0 unless failure weighting is o
 N_COLS = 11
 
 FUTURE_FEAT_COLS = [COL_VX_CMD, COL_WZ_CMD]
-LOOKBACK = 0     # v11 family: no past features, no history window
+LOOKBACK = 0     # past cmd_vel_out steps fed to the MLP besides the current one (set_history();
+                 # 0 = v11 family, no history window). Never used by the linear model.
 HORIZON = 25     # matches Nav2 MPPI's time_steps=25
 DT = 0.1
-IN_DIM_AR = 2    # LOOKBACK*0 + 2 future features
+IN_DIM_AR = 2    # 2 * (LOOKBACK + 1): [vx, wz] of steps k-LOOKBACK .. k, oldest first
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MAX_EPOCHS = 300
@@ -59,6 +60,15 @@ RIDGE_LAMBDA = 1.0
 
 STAT_VX, STAT_WZ = 0.02, 0.02
 MIN_SEG_LEN = LOOKBACK + HORIZON + 1
+
+
+def set_history(steps: int):
+    """Number of past cmd_vel_out steps the MLP sees besides the current one
+    (nav2_param2.yaml FollowPath.nn_history_steps). Must match the controller."""
+    global LOOKBACK, IN_DIM_AR, MIN_SEG_LEN
+    LOOKBACK = max(0, int(steps))
+    IN_DIM_AR = 2 * (LOOKBACK + 1)
+    MIN_SEG_LEN = LOOKBACK + HORIZON + 1
 GAP_FACTOR = 3.0
 MAX_POS_JUMP = 0.05
 AVG_WINDOW_S = 0.1
@@ -381,6 +391,9 @@ class MLP(nn.Module):
             layers += [nn.Linear(hidden, hidden), nn.LayerNorm(hidden), nn.ReLU()]
         layers.append(nn.Linear(hidden, out_dim))
         self.net = nn.Sequential(*layers)
+        # past steps in the input (exported with the model; NNDynamics checks it
+        # against FollowPath.nn_history_steps)
+        self.history_steps: int = (in_dim // 2) - 1
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
@@ -448,7 +461,12 @@ def train_mlp_ar_teacher(hidden: int, n_layers: int, train_segs, val_segs, norm:
 
     model = MLP(IN_DIM_AR, 2, hidden, n_layers).to(DEVICE)
     if init_state_dict is not None:
-        model.load_state_dict(init_state_dict)
+        w0 = init_state_dict.get('net.0.weight')
+        if w0 is not None and tuple(w0.shape) != (hidden, IN_DIM_AR):
+            print(f"[dynamics_retrain] warm-start model has input size {w0.shape[1]}, this one "
+                  f"{IN_DIM_AR} (nn_history_steps changed?) -- training from a blank init", flush=True)
+        else:
+            model.load_state_dict(init_state_dict)
     opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=MAX_EPOCHS)
     best_val, best_state, patience = float("inf"), None, 0
@@ -460,7 +478,8 @@ def train_mlp_ar_teacher(hidden: int, n_layers: int, train_segs, val_segs, norm:
         target = pointwise_velocity_target(window)
         rows_x, rows_y, rows_w = [], [], []
         for k in range(HORIZON):
-            rows_x.append(fut_n[:, L + k])
+            # [vx, wz] of steps k-L .. k (oldest first), flattened -- same order as NNDynamics
+            rows_x.append(fut_n[:, k:L + k + 1].reshape(fut_n.shape[0], -1))
             rows_y.append(target[:, k, :])
             rows_w.append(window[:, L + k, COL_W])
         x = torch.cat(rows_x, dim=0)
@@ -563,7 +582,8 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
            warm_start: bool, subset: bool, subset_fraction: float,
            fmean: np.ndarray, fstd: np.ndarray,
            warm_start_path: Optional[Path] = None, save_path: Optional[Path] = None,
-           failure_weighting: bool = False, symmetry_augmentation: bool = False) -> dict:
+           failure_weighting: bool = False, symmetry_augmentation: bool = False,
+           history_steps: int = 0) -> dict:
     """
     Retrains a model (model_type="linear" or "mlp", width required for "mlp")
     on bags in bag_dir, always including new_bag_path plus either every other
@@ -587,6 +607,11 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
         live controller via `ros2 param set`, since linear weights are ROS2
         parameters, not a file.
     """
+    # history only for the MLP (the linear model's weights are a fixed 2x2 in the yaml)
+    set_history(history_steps if model_type == "mlp" else 0)
+    if LOOKBACK:
+        print(f"[dynamics_retrain] history: the MLP sees cmd_vel_out of the current step and the "
+              f"{LOOKBACK} before it ({IN_DIM_AR} inputs)", flush=True)
     from rosbags.typesys import Stores, get_typestore
     try:
         typestore = get_typestore(Stores.ROS2_JAZZY)

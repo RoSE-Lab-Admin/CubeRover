@@ -95,6 +95,9 @@ public:
     // W is row-major [out, in] (i.e. {W00, W01, W10, W11}).
     std::array<float, 4> lin_weight{};
     std::array<float, 2> lin_bias{};
+    /// fork-only: past applied commands (cmd_vel_out) the MLP sees besides the current
+    /// step (FollowPath.nn_history_steps; 0 = off). Must match the model's history_steps.
+    int history_steps{0};
   };
 
   /**
@@ -114,6 +117,12 @@ public:
    * @param state         Current MPPI state (pose, speed, noised cmd arrays)
    * @param model_dt      Timestep in seconds
    */
+  /**
+   * @brief fork-only: the last cfg.history_steps applied commands [vx, wz], oldest
+   * first, used as the input history before the first rollout step (zeros if missing).
+   */
+  void setHistory(const std::vector<std::array<float, 2>> & hist);
+
   void integrateTrajectories(
     models::Trajectories & trajectories,
     const models::State & state,
@@ -148,7 +157,7 @@ private:
   /// (batch, horizon, 3) [rx, ry, rth] tensor. Shared by graph capture,
   /// warmup, and the CPU eager fallback so there is one source of truth for
   /// the math.
-  torch::Tensor arLoop(const torch::Tensor & cmd) const;
+  torch::Tensor arLoop(const torch::Tensor & cmd, const torch::Tensor & hist) const;
 
   /// One-time CUDA graph capture of arLoop() over static_input_. Must be
   /// followed by exactly one replay() before static_output_ is valid — the
@@ -171,6 +180,8 @@ private:
   mutable at::cuda::CUDAGraph graph_;
   mutable torch::Tensor static_input_;   // (batch, horizon, 2), copy_() target each call
   mutable torch::Tensor static_output_;  // (batch, horizon, 3) [rx, ry, rth]
+  mutable torch::Tensor static_hist_;    // (history_steps, 2), copy_() target each call
+  std::vector<float> hist_host_;         // (history_steps * 2) oldest first, from setHistory()
   bool graph_captured_{false};
 
   rclcpp::Logger logger_;

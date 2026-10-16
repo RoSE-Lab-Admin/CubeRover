@@ -38,10 +38,14 @@ struct OptimizerSettings
   unsigned int iteration_count{0u};
   bool shift_control_sequence{false};
   size_t retry_attempt_limit{0};
-  // fork-only: model the base controller's rate limiter (see
-  // Optimizer::updateInitialStateVelocities); the limits are ax_max/ax_min/az_max
+  // fork-only: model the base controller's rate limiter in the rollouts (see
+  // Optimizer::updateStateVelocities). Only the predicted (applied) velocities
+  // are limited -- the sampled commands are not, so MPPI can still try hard
+  // turn commands and sees them build up at the base controller's rate.
   bool rate_limiter_enabled{false};
   float rate_limiter_timeout{0.5f};  // s; base controller cmd_vel_timeout
+  float rate_limiter_ax{0.5f};       // m/s^2; base controller linear.x.max_acceleration
+  float rate_limiter_az{0.211666666667f};  // rad/s^2; angular.z.max_acceleration
 };
 
 }  // namespace mppi::models

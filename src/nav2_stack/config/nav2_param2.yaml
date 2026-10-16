@@ -61,17 +61,20 @@ controller_server:
       vx_max: 0.2 # max/min speeds # previously 0.4
       vx_min: -0.2 # previously -0.4
       wz_max: 0.63 # # previously 5
-      ax_max: 2.0 # max/min accelerations
+      ax_max: 2.0 # max/min accelerations (sampling; keep loose, also with rate_limiter_enabled)
       ax_min: -2.0
       az_max: 7.0
       # fork-only: model the base controller's rate limiter (cmd_vel -> cmd_vel_out). When true,
       # rollouts start from the command the base controller is applying (tracked from our own sent
       # commands; reset after rate_limiter_timeout without a command) instead of the measured speed,
-      # and are rate-limited by ax_max/ax_min/az_max. To use it, ALSO set those three to the Pi's
-      # base controller limits: ax_max 0.5, ax_min -0.5, az_max 0.211666666667 (10/09). Sim (10/09):
-      # predictions 3.6x closer to what the rover drove, commands 10x smoother; not yet tested live.
-      rate_limiter_enabled: false
+      # and the PREDICTED velocities ramp at most rate_limiter_ax/az (the Pi's base controller
+      # limits) toward the sampled commands. Keep ax_max/ax_min/az_max loose (2.0/-2.0/7.0): the
+      # first version clamped the sampling to the limiter too (10/13) and MPPI then never tried a
+      # hard turn -- arcs held 2/8 vs 6/8 without the limiter, although predictions were 2.7x better.
+      rate_limiter_enabled: false # off (10/14): with the limiter, arcs held 0-4/8 vs 6/8 without (fixed tests 10/13-14)
       rate_limiter_timeout: 0.5 # s; base controller cmd_vel_timeout
+      rate_limiter_ax: 0.5 # m/s^2; Pi linear.x.max_acceleration
+      rate_limiter_az: 0.211666666667 # rad/s^2; Pi angular.z.max_acceleration
       iteration_count: 1
       temperature: 0.1 # was 0.3; selectiveness of trajectories by their costs (lower = favour the best samples more, less averaging toward straight)
       gamma: 0.015 # guide says you prob wont need to change
@@ -80,10 +83,14 @@ controller_server:
       # ── Dynamics correction ──────────────────────────────────────────────────
       # dynamics_mode: "kinematics" (default, no correction) | "linear" | "neural_network"
       # Set once, requires a relaunch to change (not a live-reconfigurable param).
-      dynamics_mode: "neural_network"
+      dynamics_mode: "neural_network" # ("kinematics" for the 10/14 kinematics baseline trials)
       # nn_hidden_width: one of 8/16/32/64/128 -- only used when dynamics_mode == "neural_network".
       # Selects which exported model to load: models/ar_mlp/mlp<width>_ar_velocity_teacher.pt
       nn_hidden_width: 128
+      # fork-only: past applied commands (cmd_vel_out) the MLP sees besides the current step
+      # (0 = off: the current command only). dynamics_retrain/autonomous_trials train with the
+      # same value; a model trained with a different value is refused (kinematics fallback).
+      nn_history_steps: 0
       # nn_model_path: absolute path to a TorchScript .pt file, overrides the
       # nn_hidden_width-derived default path above.
       #nn_model_path: "/path/to/custom_model_scripted.pt"

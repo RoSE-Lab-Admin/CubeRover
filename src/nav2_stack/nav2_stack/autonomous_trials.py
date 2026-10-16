@@ -322,6 +322,8 @@ def parse_nav2_param_yaml(text: str) -> dict:
     return {
         "dynamics_mode": grab_scalar("dynamics_mode", "kinematics"),
         "nn_hidden_width": int(grab_scalar("nn_hidden_width", "64")),
+        # past cmd_vel_out steps the MLP sees (training must match the controller)
+        "nn_history_steps": int(grab_scalar("nn_history_steps", "0")),
         "weight": grab_array("linear_model.weight", 4),
         "bias": grab_array("linear_model.bias", 2),
         "fmean": grab_array("linear_model.fmean", 2),
@@ -467,7 +469,8 @@ def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_p
             subset_fraction=retrain_cfg["subset_fraction"],
             fmean=retrain_cfg["fmean"], fstd=retrain_cfg["fstd"],
             failure_weighting=retrain_cfg["failure_weighting"],
-            symmetry_augmentation=retrain_cfg["symmetry_augmentation"])
+            symmetry_augmentation=retrain_cfg["symmetry_augmentation"],
+            history_steps=retrain_cfg["history_steps"])
     except Exception as e:
         log(f"WARNING: retrain failed ({e}) -- keeping the currently deployed weights")
         return
@@ -522,7 +525,8 @@ def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new
             fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
             warm_start_path=fs_cfg["current_weights_path"], save_path=save_path,
             failure_weighting=fs_cfg["failure_weighting"],
-            symmetry_augmentation=fs_cfg["symmetry_augmentation"])
+            symmetry_augmentation=fs_cfg["symmetry_augmentation"],
+            history_steps=fs_cfg["history_steps"])
     except Exception as e:
         log(f"WARNING: train_from_scratch retrain failed ({e}) -- keeping the "
             f"currently deployed from-scratch weights")
@@ -622,6 +626,7 @@ def main():
             "fstd": np.array(parsed["fstd"], dtype=np.float32),
             "failure_weighting": args.failure_weighting,
             "symmetry_augmentation": args.symmetry_augmentation,
+            "history_steps": parsed["nn_history_steps"],
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
         fs_cfg["current_weights_path"] = latest_from_scratch_checkpoint(
@@ -653,6 +658,7 @@ def main():
                 "fstd": np.array(parsed["fstd"], dtype=np.float32),
                 "failure_weighting": args.failure_weighting,
             "symmetry_augmentation": args.symmetry_augmentation,
+            "history_steps": parsed["nn_history_steps"],
             }
             log(f"online retraining enabled: model={model_type}"
                 f"{retrain_cfg['width'] or ''}  warm_start={args.warm_start}  "

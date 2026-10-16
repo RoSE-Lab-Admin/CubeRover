@@ -15,7 +15,10 @@
 #ifndef NAV2_MPPI_CONTROLLER__OPTIMIZER_HPP_
 #define NAV2_MPPI_CONTROLLER__OPTIMIZER_HPP_
 
+#include <array>
 #include <chrono>
+#include <deque>
+#include <mutex>
 #include <string>
 #include <memory>
 
@@ -195,6 +198,11 @@ protected:
   void updateInitialStateVelocities(models::State & state) const;
 
   /**
+   * @brief fork-only: limit the rollout velocities like the base controller (rate_limiter_ax/az)
+   */
+  void applyRateLimiter(models::State & state) const;
+
+  /**
    * @brief predict velocities in state using model
    * for time horizon equal to timesteps
    * @param state fill state
@@ -266,6 +274,14 @@ protected:
   float applied_wz_{0.0f};
   std::chrono::steady_clock::time_point last_eval_{};
   bool have_last_eval_{false};
+
+  // fork-only input history for the learned dynamics (nn_history_steps): the
+  // applied commands the base controller reports on cmd_vel_out
+  int history_steps_{0};
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_out_sub_;
+  std::mutex cmd_out_mutex_;
+  std::deque<std::array<double, 3>> cmd_out_hist_;  // steady-clock receive time [s], vx, wz
+  void pushHistory();
 
   ParametersHandler * parameters_handler_;
   CriticManager critic_manager_;
