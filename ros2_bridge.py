@@ -19,9 +19,11 @@ DOMAIN_PI   = 1   # rover Pi
 
 # Topics to never bridge from Pi→Main (internal ROS2 overhead or would create loops)
 SKIP_TOPICS = {'/parameter_events', '/rosout', '/cmd_vel', '/clock'}
+LATCHED_TOPICS = {'/tf_static', '/robot_description'}
 
 def qos_for(topic: str) -> QoSProfile:
-    if topic == '/tf_static':
+
+    if topic in LATCHED_TOPICS:
         return QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
                           durability=DurabilityPolicy.TRANSIENT_LOCAL, depth=100)
     return QoSProfile(reliability=ReliabilityPolicy.RELIABLE,
