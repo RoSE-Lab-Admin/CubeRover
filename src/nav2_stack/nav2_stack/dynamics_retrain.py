@@ -583,7 +583,7 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
            fmean: np.ndarray, fstd: np.ndarray,
            warm_start_path: Optional[Path] = None, save_path: Optional[Path] = None,
            failure_weighting: bool = False, symmetry_augmentation: bool = False,
-           history_steps: int = 0) -> dict:
+           history_steps: int = 0, bags: Optional[List[Path]] = None) -> dict:
     """
     Retrains a model (model_type="linear" or "mlp", width required for "mlp")
     on bags in bag_dir, always including new_bag_path plus either every other
@@ -599,6 +599,10 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
       Both default to the shared installed path (found via ament_index, not
       the source tree) when not given -- unchanged behavior for the normal
       retrain_dynamics flow.
+
+    bags: train on exactly these bag directories instead of every bag found
+    under bag_dir. Used by autonomous_trials' async training, which runs while
+    the next trial is still recording a (half-written) bag into bag_dir.
 
     Returns a dict:
       - model_type="mlp": {"exported_path": <str>}.
@@ -618,7 +622,7 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
     except Exception:
         typestore = get_typestore(Stores.ROS2_HUMBLE)
 
-    all_bags = get_bags(bag_dir)
+    all_bags = list(bags) if bags is not None else get_bags(bag_dir)
     loaded = _load_bags(all_bags, typestore, read_outcomes(bag_dir), failure_weighting)
     failed_bags = [b for b in all_bags if loaded[b][1] and b != new_bag_path]
     other_bags = [b for b in all_bags if b != new_bag_path and b not in failed_bags]

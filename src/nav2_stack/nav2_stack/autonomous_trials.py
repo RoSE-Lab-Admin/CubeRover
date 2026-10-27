@@ -19,6 +19,7 @@ it works standalone too if Nav2 is already up elsewhere.
 import argparse
 import csv
 import math
+import os
 import re
 import shutil
 import signal
@@ -442,6 +443,21 @@ def reload_controller(node: PoseWatcher):
     log(f"controller_server reloaded in {time.monotonic() - t0:.1f}s")
 
 
+def record_deployed_model(bag_dir: Path, bag_name: str, fs_cfg: dict):
+    """Append which model drove this trial to bag_dir/deployed_models.csv
+    (train_from_scratch only). Serially that is always the model trained after
+    the previous trial, but with --async-training it is the one from two trials
+    back, so the analysis scripts read this file instead of assuming."""
+    path = bag_dir / "deployed_models.csv"
+    new = not path.exists()
+    model = fs_cfg["current_weights_path"]
+    with open(path, "a") as f:
+        if new:
+            f.write("bag,dynamics_mode,model\n")
+        f.write(f"{bag_name},{'kinematics' if model is None else 'neural_network'},"
+                f"{'' if model is None else Path(model).name}\n")
+
+
 def record_outcome(bag_dir: Path, bag_name: str, outcome: str, goal_xy):
     """Append this trial's outcome to bag_dir/trial_outcomes.csv -- read by
     dynamics_retrain to always train on failed trials and (with
@@ -504,6 +520,32 @@ def latest_from_scratch_checkpoint(weights_dir: Path, width: int):
     return best
 
 
+def _from_scratch_retrain_kwargs(fs_cfg: dict, bag_dir: Path, new_bag_path: Path,
+                                 save_path: Path, bags=None) -> dict:
+    """dynamics_retrain.retrain() arguments for the next from-scratch iteration:
+    warm-started from the currently deployed checkpoint, or a blank init if
+    there is none yet."""
+    return dict(
+        bag_dir=bag_dir, new_bag_path=new_bag_path,
+        model_type="mlp", width=fs_cfg["width"],
+        warm_start=fs_cfg["current_weights_path"] is not None, subset=fs_cfg["subset"],
+        subset_fraction=fs_cfg["subset_fraction"],
+        fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
+        warm_start_path=fs_cfg["current_weights_path"], save_path=save_path,
+        failure_weighting=fs_cfg["failure_weighting"],
+        symmetry_augmentation=fs_cfg["symmetry_augmentation"],
+        history_steps=fs_cfg["history_steps"], bags=bags)
+
+
+def deploy_from_scratch(node: PoseWatcher, fs_cfg: dict, model_path: Path):
+    is_first = fs_cfg["current_weights_path"] is None
+    fs_cfg["current_weights_path"] = Path(model_path)
+    push_model_path(node, fs_cfg["current_weights_path"])
+    if is_first:
+        push_dynamics_mode(node, "neural_network")
+    reload_controller(node)
+
+
 def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new_bag_path: Path,
                               trial_label: str):
     """Called after every post-bootstrap trial once train_from_scratch is
@@ -518,25 +560,84 @@ def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new
         f"mlp{fs_cfg['width']} on data in {bag_dir} -> {save_path}")
     try:
         result = dynamics_retrain.retrain(
-            bag_dir=bag_dir, new_bag_path=new_bag_path,
-            model_type="mlp", width=fs_cfg["width"],
-            warm_start=not is_first, subset=fs_cfg["subset"],
-            subset_fraction=fs_cfg["subset_fraction"],
-            fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
-            warm_start_path=fs_cfg["current_weights_path"], save_path=save_path,
-            failure_weighting=fs_cfg["failure_weighting"],
-            symmetry_augmentation=fs_cfg["symmetry_augmentation"],
-            history_steps=fs_cfg["history_steps"])
+            **_from_scratch_retrain_kwargs(fs_cfg, bag_dir, new_bag_path, save_path))
     except Exception as e:
         log(f"WARNING: train_from_scratch retrain failed ({e}) -- keeping the "
             f"currently deployed from-scratch weights")
         return
 
-    fs_cfg["current_weights_path"] = Path(result["exported_path"])
-    push_model_path(node, fs_cfg["current_weights_path"])
-    if is_first:
-        push_dynamics_mode(node, "neural_network")
-    reload_controller(node)
+    deploy_from_scratch(node, fs_cfg, Path(result["exported_path"]))
+
+
+def finished_bags(bag_dir: Path):
+    """Every bag directory under bag_dir right now, same selection and order as
+    dynamics_retrain.get_bags(). Duplicated here so the async path never
+    imports dynamics_retrain (torch) into this process: the training runs in
+    its own process and this one should hold no CUDA context of its own."""
+    def sort_key(p):
+        nums = re.findall(r"\d+", p.name)
+        return int(nums[0]) if nums else -1
+    return sorted({p.parent for p in bag_dir.rglob("metadata.yaml")}, key=sort_key)
+
+
+def start_background_from_scratch(fs_cfg: dict, bag_dir: Path, new_bag_path: Path,
+                                  trial_label: str) -> dict:
+    """--async-training: start the next from-scratch iteration in a background
+    process and return right away, so the next trial can be planned and driven
+    meanwhile (still on the previously deployed model). Trains on exactly the
+    bags finished so far -- the next trial's bag, recorded into the same
+    bag_dir while this runs, is never picked up half-written. Writes to a
+    .partial file that finish_background_from_scratch() renames, so an
+    aborted run never leaves a truncated mlp*_trialNN.pt for the resume logic
+    to pick up."""
+    from nav2_stack.async_retrain import BackgroundRetrain
+    save_path = fs_cfg["weights_dir"] / f"mlp{fs_cfg['width']}_{trial_label}.pt"
+    tmp_path = save_path.with_name(save_path.name + ".partial")
+    log_path = fs_cfg["weights_dir"] / f"train_{trial_label}.log"
+    bags = finished_bags(bag_dir)
+    current = fs_cfg["current_weights_path"]
+    job = BackgroundRetrain(
+        _from_scratch_retrain_kwargs(fs_cfg, bag_dir, new_bag_path, tmp_path, bags), log_path)
+    log(f"async training: {'training from a blank init' if current is None else 'continuing'} "
+        f"mlp{fs_cfg['width']} on {len(bags)} bags -> {save_path.name} in the background "
+        f"(log: {log_path}); the next trial drives on "
+        f"{'kinematics' if current is None else Path(current).name}")
+    return {"job": job, "label": trial_label, "save_path": save_path, "tmp_path": tmp_path}
+
+
+def finish_background_from_scratch(node: PoseWatcher, fs_cfg: dict, pending):
+    """--async-training: wait for the background iteration started after the
+    previous trial (if it is still running) and deploy it, so the coming trial
+    drives on the model trained through the trial before the one that just
+    ended. A failed iteration keeps the currently deployed weights, as in the
+    serial path."""
+    if pending is None:
+        return
+    job, label = pending["job"], pending["label"]
+    t0 = time.monotonic()
+    if not job.done():
+        log(f"async training: waiting for {label}'s model (training for {job.elapsed():.0f} s so far)")
+    try:
+        job.wait()
+    except RuntimeError as e:
+        pending["tmp_path"].unlink(missing_ok=True)
+        log(f"WARNING: async training of {label} failed ({e}) -- keeping the currently "
+            f"deployed from-scratch weights")
+        return
+    waited = time.monotonic() - t0
+    os.replace(pending["tmp_path"], pending["save_path"])
+    log(f"async training: {label} finished after {job.elapsed():.0f} s "
+        f"({f'waited {waited:.0f} s for it' if waited >= 1.0 else 'no waiting'}) -- "
+        f"deploying {pending['save_path'].name}")
+    deploy_from_scratch(node, fs_cfg, pending["save_path"])
+
+
+def abort_background_from_scratch(pending):
+    if pending is None or pending["job"].done():
+        return
+    log(f"async training: stopping the unfinished background training of {pending['label']}")
+    pending["job"].kill()
+    pending["tmp_path"].unlink(missing_ok=True)
 
 
 def run_gp_explorer(gp_explorer_path: Path, bag_dir: Path, name: str) -> bool:
@@ -593,6 +694,18 @@ def main():
                         help="When retraining, also train on mirrored copies of the data "
                              "(left/right x0.5, forward/backward x0.25, both x0.25; see "
                              "dynamics_retrain.SYM_WEIGHTS). Default: false")
+    parser.add_argument("--async-training", default="false", type=parse_bool,
+                        help="train_from_scratch only: train in a background process while the "
+                             "next trial is planned and driven, instead of between trials. "
+                             "Trial i then drives on the model trained through trial i-2 "
+                             "(one trajectory older than serially); if that model isn't done "
+                             "when trial i-1 ends, the run waits for it. The first "
+                             "--async-serial-trials trials still train serially. Default: false")
+    parser.add_argument("--async-serial-trials", default=15, type=int,
+                        help="With --async-training: trials 1..N still train serially (between "
+                             "trials, so the next trial gets the newest model), because early on "
+                             "training is quick and each new trial changes the model the most. "
+                             "Async starts from trial N+1. Default: 15")
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
                         help="Number of initial kinematics-only trials to collect before the "
                              "first from-scratch fit. Default: 5")
@@ -627,8 +740,13 @@ def main():
             "failure_weighting": args.failure_weighting,
             "symmetry_augmentation": args.symmetry_augmentation,
             "history_steps": parsed["nn_history_steps"],
+            "async": args.async_training,
+            "async_serial_trials": args.async_serial_trials,
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
+        # a .partial left by an aborted async run is never a usable checkpoint
+        for p in fs_cfg["weights_dir"].glob("*.pt.partial"):
+            p.unlink()
         fs_cfg["current_weights_path"] = latest_from_scratch_checkpoint(
             fs_cfg["weights_dir"], fs_cfg["width"])
         if fs_cfg["current_weights_path"] is not None:
@@ -640,6 +758,15 @@ def main():
                 f"initial_bag) run under kinematics, then mlp{fs_cfg['width']} trains from a "
                 f"blank init on that data and updates every trial after -- weights isolated "
                 f"under {fs_cfg['weights_dir']}, shared deployed model untouched")
+
+    if args.async_training:
+        if fs_cfg is None:
+            log("WARNING: --async-training only applies to --train-from-scratch -- ignored")
+        else:
+            log(f"async training: trials 1-{args.async_serial_trials} train serially; from trial "
+                f"{args.async_serial_trials + 1} on, each from-scratch iteration trains in the "
+                f"background during the next trial, so trial i drives on the model trained "
+                f"through trial i-2")
 
     retrain_cfg = None
     if args.retrain_dynamics and not args.train_from_scratch:
@@ -699,6 +826,7 @@ def main():
         push_dynamics_mode(pose_node, "kinematics")
         reload_controller(pose_node)
 
+    pending = None  # --async-training: the background iteration started after the last trial
     try:
         initial_bag = bag_dir / "initial_bag"
         if not initial_bag.exists():
@@ -720,6 +848,8 @@ def main():
                 outcome = "stalled"
 
             record_outcome(bag_dir, "initial_bag", outcome, (0.0, 0.0))
+            if fs_cfg is not None:
+                record_deployed_model(bag_dir, "initial_bag", fs_cfg)
             if outcome == "reached":
                 log("initial_bag: waypoint reached")
             elif outcome == "safety_stop":
@@ -776,6 +906,8 @@ def main():
                 outcome = "stalled"
 
             record_outcome(bag_dir, bag_name, outcome, goal_xy)
+            if fs_cfg is not None:
+                record_deployed_model(bag_dir, bag_name, fs_cfg)
             if outcome == "reached":
                 n_success += 1
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): waypoint reached")
@@ -789,8 +921,17 @@ def main():
                     f"waypoint (stalled) -- planning a new trajectory")
             maybe_retrain(pose_node, retrain_cfg, bag_dir, bag_dir / bag_name)
             if fs_cfg is not None and i >= fs_cfg["n_bootstrap"]:
-                maybe_train_from_scratch(pose_node, fs_cfg, bag_dir, bag_dir / bag_name,
-                                          f"trial{i:02d}")
+                if fs_cfg["async"] and i > fs_cfg["async_serial_trials"]:
+                    finish_background_from_scratch(pose_node, fs_cfg, pending)
+                    pending = start_background_from_scratch(fs_cfg, bag_dir, bag_dir / bag_name,
+                                                            f"trial{i:02d}")
+                else:
+                    maybe_train_from_scratch(pose_node, fs_cfg, bag_dir, bag_dir / bag_name,
+                                              f"trial{i:02d}")
+
+        # the last trial's iteration: wait for it so the run ends with its checkpoint saved
+        finish_background_from_scratch(pose_node, fs_cfg, pending)
+        pending = None
 
         if start_i > 1:
             log(f"all trials complete: reached the {args.n_trajectories}-trial target "
@@ -800,6 +941,7 @@ def main():
             log(f"all {args.n_trajectories} trials complete: "
                 f"{n_success}/{args.n_trajectories} successful")
     finally:
+        abort_background_from_scratch(pending)
         pose_node.destroy_node()
         rclpy.shutdown()
 

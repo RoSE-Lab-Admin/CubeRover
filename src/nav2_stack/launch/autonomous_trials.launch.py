@@ -28,6 +28,9 @@ stored per-iteration under bag_dir/from_scratch_weights/ -- the shared deployed
 model is never read from or written to. See dynamics_retrain.py / autonomous_trials.py.
   ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \\
       train_from_scratch:=true from_scratch_n_bootstrap:=5
+Add async_training:=true to train each iteration in the background while the
+next trial runs (that trial then drives on the model from one trial earlier).
+The first async_serial_trials (default 15) trials still train serially.
 
 rviz2 is launched by default (replaces running it manually in a separate
 terminal) -- pass start_rviz:=false to skip it.
@@ -84,6 +87,8 @@ def launch_setup(context):
             '--from-scratch-n-bootstrap', from_scratch_n_bootstrap,
             '--failure-weighting', LaunchConfiguration('failure_weighting'),
             '--symmetry-augmentation', LaunchConfiguration('symmetry_augmentation'),
+            '--async-training', LaunchConfiguration('async_training'),
+            '--async-serial-trials', LaunchConfiguration('async_serial_trials'),
         ],
     )
 
@@ -134,6 +139,14 @@ def generate_launch_description():
         DeclareLaunchArgument('symmetry_augmentation', default_value='false',
                               description='Also train the dynamics model on mirrored copies of '
                                           'the data (left/right, forward/backward)'),
+        DeclareLaunchArgument('async_training', default_value='false',
+                              description='train_from_scratch only: train in a background '
+                                          'process during the next trial instead of between '
+                                          'trials; trial i then drives on the model trained '
+                                          'through trial i-2'),
+        DeclareLaunchArgument('async_serial_trials', default_value='15',
+                              description='With async_training: trials 1..N still train '
+                                          'serially, async starts at trial N+1'),
         DeclareLaunchArgument('start_rviz', default_value='true',
                               description='Launch rviz2 alongside everything else (replaces '
                                           'running it manually in a separate terminal)'),

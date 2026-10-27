@@ -132,9 +132,30 @@ class ModelBank:
 
     def __init__(self, folder, mode):
         self.folder, self.mode, self.cache = folder, mode, {}
+        # autonomous_trials records the model that actually drove each trial (needed for
+        # --async-training, where trial i uses trial(i-2).pt); older runs don't have it
+        self.deployed = {}
+        path = folder / 'deployed_models.csv'
+        if path.exists():
+            with open(path) as f:
+                self.deployed = {r['bag']: r['model'] for r in csv.DictReader(f)}
+
+    def _load(self, p):
+        if p not in self.cache:
+            self.cache[p] = torch.jit.load(str(p), map_location='cpu').eval()
+        return self.cache[p], p.name
 
     def for_trial(self, i):
-        if self.mode == 'kinematics' or i <= N_BOOT:
+        if self.mode == 'kinematics':
+            return None, 'kinematics'
+        bag = f'bag_{i:02d}'
+        if bag in self.deployed:
+            name = self.deployed[bag]
+            if not name:
+                return None, 'kinematics'
+            p = self.folder / 'from_scratch_weights' / name
+            return self._load(p) if p.exists() else (None, f'{name} (missing)')
+        if i <= N_BOOT:
             return None, 'kinematics'
         # newest checkpoint from before this trial: if a retrain failed, autonomous_trials
         # keeps driving on the previous model (e.g. no trial28.pt -> trial 29 used trial27.pt)
@@ -146,9 +167,7 @@ class ModelBank:
                 break
         if p is None:
             return None, 'kinematics (no checkpoint yet)'
-        if p not in self.cache:
-            self.cache[p] = torch.jit.load(str(p), map_location='cpu').eval()
-        return self.cache[p], p.name
+        return self._load(p)
 
 
 @torch.no_grad()
