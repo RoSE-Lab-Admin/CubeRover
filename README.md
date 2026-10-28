@@ -12,7 +12,8 @@ ROS Source Build files for the RoSE Lab CubeRover
 Rover Pi (SSH in a separate terminal):
 ```bash
 ssh rosey@192.168.2.50
-ros2 launch roseybot_bringup hardware_startup.launch.py
+source CubeRover_URDF/install/setup.bash
+ros2 launch rosey_bringup hardware_startup.launch.py
 ```
 
 Wait until you see `[roseybot_base_controller] Configured and activated`.
