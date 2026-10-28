@@ -2,17 +2,26 @@
 """
 update_costmap.py — regenerate map.pgm and costmap_preview.png.
 
-Default arena corners (world frame, metres):
-  1 SE  ( 2.310, -3.160)
-  2 SW  (-2.200, -3.070)
-  3 W   (-3.860,  0.280)
-  4 NW  (-3.453,  3.020)
-  5 NE  ( 2.316,  1.123)
-Edges connect 1→2→3→4→5→1.
+Default arena (world frame, metres): the 10/27/26 OptiTrack marker survey,
+/mnt/e/mlss/costmaps/10_27_26/marker_locations.csv (see extract_markers.py there):
+  1 SE   ( 3.099, -2.278)
+  2 SSW  (-2.455, -3.120)
+  3 SWW  (-4.207, -0.892)
+  4 W    (-4.051,  1.453)
+  5 NW   (-3.290,  3.372)
+  6 N    (-0.098,  3.235)
+  7 NE   ( 2.999,  3.020)   not measured (its bag was empty): where the N edge line
+                            meets x = SE's x, then moved 5 in (0.127 m) towards the
+                            arena centroid
+Edges connect 1→2→…→7→1. Default obstacle: the crater, centred on its marker
+(-0.159, -3.695), diameter 2.0 m (1.5 m measured, inflated).
 
 Usage examples:
-  # Default arena, no obstacles
+  # Default arena and crater
   python3 scripts/update_costmap.py
+
+  # Without the default crater
+  python3 scripts/update_costmap.py --no-default-obstacles
 
   # Add two circular obstacles (x, y, radius in metres)
   python3 scripts/update_costmap.py --obstacle 1.0 0.5 0.3 --obstacle -1.0 -1.0 0.4
@@ -20,7 +29,7 @@ Usage examples:
   # Override one corner (corner index 1-based, then x y)
   python3 scripts/update_costmap.py --corner 3 -4.0 0.1
 
-  # Override all corners as "x,y" pairs
+  # Override all corners as "x,y" pairs (any number >= 3, in order around the arena)
   python3 scripts/update_costmap.py --corners "2.31,-3.16" "-2.2,-3.07" "-3.86,0.28" "-3.453,3.02" "2.316,1.123"
 """
 
@@ -65,14 +74,24 @@ INFLATION_RADIUS = 0.75
 COST_SCALING     = 2.58
 
 # ── Default arena corners (x, y) in world frame ───────────────────────────────
+# 10/27/26 marker survey (see the docstring). The previous arena, for reference:
+# SE (2.28, -3.467), SW (-2.709, -2.305), W (-3.777, -0.367), NW (-2.85, 2.727),
+# NE (2.2425, 1.9317)
 DEFAULT_CORNERS = [
-    ( 2.28, -3.467),   # 1 SE
-    (-2.709, -2.305),   # 2 SW
-    (-3.777,  -0.367),   # 3 W
-    (-2.85,  2.727),   # 4 NW
-    ( 2.2425,  1.9317),   # 5 NE
+    ( 3.0988, -2.2780),   # 1 SE
+    (-2.4545, -3.1198),   # 2 SSW
+    (-4.2065, -0.8922),   # 3 SWW
+    (-4.0505,  1.4526),   # 4 W
+    (-3.2896,  3.3718),   # 5 NW
+    (-0.0976,  3.2353),   # 6 N
+    ( 2.9994,  3.0196),   # 7 NE (not measured, see the docstring)
 ]
-CORNER_LABELS = ["1 SE", "2 SW", "3 W", "4 NW", "5 NE"]
+DEFAULT_LABELS = ["1 SE", "2 SSW", "3 SWW", "4 W", "5 NW", "6 N", "7 NE"]
+# (x, y, radius): the crater, 1.5 m measured, inflated to 2.0 m diameter
+DEFAULT_OBSTACLES = [(-0.1587, -3.6945, 1.0)]
+# Every arena edge is moved this far towards the inside before rasterizing (10/28/26:
+# 7 in tighter than the surveyed edges). --inset overrides it, 0 = the surveyed polygon.
+DEFAULT_INSET = 7 * 0.0254
 
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
@@ -97,37 +116,52 @@ def world_to_px(wx, wy):
 
 
 def px_to_world(col, row):
-    wx = ORIGIN_X + col * RESOLUTION
-    wy = ORIGIN_Y + (HEIGHT_PX - 1 - row) * RESOLUTION
+    """World coordinates of the centre of pixel (col, row)."""
+    wx = ORIGIN_X + (col + 0.5) * RESOLUTION
+    wy = ORIGIN_Y + (HEIGHT_PX - 1 - row + 0.5) * RESOLUTION
     return wx, wy
 
 
 # ── PGM generation ────────────────────────────────────────────────────────────
+
+def inset_polygon(corners, d):
+    """Move every edge of the polygon d metres inwards (d < 0: outwards); each new corner
+    is where the two moved edges next to it meet."""
+    n = len(corners)
+    area2 = sum(corners[i][0] * corners[(i + 1) % n][1] - corners[(i + 1) % n][0] * corners[i][1]
+                for i in range(n))
+    sign = 1.0 if area2 > 0 else -1.0             # counter-clockwise: inside is to the left
+    lines = []
+    for i in range(n):
+        (x1, y1), (x2, y2) = corners[i], corners[(i + 1) % n]
+        L = math.hypot(x2 - x1, y2 - y1)
+        nx, ny = -sign * (y2 - y1) / L, sign * (x2 - x1) / L      # inward unit normal
+        lines.append(((x1 + d * nx, y1 + d * ny), (x2 - x1, y2 - y1)))
+    out = []
+    for i in range(n):
+        (p, r), (q, t) = lines[i - 1], lines[i]   # edge into corner i, edge out of it
+        den = r[0] * t[1] - r[1] * t[0]
+        u = ((q[0] - p[0]) * t[1] - (q[1] - p[1]) * t[0]) / den
+        out.append((p[0] + u * r[0], p[1] + u * r[1]))
+    return out
+
 
 def build_pgm(corners, obstacles):
     """
     Returns a (HEIGHT_PX, WIDTH_PX) uint8 array.
       254 = free space
         0 = occupied (outside arena or inside an obstacle circle)
+    A pixel is classified by its centre (until 10/27/26 by its lower-left corner,
+    which shifted the free area half a pixel towards +x/+y).
     """
     pixels = np.zeros((HEIGHT_PX, WIDTH_PX), dtype=np.uint8)
 
     for row in range(HEIGHT_PX):
         for col in range(WIDTH_PX):
             wx, wy = px_to_world(col, row)
-            if point_in_polygon(wx, wy, corners):
+            if point_in_polygon(wx, wy, corners) and \
+                    not any(math.hypot(wx - ox, wy - oy) <= r for ox, oy, r in obstacles):
                 pixels[row, col] = 254
-
-    # Burn circular obstacles (set to occupied even if inside arena)
-    for (ox, oy, radius) in obstacles:
-        r_px = radius / RESOLUTION
-        cx, cy = world_to_px(ox, oy)
-        for dr in range(-math.ceil(r_px) - 1, math.ceil(r_px) + 2):
-            for dc in range(-math.ceil(r_px) - 1, math.ceil(r_px) + 2):
-                if dr * dr + dc * dc <= r_px * r_px:
-                    rr, cc = cy + dr, cx + dc
-                    if 0 <= rr < HEIGHT_PX and 0 <= cc < WIDTH_PX:
-                        pixels[rr, cc] = 0
 
     return pixels
 
@@ -163,7 +197,7 @@ def inflation_color(cost):
     return (r, g, b)
 
 
-def build_preview(pixels, corners, obstacles):
+def build_preview(pixels, corners, obstacles, labels):
     if not HAS_PIL:
         return None
 
@@ -214,7 +248,7 @@ def build_preview(pixels, corners, obstacles):
               world_to_px(x, y)[1] * SCALE + SCALE // 2)
              for x, y in corners]
     draw.line(pts_s + [pts_s[0]], fill=(200, 0, 0), width=2)
-    for (cx_s, cy_s), label in zip(pts_s, CORNER_LABELS):
+    for (cx_s, cy_s), label in zip(pts_s, labels):
         draw.ellipse([cx_s - 5, cy_s - 5, cx_s + 5, cy_s + 5], fill=(200, 0, 0))
         draw.text((cx_s + 7, cy_s - 8), label, fill=(180, 0, 0))
 
@@ -259,8 +293,8 @@ def parse_corners(args_corners, args_corner_overrides):
     corners = list(DEFAULT_CORNERS)
 
     if args_corners:
-        if len(args_corners) != 5:
-            sys.exit(f"[error] --corners expects exactly 5 'x,y' pairs, got {len(args_corners)}")
+        if len(args_corners) < 3:
+            sys.exit(f"[error] --corners expects at least 3 'x,y' pairs, got {len(args_corners)}")
         try:
             corners = [tuple(float(v) for v in s.split(',')) for s in args_corners]
         except ValueError:
@@ -268,8 +302,9 @@ def parse_corners(args_corners, args_corner_overrides):
 
     for override in (args_corner_overrides or []):
         idx, x, y = override
-        if not (1 <= idx <= 5):
-            sys.exit(f"[error] --corner index must be 1-5, got {idx}")
+        idx = int(idx)
+        if not (1 <= idx <= len(corners)):
+            sys.exit(f"[error] --corner index must be 1-{len(corners)}, got {idx}")
         corners[idx - 1] = (x, y)
         print(f"[args] Corner {idx} overridden to ({x}, {y})")
 
@@ -283,9 +318,9 @@ def main():
         epilog=__doc__,
     )
     ap.add_argument(
-        "--corners", nargs=5, metavar="X,Y",
-        help="Override ALL 5 arena corners as 'x,y' pairs in order SE SW W NW NE "
-             "(default: current lab corners)"
+        "--corners", nargs="+", metavar="X,Y",
+        help="Override ALL arena corners as 'x,y' pairs, in order around the arena "
+             "(default: the 7 corners of the 10/27/26 survey)"
     )
     ap.add_argument(
         "--corner", nargs=3, metavar=("IDX", "X", "Y"), action="append",
@@ -298,6 +333,15 @@ def main():
         type=float, default=[],
         help="Add a circular obstacle at world coords (X, Y) with radius R metres. "
              "Can be repeated. Example: --obstacle 1.0 0.5 0.3"
+    )
+    ap.add_argument(
+        "--inset", type=float, default=DEFAULT_INSET,
+        help=f"Move every arena edge this many metres inwards (default {DEFAULT_INSET:.4f} = 7 in; "
+             f"0 = the surveyed edges)"
+    )
+    ap.add_argument(
+        "--no-default-obstacles", action="store_true",
+        help="Leave out the default obstacles (the crater)"
     )
     ap.add_argument(
         "--out-map", default=str(MAP_PGM),
@@ -315,11 +359,17 @@ def main():
     args = ap.parse_args()
 
     corners   = parse_corners(args.corners, args.corner_overrides)
-    obstacles = [tuple(o) for o in args.obstacle]
+    if args.inset:
+        print(f"[arena] Edges moved {args.inset:.4f} m ({args.inset / 0.0254:.1f} in) inwards")
+        corners = inset_polygon(corners, args.inset)
+    labels    = DEFAULT_LABELS if len(corners) == len(DEFAULT_LABELS) and not args.corners \
+        else [str(i + 1) for i in range(len(corners))]
+    obstacles = ([] if args.no_default_obstacles else list(DEFAULT_OBSTACLES)) + \
+        [tuple(o) for o in args.obstacle]
 
     print(f"\n[arena] Corners:")
-    for i, (x, y) in enumerate(corners):
-        print(f"  {CORNER_LABELS[i]:6s}  ({x:+.3f}, {y:+.3f})")
+    for label, (x, y) in zip(labels, corners):
+        print(f"  {label:6s}  ({x:+.3f}, {y:+.3f})")
 
     if obstacles:
         print(f"[obs]  Obstacles:")
@@ -331,7 +381,7 @@ def main():
     save_pgm(pixels, args.out_map)
 
     if not args.no_preview:
-        img = build_preview(pixels, corners, obstacles)
+        img = build_preview(pixels, corners, obstacles, labels)
         if img is not None:
             img.save(args.out_preview)
             print(f"[preview] Written {args.out_preview}")
