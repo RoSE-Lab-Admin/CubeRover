@@ -89,6 +89,7 @@ def launch_setup(context):
             '--symmetry-augmentation', LaunchConfiguration('symmetry_augmentation'),
             '--async-training', LaunchConfiguration('async_training'),
             '--async-serial-trials', LaunchConfiguration('async_serial_trials'),
+            '--terrain-nn', LaunchConfiguration('terrain_nn'),
         ],
     )
 
@@ -147,6 +148,11 @@ def generate_launch_description():
         DeclareLaunchArgument('async_serial_trials', default_value='15',
                               description='With async_training: trials 1..N still train '
                                           'serially, async starts at trial N+1'),
+        DeclareLaunchArgument('terrain_nn', default_value='false',
+                              description='With train_from_scratch or retrain_dynamics: train '
+                                          'the terrain MLP (pitch/roll inputs from OptiTrack, '
+                                          'lateral output, GP height map for MPPI future '
+                                          'steps)'),
         DeclareLaunchArgument('start_rviz', default_value='true',
                               description='Launch rviz2 alongside everything else (replaces '
                                           'running it manually in a separate terminal)'),

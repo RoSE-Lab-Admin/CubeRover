@@ -65,6 +65,13 @@ namespace mppi
  * the world frame once at the end using the current pose (x0,y0,yaw0),
  * since that varies every planning cycle and can't be baked into a captured
  * graph.
+ *
+ * fork-only terrain models (dynamics_retrain terrain=True, detected from the
+ * model's `terrain` attribute): the MLP also takes the pitch and roll at the
+ * start of each step and predicts a lateral step. Step 0 uses the measured
+ * attitude of the current pose; steps 1.. call the model's attitude() method
+ * (GP slope map + OptiTrack calibration stored in the .pt) at the predicted
+ * world pose, so the start pose is a graph input as well.
  */
 class NNDynamics
 {
@@ -156,8 +163,11 @@ private:
   /// Runs the H-step AR loop (robot frame) using module_, writing a
   /// (batch, horizon, 3) [rx, ry, rth] tensor. Shared by graph capture,
   /// warmup, and the CPU eager fallback so there is one source of truth for
-  /// the math.
-  torch::Tensor arLoop(const torch::Tensor & cmd, const torch::Tensor & hist) const;
+  /// the math. pose0 (3) [x0, y0, yaw0] world and att0 (2) [pitch, roll] of
+  /// the current pose are only used by a terrain model.
+  torch::Tensor arLoop(
+    const torch::Tensor & cmd, const torch::Tensor & hist,
+    const torch::Tensor & pose0, const torch::Tensor & att0) const;
 
   /// One-time CUDA graph capture of arLoop() over static_input_. Must be
   /// followed by exactly one replay() before static_output_ is valid — the
@@ -181,8 +191,11 @@ private:
   mutable torch::Tensor static_input_;   // (batch, horizon, 2), copy_() target each call
   mutable torch::Tensor static_output_;  // (batch, horizon, 3) [rx, ry, rth]
   mutable torch::Tensor static_hist_;    // (history_steps, 2), copy_() target each call
+  mutable torch::Tensor static_pose0_;   // (3) [x0, y0, yaw0], terrain model only
+  mutable torch::Tensor static_att0_;    // (2) [pitch, roll] measured, terrain model only
   std::vector<float> hist_host_;         // (history_steps * 2) oldest first, from setHistory()
   bool graph_captured_{false};
+  bool terrain_{false};                  // fork-only: model has pitch/roll inputs + lateral output
 
   rclcpp::Logger logger_;
 };

@@ -13,6 +13,7 @@
 #include "nav2_mppi_controller/nn_dynamics.hpp"
 
 #include <cmath>
+#include <optional>
 #include <vector>
 
 #pragma GCC diagnostic push
@@ -77,6 +78,8 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
       return;
     }
     hist_host_.assign(static_cast<size_t>(2 * cfg_.history_steps), 0.0f);
+    // fork-only terrain model (dynamics_retrain TerrainMLP): pitch/roll inputs, lateral output
+    terrain_ = module_.hasattr("terrain") && module_.attr("terrain").toBool();
 
     // Warm-up so CUDA kernels are JIT-compiled before graph capture / first real call.
     {
@@ -84,14 +87,17 @@ NNDynamics::NNDynamics(const Config & cfg, rclcpp::Logger logger)
       auto dummy = torch::zeros(
         {static_cast<int64_t>(cfg_.batch_size), static_cast<int64_t>(cfg_.horizon), 2},
         torch::TensorOptions().dtype(torch::kFloat32).device(device_));
-      arLoop(dummy, torch::zeros({cfg_.history_steps, 2}, dummy.options()));
+      arLoop(
+        dummy, torch::zeros({cfg_.history_steps, 2}, dummy.options()),
+        torch::zeros({3}, dummy.options()), torch::zeros({2}, dummy.options()));
     }
 
     enabled_ = true;
     RCLCPP_INFO(
-      logger_, "NNDynamics: mode=neural_network  loaded '%s'  batch=%u  horizon=%d  history=%d  device=%s",
+      logger_, "NNDynamics: mode=neural_network  loaded '%s'  batch=%u  horizon=%d  history=%d  "
+      "terrain=%s  device=%s",
       cfg_.model_path.c_str(), cfg_.batch_size, cfg_.horizon, cfg_.history_steps,
-      device_.is_cuda() ? "cuda" : "cpu");
+      terrain_ ? "yes" : "no", device_.is_cuda() ? "cuda" : "cpu");
   } catch (const c10::Error & e) {
     RCLCPP_ERROR(
       logger_,
@@ -128,7 +134,9 @@ void NNDynamics::setHistory(const std::vector<std::array<float, 2>> & hist)
   }
 }
 
-torch::Tensor NNDynamics::arLoop(const torch::Tensor & cmd, const torch::Tensor & hist) const
+torch::Tensor NNDynamics::arLoop(
+  const torch::Tensor & cmd, const torch::Tensor & hist,
+  const torch::Tensor & pose0, const torch::Tensor & att0) const
 {
   // cmd: (batch, horizon, 2) raw [vx_cmd, wz_cmd]. Returns (batch, horizon, 3)
   // robot-frame [rx, ry, rth], matching the training-side ar_rollout's
@@ -155,18 +163,47 @@ torch::Tensor NNDynamics::arLoop(const torch::Tensor & cmd, const torch::Tensor 
   std::vector<torch::Tensor> out;
   out.reserve(static_cast<size_t>(H));
 
+  // fork-only terrain model: world pose of each step for the attitude lookup
+  torch::Tensor wx0, wy0, wth0, wc0, ws0, att0_b;
+  std::optional<torch::jit::Method> attitude;
+  if (terrain_) {
+    attitude.emplace(module_.get_method("attitude"));
+    wx0 = pose0.select(0, 0);
+    wy0 = pose0.select(0, 1);
+    wth0 = pose0.select(0, 2);
+    wc0 = torch::cos(wth0);
+    ws0 = torch::sin(wth0);
+    att0_b = att0.unsqueeze(0).expand({B, 2});
+  }
+
   for (int64_t k = 0; k < H; ++k) {
     auto cmd_k = cmd.select(1, k);                  // (B,2)
     auto x_in  = L > 0 ?
       full_n.narrow(1, k, L + 1).reshape({B, 2 * (L + 1)}) :   // (B,2(L+1)) normalized
       (cmd_k - fmean_dev_) / fstd_dev_;              // (B,2) normalized
-    auto pred  = module_.forward({x_in}).toTensor(); // (B,2) [corr_fwd, corr_yaw]
+    if (terrain_) {
+      // + [pitch, roll] at the start of step k: measured at the current pose,
+      // from the model's GP map at the predicted pose after that
+      auto att = k == 0 ? att0_b : (*attitude)(
+        {wx0 + wc0 * xs - ws0 * ys, wy0 + ws0 * xs + wc0 * ys, wth0 + ths}).toTensor();
+      x_in = torch::cat({x_in, att}, 1);
+    }
+    // (B,2) [corr_fwd, corr_yaw], terrain model (B,3) [corr_fwd, lateral, corr_yaw]
+    auto pred  = module_.forward({x_in}).toTensor();
 
     auto corrected_fwd = cmd_k.select(1, 0) * cfg_.model_dt + pred.select(1, 0);
-    auto corrected_yaw = cmd_k.select(1, 1) * cfg_.model_dt + pred.select(1, 1);
+    auto corrected_yaw = cmd_k.select(1, 1) * cfg_.model_dt + pred.select(1, terrain_ ? 2 : 1);
 
-    xs  = xs + corrected_fwd * torch::cos(ths);
-    ys  = ys + corrected_fwd * torch::sin(ths);
+    auto cos_ths = torch::cos(ths);
+    auto sin_ths = torch::sin(ths);
+    if (terrain_) {
+      auto lateral = pred.select(1, 1);
+      xs = xs + corrected_fwd * cos_ths - lateral * sin_ths;
+      ys = ys + corrected_fwd * sin_ths + lateral * cos_ths;
+    } else {
+      xs = xs + corrected_fwd * cos_ths;
+      ys = ys + corrected_fwd * sin_ths;
+    }
     ths = ths + corrected_yaw;
 
     out.push_back(torch::stack({xs, ys, ths}, /*dim=*/1));  // (B,3)
@@ -183,18 +220,20 @@ void NNDynamics::captureGraph()
   static_hist_ = torch::zeros(
     {static_cast<int64_t>(cfg_.history_steps), 2},
     torch::TensorOptions().dtype(torch::kFloat32).device(device_));
+  static_pose0_ = torch::zeros({3}, static_hist_.options());
+  static_att0_ = torch::zeros({2}, static_hist_.options());
 
   torch::NoGradGuard no_grad;
   c10::cuda::CUDAStream capture_stream = c10::cuda::getStreamFromPool();
   c10::cuda::CUDAStreamGuard guard(capture_stream);
 
   for (int i = 0; i < 3; ++i) {
-    arLoop(static_input_, static_hist_);
+    arLoop(static_input_, static_hist_, static_pose0_, static_att0_);
   }
   torch::cuda::synchronize();
 
   graph_.capture_begin();
-  static_output_ = arLoop(static_input_, static_hist_);
+  static_output_ = arLoop(static_input_, static_hist_, static_pose0_, static_att0_);
   graph_.capture_end();
 
   // The output buffer captured inside capture_begin/capture_end is NOT yet
@@ -326,6 +365,18 @@ void NNDynamics::integrateNeuralNetwork(
     const_cast<float *>(state.wz.data()), {B_l, static_cast<long>(H)}, {ts_l, 1L}, torch::kFloat32);
   auto cmd_cpu = torch::stack({cvx_blob, cwz_blob}, /*dim=*/2).contiguous();  // (B,H,2)
 
+  // fork-only terrain model: start pose and its measured attitude (ROS ZYX pitch
+  // and roll, the same formula as dynamics_retrain._quat_to_pitch_roll)
+  torch::Tensor pose0_dev, att0_dev;
+  if (terrain_) {
+    const float pitch0 = static_cast<float>(
+      std::asin(std::clamp(2.0 * (q.w * q.y - q.z * q.x), -1.0, 1.0)));
+    const float roll0 = static_cast<float>(
+      std::atan2(2.0 * (q.w * q.x + q.y * q.z), 1.0 - 2.0 * (q.x * q.x + q.y * q.y)));
+    pose0_dev = torch::tensor({x0, y0, yaw0}, torch::kFloat32).to(device_);
+    att0_dev = torch::tensor({pitch0, roll0}, torch::kFloat32).to(device_);
+  }
+
   torch::Tensor rxyz_cpu;
   {
     torch::NoGradGuard no_grad;
@@ -339,11 +390,16 @@ void NNDynamics::integrateNeuralNetwork(
       if (cfg_.history_steps > 0) {
         static_hist_.copy_(hist_cpu.to(device_));
       }
+      if (terrain_) {
+        static_pose0_.copy_(pose0_dev);
+        static_att0_.copy_(att0_dev);
+      }
       graph_.replay();
       rxyz_cpu = static_output_.to(torch::kCPU).contiguous();
     } else {
       auto cmd_dev = cmd_cpu.to(device_);
-      rxyz_cpu = arLoop(cmd_dev, hist_cpu.to(device_)).to(torch::kCPU).contiguous();
+      rxyz_cpu = arLoop(cmd_dev, hist_cpu.to(device_), pose0_dev, att0_dev)
+        .to(torch::kCPU).contiguous();
     }
   }
 

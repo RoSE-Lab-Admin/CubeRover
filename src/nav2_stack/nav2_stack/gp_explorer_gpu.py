@@ -210,14 +210,19 @@ def trim_stationary(X: np.ndarray, z: np.ndarray):
     return X[start:end + 1], z[start:end + 1]
 
 
-def load_bags(bag_dir: Path):
+def load_bags(bag_dir: Path, bags=None):
+    """bags: read exactly these bag directories instead of every one in bag_dir
+    (dynamics_retrain's terrain map, which must not read a bag still recording)."""
     try:
         typestore = get_typestore(Stores.ROS2_JAZZY)
     except AttributeError:
         typestore = get_typestore(Stores.ROS2_HUMBLE)
 
-    bag_dirs = sorted(p for p in bag_dir.iterdir()
-                      if p.is_dir() and (p / 'metadata.yaml').exists())
+    if bags is not None:
+        bag_dirs = list(bags)
+    else:
+        bag_dirs = sorted(p for p in bag_dir.iterdir()
+                          if p.is_dir() and (p / 'metadata.yaml').exists())
     if not bag_dirs:
         sys.exit(f'[error] No bags found in {bag_dir}')
 

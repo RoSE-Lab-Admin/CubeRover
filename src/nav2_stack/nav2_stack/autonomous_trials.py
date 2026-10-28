@@ -475,18 +475,30 @@ def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_p
         return
     from nav2_stack import dynamics_retrain  # deferred -- see import comment near top of file
     log(f"retraining {retrain_cfg['model_type']}"
-        f"{retrain_cfg.get('width', '')} on data in {bag_dir} "
-        f"(warm_start={retrain_cfg['warm_start']}, subset={retrain_cfg['subset']})")
+        f"{retrain_cfg.get('width', '')}{' terrain' if retrain_cfg['terrain'] else ''} on data "
+        f"in {bag_dir} (warm_start={retrain_cfg['warm_start']}, subset={retrain_cfg['subset']})")
+    # terrain: never the shared deployed model (that one has no terrain inputs) -- each
+    # iteration gets its own file under bag_dir/terrain_weights/, warm-started from
+    # the previous one (a blank init before the first)
+    terrain_paths = {}
+    if retrain_cfg["terrain"]:
+        current = retrain_cfg["current_weights_path"]
+        terrain_paths = dict(
+            warm_start_path=current,
+            save_path=retrain_cfg["weights_dir"] /
+            f"{model_stem(retrain_cfg['width'], True)}_{new_bag_path.name}.pt")
     try:
         result = dynamics_retrain.retrain(
             bag_dir=bag_dir, new_bag_path=new_bag_path,
             model_type=retrain_cfg["model_type"], width=retrain_cfg.get("width"),
-            warm_start=retrain_cfg["warm_start"], subset=retrain_cfg["subset"],
-            subset_fraction=retrain_cfg["subset_fraction"],
+            warm_start=retrain_cfg["warm_start"] and (
+                not retrain_cfg["terrain"] or retrain_cfg["current_weights_path"] is not None),
+            subset=retrain_cfg["subset"], subset_fraction=retrain_cfg["subset_fraction"],
             fmean=retrain_cfg["fmean"], fstd=retrain_cfg["fstd"],
             failure_weighting=retrain_cfg["failure_weighting"],
             symmetry_augmentation=retrain_cfg["symmetry_augmentation"],
-            history_steps=retrain_cfg["history_steps"])
+            history_steps=retrain_cfg["history_steps"], terrain=retrain_cfg["terrain"],
+            **terrain_paths)
     except Exception as e:
         log(f"WARNING: retrain failed ({e}) -- keeping the currently deployed weights")
         return
@@ -495,6 +507,9 @@ def maybe_retrain(node: PoseWatcher, retrain_cfg: dict, bag_dir: Path, new_bag_p
         push_linear_params_and_reload(node, result["weight"], result["bias"])
     else:
         log(f"exported retrained mlp to {result['exported_path']}")
+        if retrain_cfg["terrain"]:
+            retrain_cfg["current_weights_path"] = Path(result["exported_path"])
+            push_model_path(node, retrain_cfg["current_weights_path"])
         reload_controller(node)
 
 
@@ -508,13 +523,20 @@ def push_model_path(node: PoseWatcher, model_path: Path):
     set_controller_param(node, "FollowPath.nn_model_path", str(model_path))
 
 
-def latest_from_scratch_checkpoint(weights_dir: Path, width: int):
-    """Newest mlp{width}_trialNN.pt in weights_dir (highest NN), or None. Lets a
+def model_stem(width: int, terrain: bool) -> str:
+    """Checkpoint file name prefix: terrain models get their own, so resuming never
+    picks up a checkpoint of the other kind."""
+    return f"mlp{width}_terrain" if terrain else f"mlp{width}"
+
+
+def latest_from_scratch_checkpoint(weights_dir: Path, stem: str, label: str = "trial"):
+    """Newest {stem}_{label}NN.pt in weights_dir (highest NN), or None. Lets a
     train_from_scratch session in an existing bag_dir resume from the last
-    checkpoint instead of going back to kinematics and a blank init."""
+    checkpoint instead of going back to kinematics and a blank init (label "bag_"
+    for retrain_dynamics' terrain checkpoints)."""
     best, best_n = None, -1
-    for p in weights_dir.glob(f"mlp{width}_trial*.pt"):
-        m = re.fullmatch(rf"mlp{width}_trial(\d+)\.pt", p.name)
+    for p in weights_dir.glob(f"{stem}_{label}*.pt"):
+        m = re.fullmatch(rf"{re.escape(stem)}_{label}(\d+)\.pt", p.name)
         if m and int(m.group(1)) > best_n:
             best, best_n = p, int(m.group(1))
     return best
@@ -534,7 +556,7 @@ def _from_scratch_retrain_kwargs(fs_cfg: dict, bag_dir: Path, new_bag_path: Path
         warm_start_path=fs_cfg["current_weights_path"], save_path=save_path,
         failure_weighting=fs_cfg["failure_weighting"],
         symmetry_augmentation=fs_cfg["symmetry_augmentation"],
-        history_steps=fs_cfg["history_steps"], bags=bags)
+        history_steps=fs_cfg["history_steps"], bags=bags, terrain=fs_cfg["terrain"])
 
 
 def deploy_from_scratch(node: PoseWatcher, fs_cfg: dict, model_path: Path):
@@ -555,9 +577,9 @@ def maybe_train_from_scratch(node: PoseWatcher, fs_cfg: dict, bag_dir: Path, new
     nav2_mppi_controller's share dir is never read from or written to."""
     from nav2_stack import dynamics_retrain  # deferred -- see import comment near top of file
     is_first = fs_cfg["current_weights_path"] is None
-    save_path = fs_cfg["weights_dir"] / f"mlp{fs_cfg['width']}_{trial_label}.pt"
+    save_path = fs_cfg["weights_dir"] / f"{fs_cfg['stem']}_{trial_label}.pt"
     log(f"train_from_scratch: {'training from a blank init' if is_first else 'continuing'} "
-        f"mlp{fs_cfg['width']} on data in {bag_dir} -> {save_path}")
+        f"{fs_cfg['stem']} on data in {bag_dir} -> {save_path}")
     try:
         result = dynamics_retrain.retrain(
             **_from_scratch_retrain_kwargs(fs_cfg, bag_dir, new_bag_path, save_path))
@@ -591,7 +613,7 @@ def start_background_from_scratch(fs_cfg: dict, bag_dir: Path, new_bag_path: Pat
     aborted run never leaves a truncated mlp*_trialNN.pt for the resume logic
     to pick up."""
     from nav2_stack.async_retrain import BackgroundRetrain
-    save_path = fs_cfg["weights_dir"] / f"mlp{fs_cfg['width']}_{trial_label}.pt"
+    save_path = fs_cfg["weights_dir"] / f"{fs_cfg['stem']}_{trial_label}.pt"
     tmp_path = save_path.with_name(save_path.name + ".partial")
     log_path = fs_cfg["weights_dir"] / f"train_{trial_label}.log"
     bags = finished_bags(bag_dir)
@@ -599,7 +621,7 @@ def start_background_from_scratch(fs_cfg: dict, bag_dir: Path, new_bag_path: Pat
     job = BackgroundRetrain(
         _from_scratch_retrain_kwargs(fs_cfg, bag_dir, new_bag_path, tmp_path, bags), log_path)
     log(f"async training: {'training from a blank init' if current is None else 'continuing'} "
-        f"mlp{fs_cfg['width']} on {len(bags)} bags -> {save_path.name} in the background "
+        f"{fs_cfg['stem']} on {len(bags)} bags -> {save_path.name} in the background "
         f"(log: {log_path}); the next trial drives on "
         f"{'kinematics' if current is None else Path(current).name}")
     return {"job": job, "label": trial_label, "save_path": save_path, "tmp_path": tmp_path}
@@ -706,6 +728,12 @@ def main():
                              "trials, so the next trial gets the newest model), because early on "
                              "training is quick and each new trial changes the model the most. "
                              "Async starts from trial N+1. Default: 15")
+    parser.add_argument("--terrain-nn", default="false", type=parse_bool,
+                        help="With train_from_scratch or retrain_dynamics (MLP): train the terrain "
+                             "MLP instead -- OptiTrack pitch/roll as inputs, a lateral output, and "
+                             "a GP height map (refit every retrain) for the attitude of MPPI's "
+                             "future rollout steps. Checkpoints are kept apart from the plain "
+                             "ones. Default: false")
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
                         help="Number of initial kinematics-only trials to collect before the "
                              "first from-scratch fit. Default: 5")
@@ -742,20 +770,22 @@ def main():
             "history_steps": parsed["nn_history_steps"],
             "async": args.async_training,
             "async_serial_trials": args.async_serial_trials,
+            "terrain": args.terrain_nn,
+            "stem": model_stem(parsed["nn_hidden_width"], args.terrain_nn),
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
         # a .partial left by an aborted async run is never a usable checkpoint
         for p in fs_cfg["weights_dir"].glob("*.pt.partial"):
             p.unlink()
         fs_cfg["current_weights_path"] = latest_from_scratch_checkpoint(
-            fs_cfg["weights_dir"], fs_cfg["width"])
+            fs_cfg["weights_dir"], fs_cfg["stem"])
         if fs_cfg["current_weights_path"] is not None:
             log(f"train_from_scratch enabled, resuming from checkpoint "
                 f"{fs_cfg['current_weights_path']}: no kinematics trials, the next trial runs "
                 f"on it and training continues from it after every trial")
         else:
             log(f"train_from_scratch enabled: first {fs_cfg['n_bootstrap']} trials (including "
-                f"initial_bag) run under kinematics, then mlp{fs_cfg['width']} trains from a "
+                f"initial_bag) run under kinematics, then {fs_cfg['stem']} trains from a "
                 f"blank init on that data and updates every trial after -- weights isolated "
                 f"under {fs_cfg['weights_dir']}, shared deployed model untouched")
 
@@ -767,6 +797,10 @@ def main():
                 f"{args.async_serial_trials + 1} on, each from-scratch iteration trains in the "
                 f"background during the next trial, so trial i drives on the model trained "
                 f"through trial i-2")
+
+    if args.terrain_nn and not (args.train_from_scratch or args.retrain_dynamics):
+        log("WARNING: --terrain-nn only applies with --train-from-scratch or "
+            "--retrain-dynamics -- ignored")
 
     retrain_cfg = None
     if args.retrain_dynamics and not args.train_from_scratch:
@@ -786,9 +820,19 @@ def main():
                 "failure_weighting": args.failure_weighting,
             "symmetry_augmentation": args.symmetry_augmentation,
             "history_steps": parsed["nn_history_steps"],
+            "terrain": args.terrain_nn and model_type == "mlp",
             }
+            if args.terrain_nn and model_type != "mlp":
+                log("WARNING: --terrain-nn only applies to the MLP (dynamics_mode "
+                    "neural_network) -- retraining the linear model without it")
+            if retrain_cfg["terrain"]:
+                retrain_cfg["weights_dir"] = bag_dir / "terrain_weights"
+                retrain_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
+                retrain_cfg["current_weights_path"] = latest_from_scratch_checkpoint(
+                    retrain_cfg["weights_dir"], model_stem(retrain_cfg["width"], True), "bag_")
             log(f"online retraining enabled: model={model_type}"
-                f"{retrain_cfg['width'] or ''}  warm_start={args.warm_start}  "
+                f"{retrain_cfg['width'] or ''}{' terrain' if retrain_cfg['terrain'] else ''}  "
+                f"warm_start={args.warm_start}  "
                 f"subset={args.retrain_subset} (fraction={args.retrain_subset_fraction})")
 
     # Same package directory as gp_explorer_gpu.py (source or installed -- this
@@ -825,6 +869,16 @@ def main():
             "(regardless of what nav2_param2.yaml currently has deployed)")
         push_dynamics_mode(pose_node, "kinematics")
         reload_controller(pose_node)
+
+    if retrain_cfg is not None and retrain_cfg["terrain"]:
+        if retrain_cfg["current_weights_path"] is not None:
+            log(f"terrain_nn: deploying checkpoint {retrain_cfg['current_weights_path']} for "
+                f"the first new trial")
+            push_model_path(pose_node, retrain_cfg["current_weights_path"])
+            reload_controller(pose_node)
+        else:
+            log("terrain_nn: no terrain checkpoint in this bag_dir yet -- the deployed (plain) "
+                "model drives until the first retrain, which starts from a blank init")
 
     pending = None  # --async-training: the background iteration started after the last trial
     try:
