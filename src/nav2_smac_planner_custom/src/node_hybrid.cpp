@@ -15,6 +15,7 @@
 // limitations under the License. Reserved.
 
 #include <math.h>
+#include <cmath>
 #include <chrono>
 #include <vector>
 #include <memory>
@@ -656,7 +657,15 @@ float NodeHybrid::getHeuristicCost(
   // heading is acceptable. The obstacle heuristic is heading-free and
   // remains admissible.
   if (motion_table.ignore_goal_heading) {
-    return obstacle_heuristic;
+    // ...but it is 0 for cells its 2D flood fill never reaches (it does not
+    // enter cells at or above INSCRIBED cost, which a rectangular footprint can
+    // still occupy). Without a floor such a node looks like the goal: A* is
+    // drawn to it and returns it as the best "within tolerance" node, i.e. a
+    // plan ending metres from the goal (seen live along the west wall). The
+    // straight-line distance is heading-free and admissible, so it is a safe floor.
+    const float straight_line = std::hypot(
+      node_coords.x - goal_coords.x, node_coords.y - goal_coords.y);
+    return std::max(obstacle_heuristic, straight_line);
   }
   const float dist_heuristic = getDistanceHeuristic(node_coords, goal_coords, obstacle_heuristic);
   return std::max(obstacle_heuristic, dist_heuristic);

@@ -347,7 +347,7 @@ bool AStarAlgorithm<NodeT>::createPath(
     // 3) Check if we're at the goal, backtrace if required
     if (isGoal(current_node)) {
       return current_node->backtracePath(path);
-    } else if (_best_heuristic_node.first < getToleranceHeuristic()) {
+    } else if (_best_heuristic_node.first < getToleranceHeuristic() && bestNodeNearGoal()) {
       // Optimization: Let us find when in tolerance and refine within reason
       approach_iterations++;
       if (approach_iterations >= getOnApproachMaxIterations()) {
@@ -388,12 +388,24 @@ bool AStarAlgorithm<NodeT>::createPath(
     }
   }
 
-  if (_best_heuristic_node.first < getToleranceHeuristic()) {
+  if (_best_heuristic_node.first < getToleranceHeuristic() && bestNodeNearGoal()) {
     // If we run out of search options, return the path that is closest, if within tolerance.
     return _graph.at(_best_heuristic_node.second).backtracePath(path);
   }
 
   return false;
+}
+
+template<typename NodeT>
+bool AStarAlgorithm<NodeT>::bestNodeNearGoal()
+{
+  // Fork-only safeguard: the "best heuristic" fallback trusts the heuristic to
+  // mean distance-to-goal. Check the actual position too, so a wrong heuristic
+  // can never turn into a plan that ends far from the goal.
+  const Coordinates c = NodeT::getCoords(
+    _best_heuristic_node.second, getSizeX(), getSizeDim3());
+  return std::hypot(c.x - _goal_coordinates.x, c.y - _goal_coordinates.y) <=
+         getToleranceHeuristic();
 }
 
 template<typename NodeT>

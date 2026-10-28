@@ -265,6 +265,12 @@ protected:
   SearchInfo _search_info;
 
   Coordinates _goal_coordinates;
+
+  /**
+   * @brief Fork-only: whether the best-heuristic fallback node is really within
+   * the goal tolerance (by position, not just by its heuristic)
+   */
+  bool bestNodeNearGoal();
   NodePtr _start;
   NodePtr _goal;
 
