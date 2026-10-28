@@ -83,6 +83,21 @@ ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
     train_from_scratch:=true async_training:=true
 ```
 
+Example with train-from-scratch and the terrain model (also works with `async_training:=true`):
+```bash
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
+    train_from_scratch:=true terrain_nn:=true
+```
+- Use a new `bag_dir`: terrain checkpoints (`from_scratch_weights/mlp<W>_terrain_trialNN.pt`) are
+  never resumed from plain ones, so a directory with a plain from-scratch run would start over
+  from kinematics. To train on bags from earlier sessions too (e.g. the hills bags), copy them
+  into `bag_dir` before launching; they then also go into the GP height map, so only copy bags
+  recorded on the same terrain.
+- Every training prints `terrain: + pitch, roll inputs ...` and the GP -> OptiTrack calibration,
+  e.g. `pitch = 1.06 * pitch_gp + 0.03 * roll_gp -4.55 deg (residual rms 2.0 deg)`. A residual
+  well above ~3 deg means the GP map fits the terrain poorly.
+- After each new model, `controller_server` logs `NNDynamics: ... terrain=yes`.
+
 Other behavior:
 - If `bag_dir` has no `initial_bag` yet, one is collected automatically by driving to the
   origin `(0,0)` first — no need to separately do the "Before the first run" step below.
