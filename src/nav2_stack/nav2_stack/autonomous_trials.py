@@ -66,7 +66,7 @@ BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before comman
 BAG_TOPICS = [
     "/FitRosey_passive/pose", "/dynamic_joint_states", "/cmd_vel",
     "/roseybot_base_controller/cmd_vel_out", "/plan", "/optimal_trajectory",
-    "/optimal_trajectory_model",
+    "/optimal_trajectory_model", "/imu/data", "/imu/rpy",
 ]
 
 
