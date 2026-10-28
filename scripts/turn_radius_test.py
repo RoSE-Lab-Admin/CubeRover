@@ -11,7 +11,7 @@ Ctrl-C at any time sends zero and exits.
 
 Nav2 / joystick must not be publishing /cmd_vel at the same time. Record with:
 
-    ros2 bag record -o turn_radius_test /FitRosey_V1/pose /cmd_vel /dynamic_joint_states /turn_test/step
+    ros2 bag record -o turn_radius_test /FitRosey_passive/pose /cmd_vel /dynamic_joint_states /turn_test/step
 
     python3 scripts/turn_radius_test.py [--only 3 4] [--duration 15] [--max-turn 120]
 """
@@ -40,7 +40,7 @@ class TurnTest(Node):
         self.cmd_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
         self.step_pub = self.create_publisher(String, '/turn_test/step', 10)
         self.yaw = None
-        self.create_subscription(PoseStamped, '/FitRosey_V1/pose', self._pose, 20)
+        self.create_subscription(PoseStamped, '/FitRosey_passive/pose', self._pose, 20)
 
     def _pose(self, m):
         q = m.pose.orientation
@@ -49,7 +49,7 @@ class TurnTest(Node):
     def send(self, vx, wz):
         m = TwistStamped()
         m.header.stamp = self.get_clock().now().to_msg()
-        m.header.frame_id = 'FitRosey_V1'
+        m.header.frame_id = 'FitRosey_passive'
         m.twist.linear.x, m.twist.angular.z = float(vx), float(wz)
         self.cmd_pub.publish(m)
 
@@ -75,7 +75,7 @@ def main():
         while n.yaw is None and time.monotonic() - t < 5.0:
             rclpy.spin_once(n, timeout_sec=0.1)
         if n.yaw is None:
-            print('WARNING: no /FitRosey_V1/pose -- steps will only stop on --duration')
+            print('WARNING: no /FitRosey_passive/pose -- steps will only stop on --duration')
         for i, (vx, wz) in enumerate(STEPS, 1):
             if a.only and i not in a.only:
                 continue

@@ -46,7 +46,7 @@ class SafetyWatchdog(Node):
     def __init__(self):
         super().__init__("safety_watchdog")
 
-        self.declare_parameter("opti_topic", "/FitRosey_V1/pose")
+        self.declare_parameter("opti_topic", "/FitRosey_passive/pose")
         self.declare_parameter("window_s", 2.0)
         self.declare_parameter("pose_static_thresh_m", 0.03)
         self.declare_parameter("yaw_static_thresh_rad", 0.05)

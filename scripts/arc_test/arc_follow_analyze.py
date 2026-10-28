@@ -39,7 +39,9 @@ import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
-TOPICS = ("/FitRosey_V1/pose", "/cmd_vel", "/plan", "/rosout")
+# bags before 2026-10-27 recorded the rigid body under its old Motive name, /FitRosey_V1
+POSE_TOPICS = ("/FitRosey_passive/pose", "/FitRosey_V1/pose")
+TOPICS = POSE_TOPICS + ( "/cmd_vel", "/plan", "/rosout")
 MAX_DEV = 0.25    # m, max distance from the first planned arc for a "held" run
 END_ZONE = 1.0    # m from the goal: rejections this close to the end don't count
                   # (over the last ~1 m the needed radius swings wildly with tiny
@@ -61,7 +63,7 @@ def read_bag(path):
         topic, raw, t = r.read_next()
         m = deserialize_message(raw, get_message(types[topic]))
         t *= 1e-9
-        if topic == "/FitRosey_V1/pose":
+        if topic in POSE_TOPICS:
             P.append((t, m.pose.position.x, m.pose.position.y, yaw(m.pose.orientation)))
         elif topic == "/cmd_vel":
             C.append((t, m.twist.linear.x, m.twist.angular.z))

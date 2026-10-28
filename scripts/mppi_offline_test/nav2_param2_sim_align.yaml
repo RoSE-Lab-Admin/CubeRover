@@ -2,7 +2,7 @@ bt_navigator:
   ros__parameters:
     use_sim_time: false
     global_frame: world
-    robot_base_frame: FitRosey_V1
+    robot_base_frame: FitRosey_passive
     odom_topic: /odometry/filtered
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -263,7 +263,7 @@ planner_server:
       allow_primitive_interpolation: true # adds gentle turning primitives (~R 3.3 / 1.7 / 1.1 m) next to the minimum-radius one
       extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
       motion_reversal_penalty: 3.0 # was 1.0 -- fork-only: extra cost (meters of equivalent driving) for a replan whose first move reverses the rover's current motion (see motion_pose_topic); 1.0 let near-tie replans next to walls flip the rover's gear
-      motion_pose_topic: "/FitRosey_V1/pose" # fork-only: replans start in the gear the rover is already moving in (from mocap pose deltas), so a replan reversing a moving rover counts as a direction change. "" disables.
+      motion_pose_topic: "/FitRosey_passive/pose" # fork-only: replans start in the gear the rover is already moving in (from mocap pose deltas), so a replan reversing a moving rover counts as a direction change. "" disables.
       motion_window: 0.5 # fork-only: seconds of pose history the displacement is measured over
       motion_threshold: 0.02 # fork-only: meters of displacement along the heading within motion_window to count as moving; below = at rest (plans as from rest)
       motion_stale_timeout: 0.5 # fork-only: seconds without a pose before the gear is treated as unknown
@@ -302,7 +302,7 @@ local_costmap:
       update_frequency: 10.0
       publish_frequency: 10.0
       global_frame: world
-      robot_base_frame: FitRosey_V1
+      robot_base_frame: FitRosey_passive
       rolling_window: true
       width: 5
       height: 5
@@ -327,7 +327,7 @@ global_costmap:
       update_frequency: 5.0
       publish_frequency: 5.0
       global_frame: world
-      robot_base_frame: FitRosey_V1
+      robot_base_frame: FitRosey_passive
       footprint: "[[0.37, 0.23], [0.37, -0.23], [-0.37, -0.23], [-0.37, 0.23]]"
       resolution: 0.05
       track_unknown_space: true
@@ -384,9 +384,9 @@ behavior_server:
       projection_time: 1.0
       simulation_time_step: 0.1
     
-    local_frame: FitRosey_V1
+    local_frame: FitRosey_passive
     global_frame: world
-    robot_base_frame: FitRosey_V1
+    robot_base_frame: FitRosey_passive
     transform_tolerance: 0.5
     # simulate_ahead_time: 2.0
     # max_rotational_vel: 0.50

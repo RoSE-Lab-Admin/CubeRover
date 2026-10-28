@@ -23,7 +23,9 @@ import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
-TOPICS = ['/FitRosey_V1/pose', '/cmd_vel', '/roseybot_base_controller/cmd_vel_out', '/plan',
+# bags before 2026-10-27 recorded the rigid body under its old Motive name, /FitRosey_V1
+POSE_TOPICS = ('/FitRosey_passive/pose', '/FitRosey_V1/pose')
+TOPICS = ['/FitRosey_passive/pose', '/cmd_vel', '/roseybot_base_controller/cmd_vel_out', '/plan',
           '/optimal_trajectory_model', '/dynamic_joint_states']
 SLOW_RATIO, LOW_VOLT = 0.88, 13.5   # speed tracking / battery limits for a usable trial
 N_BOOT = 5
@@ -37,13 +39,13 @@ def read(bag):
     r = rosbag2_py.SequentialReader()
     r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=''), rosbag2_py.ConverterOptions('', ''))
     types = {t.name: t.type for t in r.get_all_topics_and_types()}
-    r.set_filter(rosbag2_py.StorageFilter(topics=[t for t in TOPICS if t in types]))
+    r.set_filter(rosbag2_py.StorageFilter(topics=[t for t in TOPICS + list(POSE_TOPICS[1:]) if t in types]))
     D = {k: [] for k in ('P', 'C', 'O', 'plans', 'opt', 'V')}
     while r.has_next():
         tp, raw, t = r.read_next()
         t *= 1e-9
         m = deserialize_message(raw, get_message(types[tp]))
-        if tp == TOPICS[0]:
+        if tp in POSE_TOPICS:
             D['P'].append((t, m.pose.position.x, m.pose.position.y, yaw(m.pose.orientation)))
         elif tp == TOPICS[1]:
             D['C'].append((t, m.twist.linear.x, m.twist.angular.z))

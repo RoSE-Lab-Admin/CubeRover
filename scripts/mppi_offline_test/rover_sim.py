@@ -3,8 +3,8 @@
 
 Integrates the pose from /cmd_vel (TwistStamped, as the base controller gets
 it) and publishes what the live stack sees from mocap and path_follower:
-  - TF world -> FitRosey_V1
-  - /FitRosey_V1/pose                       (planner gear seeding)
+  - TF world -> FitRosey_passive
+  - /FitRosey_passive/pose                       (planner gear seeding)
   - /odometry/filtered                      (body-frame twist from the last 5
                                              poses, like path_follower.vel_interp)
   - /roseybot_base_controller/cmd_vel_out   (the command actually applied)
@@ -40,7 +40,7 @@ class RoverSim(Node):
         self.declare_parameter('yaw_scale', 1.0)
         self.declare_parameter('cmd_timeout', 0.5)
         self.declare_parameter('start', [0.0, 0.0, 0.0])
-        self.declare_parameter('frame', 'FitRosey_V1')
+        self.declare_parameter('frame', 'FitRosey_passive')
         self.declare_parameter('rate_limiter', True)
         self.declare_parameter('limit_rate', 10.0)       # Hz, controller_manager update_rate
         self.declare_parameter('accel_vx', 0.5)          # m/s^2, linear.x.max_acceleration (Pi)

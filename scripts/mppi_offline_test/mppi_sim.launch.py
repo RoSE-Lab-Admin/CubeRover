@@ -18,7 +18,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROBOT = 'FitRosey_V1'
+ROBOT = 'FitRosey_passive'
 
 
 def generate_launch_description():

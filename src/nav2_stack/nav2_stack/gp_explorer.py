@@ -47,7 +47,9 @@ GLOBAL_FRAME = 'world'
 PLANNER_ID   = 'GridBased'
 
 # ── Internal constants ────────────────────────────────────────────────────────
-POSE_TOPIC         = '/FitRosey_V1/pose'
+POSE_TOPIC         = '/FitRosey_passive/pose'
+# bags before 2026-10-27 recorded the rigid body under its old Motive name
+POSE_TOPICS        = (POSE_TOPIC, '/FitRosey_V1/pose')
 N_REF_POINTS       = 200   # uniform reference grid used for Cohn ALC integration
 MAX_PATH_PTS       = 100   # downsample long paths to this count before ALC
 DOWNSAMPLE_FACTOR  = 20    # keep every Nth pose sample from bags
@@ -81,7 +83,7 @@ def trim_stationary(X: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarra
 def load_bags(bag_dir: Path):
     """
     Read all ros2 bag directories under bag_dir and return
-    X (N,2) array of (x,y) and z (N,) from /FitRosey_V1/pose.
+    X (N,2) array of (x,y) and z (N,) from the mocap pose topic.
     Trims stationary periods at the start and end of each bag before combining.
     """
     try:
@@ -99,10 +101,11 @@ def load_bags(bag_dir: Path):
         print(f'  reading {bag.name} …', flush=True)
         bag_X, bag_z = [], []
         with Reader(bag) as reader:
-            if POSE_TOPIC not in reader.topics:
-                print(f'    skipping — {POSE_TOPIC!r} not present')
+            pose_topic = next((t for t in POSE_TOPICS if t in reader.topics), None)
+            if pose_topic is None:
+                print(f'    skipping — none of {POSE_TOPICS} present')
                 continue
-            conns = [c for c in reader.connections if c.topic == POSE_TOPIC]
+            conns = [c for c in reader.connections if c.topic == pose_topic]
             for conn, _, rawdata in reader.messages(connections=conns):
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
                 bag_X.append([msg.pose.position.x, msg.pose.position.y])

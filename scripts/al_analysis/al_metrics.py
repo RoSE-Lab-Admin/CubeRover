@@ -40,7 +40,9 @@ from nav2_stack import dynamics_retrain as dr
 
 dr.DEVICE = torch.device('cpu')
 CACHE = Path.home() / 'AL_scripts' / 'al_analysis_cache'
-TOPICS = ['/FitRosey_V1/pose', '/cmd_vel', '/roseybot_base_controller/cmd_vel_out', '/plan',
+# bags before 2026-10-27 recorded the rigid body under its old Motive name, /FitRosey_V1
+POSE_TOPICS = ('/FitRosey_passive/pose', '/FitRosey_V1/pose')
+TOPICS = ['/FitRosey_passive/pose', '/cmd_vel', '/roseybot_base_controller/cmd_vel_out', '/plan',
           '/optimal_trajectory_model', '/dynamic_joint_states']
 FMEAN = np.array([0.00372449, -0.03188930], np.float32)   # nav2_param2.yaml linear_model.fmean/fstd
 FSTD = np.array([0.19342424, 0.31374899], np.float32)
@@ -59,13 +61,13 @@ def read_bag(bag):
     r = rosbag2_py.SequentialReader()
     r.open(rosbag2_py.StorageOptions(uri=str(bag), storage_id=''), rosbag2_py.ConverterOptions('', ''))
     types = {t.name: t.type for t in r.get_all_topics_and_types()}
-    r.set_filter(rosbag2_py.StorageFilter(topics=[t for t in TOPICS if t in types]))
+    r.set_filter(rosbag2_py.StorageFilter(topics=[t for t in TOPICS + list(POSE_TOPICS[1:]) if t in types]))
     D = {'P': [], 'C': [], 'O': [], 'plans': [], 'opt': [], 'V': []}
     while r.has_next():
         tp, raw, t = r.read_next()
         t *= 1e-9
         m = deserialize_message(raw, get_message(types[tp]))
-        if tp == TOPICS[0]:
+        if tp in POSE_TOPICS:
             D['P'].append((t, m.pose.position.x, m.pose.position.y, yaw_of(m.pose.orientation)))
         elif tp == TOPICS[1]:
             D['C'].append((t, m.twist.linear.x, m.twist.angular.z))

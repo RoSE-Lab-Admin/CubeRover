@@ -101,7 +101,7 @@ def current_pose(node, timeout=10.0):
     while node.pose() is None and time.monotonic() - t0 < timeout:
         rclpy.spin_once(node, timeout_sec=0.1)
     if node.pose() is None:
-        raise RuntimeError("no /FitRosey_V1/pose")
+        raise RuntimeError("no /FitRosey_passive/pose")
     return node.pose()
 
 
@@ -170,7 +170,7 @@ def main():
     amap = Map()
 
     rclpy.init()
-    node = at.PoseWatcher("/FitRosey_V1/pose")
+    node = at.PoseWatcher("/FitRosey_passive/pose")
     ctrl_get = node.create_client(GetParameters, "/controller_server/get_parameters")
     plan_get = node.create_client(GetParameters, "/planner_server/get_parameters")
     at.wait_for_nav2_active()

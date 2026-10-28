@@ -109,7 +109,7 @@ class Driver(Node):
         self.rec_pose, self.rec_cmd, self.rec_plan = [], [], []
         self.recording = False
         self.t0 = time.monotonic()
-        self.create_subscription(PoseStamped, '/FitRosey_V1/pose', self.on_pose, 50)
+        self.create_subscription(PoseStamped, '/FitRosey_passive/pose', self.on_pose, 50)
         self.create_subscription(TwistStamped, '/cmd_vel', self.on_cmd, 50)
         # MPPI's chosen sequence: as commanded (kinematic) and as the configured model predicts
         self.rec_opt, self.rec_opt_model = [], []

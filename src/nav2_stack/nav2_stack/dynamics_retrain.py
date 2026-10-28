@@ -32,7 +32,9 @@ from torch.utils.data import DataLoader, Dataset
 from ament_index_python.packages import get_package_share_directory
 
 # ── Constants (match plotting_data/run_nn_dynamics_v11.py exactly) ────────────
-POSE_TOPIC = "/FitRosey_V1/pose"
+POSE_TOPIC = "/FitRosey_passive/pose"
+# bags before 2026-10-27 recorded the rigid body under its old Motive name
+POSE_TOPICS = (POSE_TOPIC, "/FitRosey_V1/pose")
 CMD_OUT_TOPIC = "/roseybot_base_controller/cmd_vel_out"
 
 COL_X, COL_Y, COL_YAW = 0, 1, 2
@@ -207,13 +209,14 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
     from rosbags.highlevel import AnyReader
 
     pose_rows, cmdout_rows, plans, joint_rows = [], [], [], []
-    rec_t = {POSE_TOPIC: [], CMD_OUT_TOPIC: [], PLAN_TOPIC: []}  # recording times, same order
     with AnyReader([bag_path], default_typestore=typestore) as reader:
         topics = {c.topic for c in reader.connections}
-        if not {POSE_TOPIC, CMD_OUT_TOPIC}.issubset(topics):
+        pose_topic = next((t for t in POSE_TOPICS if t in topics), None)
+        if pose_topic is None or CMD_OUT_TOPIC not in topics:
             return None, False
+        rec_t = {pose_topic: [], CMD_OUT_TOPIC: [], PLAN_TOPIC: []}  # recording times, same order
         conns = [c for c in reader.connections
-                 if c.topic in (POSE_TOPIC, CMD_OUT_TOPIC, PLAN_TOPIC, JOINT_TOPIC)]
+                 if c.topic in (pose_topic, CMD_OUT_TOPIC, PLAN_TOPIC, JOINT_TOPIC)]
         for conn, ts_ns, raw in reader.messages(connections=conns):
             m = reader.deserialize(raw, conn.msgtype)
             if conn.topic == JOINT_TOPIC:
@@ -224,7 +227,7 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
                     joint_rows.append((ts_ns * 1e-9, float(np.mean(np.abs(speeds)))))
                 continue
             t = m.header.stamp.sec + m.header.stamp.nanosec * 1e-9
-            if conn.topic == POSE_TOPIC:
+            if conn.topic == pose_topic:
                 p, o = m.pose.position, m.pose.orientation
                 pose_rows.append((t, p.x, p.y, o.x, o.y, o.z, o.w))
             elif conn.topic == CMD_OUT_TOPIC:
@@ -238,7 +241,7 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
             rec_t[conn.topic].append(ts_ns * 1e-9)
 
     # unsynced publisher clocks: fall back to recording time (see CLOCK_OFFSET_TOL_S)
-    for topic, rows in ((POSE_TOPIC, pose_rows), (CMD_OUT_TOPIC, cmdout_rows), (PLAN_TOPIC, plans)):
+    for topic, rows in ((pose_topic, pose_rows), (CMD_OUT_TOPIC, cmdout_rows), (PLAN_TOPIC, plans)):
         if not rows:
             continue
         offset = float(np.median([r[0] for r in rows] - np.array(rec_t[topic])))

@@ -55,7 +55,9 @@ GLOBAL_FRAME = 'world'
 PLANNER_ID   = 'GridBased'  # fallback only -- see GPExplorer._resolve_planner_id()
 
 # ── Internal constants ─────────────────────────────────────────────────────────
-POSE_TOPIC         = '/FitRosey_V1/pose'
+POSE_TOPIC         = '/FitRosey_passive/pose'
+# bags before 2026-10-27 recorded the rigid body under its old Motive name
+POSE_TOPICS        = (POSE_TOPIC, '/FitRosey_V1/pose')
 N_REF_POINTS       = 200
 MAX_PATH_PTS       = 100
 # GP training data: one point per GP_CELL x GP_CELL m grid cell (mean x, y, z
@@ -224,10 +226,11 @@ def load_bags(bag_dir: Path):
         print(f'  reading {bag.name} …', flush=True)
         bag_X, bag_z = [], []
         with Reader(bag) as reader:
-            if POSE_TOPIC not in reader.topics:
-                print(f'    skipping — {POSE_TOPIC!r} not present')
+            pose_topic = next((t for t in POSE_TOPICS if t in reader.topics), None)
+            if pose_topic is None:
+                print(f'    skipping — none of {POSE_TOPICS} present')
                 continue
-            conns = [c for c in reader.connections if c.topic == POSE_TOPIC]
+            conns = [c for c in reader.connections if c.topic == pose_topic]
             for conn, _, rawdata in reader.messages(connections=conns):
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
                 bag_X.append([msg.pose.position.x, msg.pose.position.y])

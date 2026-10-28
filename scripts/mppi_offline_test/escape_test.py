@@ -52,7 +52,7 @@ class Driver(Node):
         self.wp_pub = self.create_publisher(PathMsg, '/sim_waypoints',
                                             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.pose, self.track, self.result = None, [], None
-        self.create_subscription(PoseStamped, '/FitRosey_V1/pose', self._pose, 20)
+        self.create_subscription(PoseStamped, '/FitRosey_passive/pose', self._pose, 20)
         self.create_subscription(String, '/trial_goal_result', self._result, 10)
 
     def _pose(self, m):

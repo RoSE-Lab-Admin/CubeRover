@@ -64,7 +64,7 @@ NO_MOVEMENT_MAX_ATTEMPTS = 3  # retries for a trial that recorded a "no_movement
 BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before commands flow
 
 BAG_TOPICS = [
-    "/FitRosey_V1/pose", "/dynamic_joint_states", "/cmd_vel",
+    "/FitRosey_passive/pose", "/dynamic_joint_states", "/cmd_vel",
     "/roseybot_base_controller/cmd_vel_out", "/plan", "/optimal_trajectory",
     "/optimal_trajectory_model",
 ]
@@ -665,8 +665,8 @@ def main():
                         help="Directory bags are stored in and loaded from")
     parser.add_argument("--n-trajectories", default=25, type=int,
                         help="Number of trials to run (default: 25)")
-    parser.add_argument("--opti-topic", default="/FitRosey_V1/pose",
-                        help="Ground-truth pose topic (default: /FitRosey_V1/pose)")
+    parser.add_argument("--opti-topic", default="/FitRosey_passive/pose",
+                        help="Ground-truth pose topic (default: /FitRosey_passive/pose)")
     parser.add_argument("--retrain-dynamics", default="false", type=parse_bool,
                         help="Retrain the deployed dynamics model after every trial "
                              "(default: false)")

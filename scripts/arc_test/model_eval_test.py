@@ -234,7 +234,7 @@ def main():
     amap = aft.Map()
 
     rclpy.init()
-    node = at.PoseWatcher('/FitRosey_V1/pose')
+    node = at.PoseWatcher('/FitRosey_passive/pose')
     ctrl_get = node.create_client(GetParameters, '/controller_server/get_parameters')
     at.wait_for_nav2_active()
     width = aft.get_param(node, ctrl_get, 'FollowPath.nn_hidden_width') or 128

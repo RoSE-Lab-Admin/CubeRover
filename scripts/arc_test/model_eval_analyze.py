@@ -25,7 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import al_compare  # noqa: E402  (battery / speed-tracking check)
 import arc_follow_analyze as A  # noqa: E402
 
-TOPICS = ('/FitRosey_V1/pose', '/cmd_vel', '/plan', '/rosout', '/optimal_trajectory_model')
+# bags before 2026-10-27 recorded the rigid body under its old Motive name, /FitRosey_V1
+POSE_TOPICS = ('/FitRosey_passive/pose', '/FitRosey_V1/pose')
+TOPICS = POSE_TOPICS + ( '/cmd_vel', '/plan', '/rosout', '/optimal_trajectory_model')
 
 
 def read(bag):
@@ -38,7 +40,7 @@ def read(bag):
         topic, raw, t = r.read_next()
         m = deserialize_message(raw, get_message(types[topic]))
         t *= 1e-9
-        if topic == '/FitRosey_V1/pose':
+        if topic in POSE_TOPICS:
             P.append((t, m.pose.position.x, m.pose.position.y, A.yaw(m.pose.orientation)))
         elif topic == '/cmd_vel':
             C.append((t, m.twist.linear.x, m.twist.angular.z))
