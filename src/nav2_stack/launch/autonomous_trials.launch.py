@@ -90,6 +90,12 @@ def launch_setup(context):
             '--async-training', LaunchConfiguration('async_training'),
             '--async-serial-trials', LaunchConfiguration('async_serial_trials'),
             '--terrain-nn', LaunchConfiguration('terrain_nn'),
+            '--terrain-gp', LaunchConfiguration('terrain_gp'),
+            '--waypoint-mode', LaunchConfiguration('waypoint_mode'),
+            '--spiral-drive', LaunchConfiguration('spiral_drive'),
+            '--spiral-radius', LaunchConfiguration('spiral_radius'),
+            '--spiral-centre-x', LaunchConfiguration('spiral_centre_x'),
+            '--spiral-centre-y', LaunchConfiguration('spiral_centre_y'),
         ],
     )
 
@@ -153,6 +159,23 @@ def generate_launch_description():
                                           'the terrain MLP (pitch/roll inputs from OptiTrack, '
                                           'lateral output, GP height map for MPPI future '
                                           'steps)'),
+        DeclareLaunchArgument('terrain_gp', default_value='false',
+                              description='With train_from_scratch: fit kinematics with slip '
+                                          'learned from the slope (a second GP: GP height map '
+                                          'slope -> linear/angular slip) instead of an MLP'),
+        DeclareLaunchArgument('waypoint_mode', default_value='gp',
+                              description='gp = information-based goals from gp_explorer_gpu.py; '
+                                          'spiral = legs of a spiral, one bag per leg'),
+        DeclareLaunchArgument('spiral_drive', default_value='waypoints',
+                              description='waypoint_mode spiral: waypoints (goal kept ~1.5 m '
+                                          'ahead along the leg, planned, the rover keeps moving) '
+                                          'or path (the leg straight to the controller via '
+                                          'FollowPath)'),
+        DeclareLaunchArgument('spiral_radius', default_value='1.8',
+                              description='waypoint_mode spiral: inner circle radius = tightest '
+                                          'turn (m)'),
+        DeclareLaunchArgument('spiral_centre_x', default_value='0.0'),
+        DeclareLaunchArgument('spiral_centre_y', default_value='0.0'),
         DeclareLaunchArgument('start_rviz', default_value='true',
                               description='Launch rviz2 alongside everything else (replaces '
                                           'running it manually in a separate terminal)'),

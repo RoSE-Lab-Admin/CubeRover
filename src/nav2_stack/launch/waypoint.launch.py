@@ -31,6 +31,9 @@ def launch_setup(context):
     pose_csv   = LaunchConfiguration('pose_csv').perform(context)
     rover_type = LaunchConfiguration('rover_type').perform(context)
     include_nav2 = LaunchConfiguration('include_nav2')
+    follow_mode = LaunchConfiguration('follow_mode').perform(context)
+    advance_distance = float(LaunchConfiguration('advance_distance').perform(context))
+    trial_id = LaunchConfiguration('trial_id').perform(context)
 
     if rover_type not in ROVER_CONFIGS:
         raise ValueError(f"Unknown rover_type '{rover_type}'. Choose from: {list(ROVER_CONFIGS)}")
@@ -63,6 +66,9 @@ def launch_setup(context):
             'use_opti':     is_opti,
             'opti_topic':   opti_topic,
             'robot_frame':  robot_frame,
+            'follow_mode':  follow_mode,
+            'advance_distance': advance_distance,
+            'trial_id':     trial_id,
         }]
     )
 
@@ -120,5 +126,11 @@ def generate_launch_description():
         DeclareLaunchArgument('pose_csv',    default_value='pose.csv'),
         DeclareLaunchArgument('rover_type',  default_value='fit_rosey'),
         DeclareLaunchArgument('include_nav2', default_value='true'),
+        # path_follower: "goals" (goToPose per waypoint) or "path" (FollowPath along
+        # the waypoints); advance_distance > 0 sends the next goal that early
+        DeclareLaunchArgument('follow_mode', default_value='goals'),
+        DeclareLaunchArgument('advance_distance', default_value='0.0'),
+        # tags path_follower's /trial_goal_result (autonomous_trials passes the trial name)
+        DeclareLaunchArgument('trial_id', default_value=''),
         OpaqueFunction(function=launch_setup),
     ])

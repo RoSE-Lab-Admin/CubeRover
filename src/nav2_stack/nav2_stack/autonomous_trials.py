@@ -96,6 +96,7 @@ class PoseWatcher(Node):
         self.yaw = None
         self.safety_stop = False
         self.goal_result = None  # None | "succeeded" | "failed"
+        self.trial_id = None     # results tagged with another trial's id are ignored
         self.create_subscription(PoseStamped, opti_topic, self._cb, 10)
         self.create_subscription(Bool, "/safety_stop", self._safety_stop_cb, 10)
         self.create_subscription(String, "/trial_goal_result", self._goal_result_cb, 10)
@@ -119,10 +120,17 @@ class PoseWatcher(Node):
             self.safety_stop = True
 
     def _goal_result_cb(self, msg: String):
-        self.goal_result = msg.data
+        # "<result>:<trial_id>" (path_follower's trial_id); a result of another
+        # trial (a late one from the previous trial's path_follower) is ignored
+        result, _, trial_id = msg.data.partition(":")
+        if trial_id and trial_id != self.trial_id:
+            log(f"ignoring /trial_goal_result '{msg.data}' (current trial: {self.trial_id})")
+            return
+        self.goal_result = result
 
-    def reset_trial_state(self):
+    def reset_trial_state(self, trial_id=None):
         self.goal_result = None
+        self.trial_id = trial_id
 
 
 def wait_for_node_active(nav: BasicNavigator, node_name: str, timeout_sec: float = 5.0,
@@ -171,7 +179,7 @@ def wait_for_nav2_active():
     log(f"Nav2 fully active after {time.monotonic() - t0:.1f}s")
 
 
-def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
+def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=None) -> str:
     """Spins until path_follower reports its authoritative trajectory
     outcome, the real pose is within XY_GOAL_TOLERANCE of goal_xy (a
     secondary/fallback "reached" signal -- see below), no progress has been
@@ -189,6 +197,12 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
     uses this to discard the bag and retry the same trial instead of treating
     it as a normal failed-but-attempted trajectory.
 
+    route (waypoint_mode "spiral"): the leg's points; progress is then the
+    length still to go along the route (nearest point, searched only a few
+    metres ahead -- see spiral.route_remaining) instead of the straight-line
+    distance to goal_xy, which does not shrink steadily on a spiral, and the
+    distance fallback only counts within the last metre of the route.
+
     Trusts path_follower's own /trial_goal_result over the distance poll:
     Nav2's internal goToPose result and this function's independent
     re-derivation of "reached" from a coarser, staler pose-topic poll can
@@ -199,10 +213,15 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
     only ever fire *correctly* (same 0.5m tolerance Nav2's own goal checker
     uses), so keeping it can't reintroduce that bug, only catch a reached
     goal if /trial_goal_result were ever dropped."""
-    node.reset_trial_state()
+    node.reset_trial_state(trial_id)
     best_dist = math.inf
     first_dist = None
     last_improve_t = time.monotonic()
+    if route is not None:
+        from nav2_stack.spiral import route_remaining
+        route = np.asarray(route, dtype=float)
+        route_cum = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(route, axis=0).T))])
+        route_idx = 0
     log(f"{label}: waiting for goal ({goal_xy[0]:.3f}, {goal_xy[1]:.3f})  "
         f"tolerance={XY_GOAL_TOLERANCE}m  stall_window={STALL_WINDOW_S}s")
 
@@ -221,12 +240,15 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str) -> str:
             log(f"{label}: path_follower reported the trajectory FAILED")
             return "stalled" if _made_progress() else "no_movement"
         if node.xy is not None:
-            dist = math.hypot(node.xy[0] - goal_xy[0], node.xy[1] - goal_xy[1])
+            goal_dist = math.hypot(node.xy[0] - goal_xy[0], node.xy[1] - goal_xy[1])
+            dist = goal_dist
+            if route is not None:
+                dist, route_idx = route_remaining(route, route_cum, node.xy, route_idx)
             if first_dist is None:
                 first_dist = dist
                 best_dist = dist
-            if dist < XY_GOAL_TOLERANCE:
-                log(f"{label}: goal reached (dist={dist:.3f}m)")
+            if goal_dist < XY_GOAL_TOLERANCE and (route is None or dist < XY_GOAL_TOLERANCE + 1.0):
+                log(f"{label}: goal reached (dist={goal_dist:.3f}m)")
                 return "reached"
             if dist < best_dist - MIN_IMPROVEMENT_M:
                 best_dist = dist
@@ -280,19 +302,23 @@ def next_trial_start_index(bag_dir: Path) -> int:
     return max(existing, default=0) + 1
 
 
-def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str) -> str:
-    """Returns 'reached', 'stalled', 'no_movement', or 'safety_stop' (see wait_for_goal)."""
+def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str,
+                  follow_args=(), route=None) -> str:
+    """Returns 'reached', 'stalled', 'no_movement', or 'safety_stop' (see wait_for_goal).
+    follow_args: extra waypoint.launch.py arguments (follow_mode, advance_distance);
+    route: see wait_for_goal."""
     bag_path = bag_dir / bag_name
+    trial_id = f"{label}@{int(time.time())}"  # unique per attempt (see PoseWatcher._goal_result_cb)
     bag_proc = start_process(["ros2", "bag", "record", *BAG_TOPICS, "-o", str(bag_path)])
     time.sleep(BAG_START_DELAY_S)
 
     wp_proc = start_process([
         "ros2", "launch", "nav2_stack", "waypoint.launch.py",
-        "include_nav2:=false", f"pose_csv:={pose_csv}",
+        "include_nav2:=false", f"pose_csv:={pose_csv}", f"trial_id:={trial_id}", *follow_args,
     ])
 
     try:
-        outcome = wait_for_goal(pose_node, goal_xy, label)
+        outcome = wait_for_goal(pose_node, goal_xy, label, route, trial_id)
     finally:
         stop_process(wp_proc, "waypoint.launch.py")
         stop_process(bag_proc, "ros2 bag record")
@@ -549,7 +575,7 @@ def _from_scratch_retrain_kwargs(fs_cfg: dict, bag_dir: Path, new_bag_path: Path
     there is none yet."""
     return dict(
         bag_dir=bag_dir, new_bag_path=new_bag_path,
-        model_type="mlp", width=fs_cfg["width"],
+        model_type="slip_gp" if fs_cfg["terrain_gp"] else "mlp", width=fs_cfg["width"],
         warm_start=fs_cfg["current_weights_path"] is not None, subset=fs_cfg["subset"],
         subset_fraction=fs_cfg["subset_fraction"],
         fmean=fs_cfg["fmean"], fstd=fs_cfg["fstd"],
@@ -662,6 +688,28 @@ def abort_background_from_scratch(pending):
     pending["tmp_path"].unlink(missing_ok=True)
 
 
+SPIRAL_ADVANCE_DISTANCE = 1.5  # m: option A keeps its goal this far ahead of the rover along the leg
+
+
+def write_spiral_trial(bag_dir: Path, traj_name: str, leg, drive: str) -> Path:
+    """The leg's points for waypoint.launch.py's pose_csv: every
+    spiral.WAYPOINT_SPACING m for "waypoints" (option A), the dense leg for
+    "path" (option B). Kept in bag_dir as <traj_name>_spiral.csv."""
+    pts = leg.waypoints() if drive == "waypoints" else leg.points
+    path = bag_dir / f"{traj_name}_spiral.csv"
+    with open(path, "w") as f:
+        f.write("x,y,z\n")
+        for x, y in pts:
+            f.write(f"{x:.4f},{y:.4f},0.0\n")
+    return path
+
+
+def spiral_follow_args(drive: str):
+    if drive == "waypoints":
+        return ["follow_mode:=goals", f"advance_distance:={SPIRAL_ADVANCE_DISTANCE}"]
+    return ["follow_mode:=path"]
+
+
 def run_gp_explorer(gp_explorer_path: Path, bag_dir: Path, name: str) -> bool:
     # gp_explorer_gpu.py's own --map default is Path(__file__).resolve().parent.parent
     # / 'maps' / 'map.pgm' -- only correct when run from source. From the
@@ -734,6 +782,28 @@ def main():
                              "a GP height map (refit every retrain) for the attitude of MPPI's "
                              "future rollout steps. Checkpoints are kept apart from the plain "
                              "ones. Default: false")
+    parser.add_argument("--terrain-gp", default="false", type=parse_bool,
+                        help="train_from_scratch only: instead of an MLP, fit kinematics with slip "
+                             "learned from the slope -- a second GP maps the GP height map's slope "
+                             "(climb along the direction of travel, side slope) to linear and "
+                             "angular slip ratios, refit every trial. Takes over from --terrain-nn "
+                             "if both are set. Default: false")
+    parser.add_argument("--waypoint-mode", default="gp", choices=["gp", "spiral"],
+                        help="How each trial's goal is chosen: gp = gp_explorer_gpu.py's "
+                             "information-based goal (default); spiral = the next leg of a spiral "
+                             "around --spiral-centre (see nav2_stack/spiral.py): one bag per leg, "
+                             "from the inner circle to the outside or back in")
+    parser.add_argument("--spiral-drive", default="waypoints", choices=["waypoints", "path"],
+                        help="waypoint-mode spiral: waypoints = waypoints every 1 m along the leg, "
+                             "the goal kept ~1.5 m ahead of the rover's progress along it so the "
+                             "rover never stops, planned by the global planner (default); path = "
+                             "the leg itself straight to the controller (FollowPath, no global "
+                             "planner)")
+    parser.add_argument("--spiral-radius", default=1.8, type=float,
+                        help="waypoint-mode spiral: radius of the inner circle = the tightest turn "
+                             "(m). Default: 1.8")
+    parser.add_argument("--spiral-centre-x", default=0.0, type=float)
+    parser.add_argument("--spiral-centre-y", default=0.0, type=float)
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
                         help="Number of initial kinematics-only trials to collect before the "
                              "first from-scratch fit. Default: 5")
@@ -754,6 +824,13 @@ def main():
         log("WARNING: both --train-from-scratch and --retrain-dynamics are true -- "
             "train_from_scratch takes over, retrain_dynamics is ignored")
 
+    if args.terrain_gp and args.terrain_nn:
+        log("WARNING: both --terrain-gp and --terrain-nn are true -- terrain_gp takes over")
+        args.terrain_nn = False
+    if args.terrain_gp and not args.train_from_scratch:
+        log("WARNING: --terrain-gp only applies with --train-from-scratch -- ignored")
+        args.terrain_gp = False
+
     fs_cfg = None
     if args.train_from_scratch:
         fs_cfg = {
@@ -771,7 +848,9 @@ def main():
             "async": args.async_training,
             "async_serial_trials": args.async_serial_trials,
             "terrain": args.terrain_nn,
-            "stem": model_stem(parsed["nn_hidden_width"], args.terrain_nn),
+            "terrain_gp": args.terrain_gp,
+            "stem": "slip_gp" if args.terrain_gp else model_stem(parsed["nn_hidden_width"],
+                                                                 args.terrain_nn),
         }
         fs_cfg["weights_dir"].mkdir(parents=True, exist_ok=True)
         # a .partial left by an aborted async run is never a usable checkpoint
@@ -838,6 +917,20 @@ def main():
     # Same package directory as gp_explorer_gpu.py (source or installed -- this
     # script and gp_explorer_gpu.py are always siblings either way), so this is
     # robust regardless of how autonomous_trials.py itself was invoked.
+    spiral = None
+    if args.waypoint_mode == "spiral":
+        from nav2_stack.spiral import Clearance, spiral_legs
+        map_yaml = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.yaml"
+        legs = spiral_legs(args.spiral_radius, (args.spiral_centre_x, args.spiral_centre_y),
+                           Clearance(map_yaml), args.n_trajectories)
+        if not legs:
+            sys.exit(f"FATAL: no spiral leg of radius {args.spiral_radius} m around "
+                     f"({args.spiral_centre_x}, {args.spiral_centre_y}) fits the map")
+        spiral = {"legs": legs, "drive": args.spiral_drive}
+        log(f"waypoint mode spiral: r_min {args.spiral_radius} m around ({args.spiral_centre_x}, "
+            f"{args.spiral_centre_y}), drive={args.spiral_drive}; {len(legs)} legs, "
+            f"{min(L.length for L in legs):.1f}-{max(L.length for L in legs):.1f} m long")
+
     gp_explorer_path = Path(__file__).resolve().parent / "gp_explorer_gpu.py"
     if not gp_explorer_path.exists():
         sys.exit(f"FATAL: expected to find gp_explorer_gpu.py next to this script "
@@ -941,12 +1034,23 @@ def main():
                 ok, msg = escaper.run((0.0, 0.0))
                 if msg != "not stuck":
                     log(f"pre-explorer escape: {'freed' if ok else 'not freed'} ({msg})")
-                if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
-                    sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} "
-                             f"times for {traj_name} -- aborting entire run")
-
-                goal_xy = read_goal_xy(pose_csv)
-                outcome = run_one_trial(bag_dir, bag_name, pose_csv, goal_xy, pose_node, traj_name)
+                if spiral is not None:
+                    leg = spiral["legs"][(i - 1) % len(spiral["legs"])]
+                    trial_csv = write_spiral_trial(bag_dir, traj_name, leg, spiral["drive"])
+                    goal_xy = leg.points[-1]
+                    log(f"{traj_name}: spiral leg {i} {leg.direction}, r {leg.r0:.2f} -> "
+                        f"{leg.r1:.2f} m, {leg.length:.1f} m, from ({leg.points[0][0]:.2f}, "
+                        f"{leg.points[0][1]:.2f}) to ({goal_xy[0]:.2f}, {goal_xy[1]:.2f})")
+                    outcome = run_one_trial(bag_dir, bag_name, trial_csv, goal_xy, pose_node,
+                                            traj_name, spiral_follow_args(spiral["drive"]),
+                                            leg.points)
+                else:
+                    if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
+                        sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} "
+                                 f"times for {traj_name} -- aborting entire run")
+                    goal_xy = read_goal_xy(pose_csv)
+                    outcome = run_one_trial(bag_dir, bag_name, pose_csv, goal_xy, pose_node,
+                                            traj_name)
                 if outcome != "no_movement":
                     break
                 log(f"trial {i}/{args.n_trajectories} ({traj_name}): no movement detected "

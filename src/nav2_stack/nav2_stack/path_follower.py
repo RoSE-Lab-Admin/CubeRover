@@ -42,11 +42,33 @@ class PathFollower(Node):
         # nav2_stack/escape.py): the planner and controller cannot recover
         # from a footprint already in collision on their own.
         self.declare_parameter('escape_when_stuck', True)
+        # How the waypoints are driven (autonomous_trials' waypoint_mode "spiral"):
+        #  - "goals" (default): goToPose to each waypoint in turn. With
+        #    advance_distance > 0 the goal is instead always the waypoint about
+        #    advance_distance ahead of the rover's progress along the waypoints, so
+        #    it never stops in between (0 = wait until each goal is reached, the
+        #    original behaviour).
+        #  - "path": goToPose to the first waypoint, then the waypoints themselves
+        #    (dense, e.g. a spiral leg) go straight to the controller via
+        #    FollowPath -- no global planner, no replanning.
+        self.declare_parameter('follow_mode', 'goals')
+        self.declare_parameter('advance_distance', 0.0)
+        # tag for /trial_goal_result ("<result>:<trial_id>"), so autonomous_trials
+        # can tell this trial's result from a late one of the previous trial's
+        # path_follower (which it may already have stopped by distance)
+        self.declare_parameter('trial_id', '')
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
         self.reissue_on_heading_change = self.get_parameter('reissue_on_heading_change').value
         self.escape_when_stuck = self.get_parameter('escape_when_stuck').value
+        self.follow_mode = self.get_parameter('follow_mode').value
+        self.advance_distance = float(self.get_parameter('advance_distance').value)
+        self.trial_id = self.get_parameter('trial_id').value
+        if self.follow_mode not in ('goals', 'path'):
+            raise ValueError(f"follow_mode must be 'goals' or 'path', got {self.follow_mode!r}")
+        self.path_phase = None   # follow_mode "path": "approach" (goToPose) then "follow"
+        self.progress_idx = 0    # advance_distance > 0: waypoint the rover has got to
 
         # create callback group so it can execute while nav2 blocks
         self.opti_group = ReentrantCallbackGroup()
@@ -81,7 +103,8 @@ class PathFollower(Node):
         # _wait_for_node_active; pose comes from opti_callback
         self.escaper = (Escaper(self.nav, self._current_pose, default_planner_id(),
                                 robot_frame=self.robot_frame, cmd_pub=self.cmd_vel_pub)
-                        if self.escape_when_stuck and self.use_opti else None)
+                        if self.escape_when_stuck and self.use_opti and self.follow_mode == 'goals'
+                        else None)
         self.stuck_since = None
         self.escapes_this_wp = 0
 
@@ -416,11 +439,20 @@ class PathFollower(Node):
                 self.get_logger().info("waiting to receive OptiTrack pose before beginning trajectory")
                 return
             self.current_wp_idx = 0
-            self._issue_goal()
             self.started = True
+            if self.follow_mode == 'path':
+                self._start_path_mode()
+                return
+            self._issue_goal()
+            return
+
+        if self.follow_mode == 'path':
+            self._step_path_mode()
             return
 
         if not self.nav.isTaskComplete():
+            if self._advance_early():
+                return
             # stuck in an obstacle while navigating -> escape (see escape.py)
             if self.escaper is not None and self.escapes_this_wp < MAX_ESCAPES_PER_WAYPOINT:
                 pose = self._current_pose()
@@ -484,13 +516,104 @@ class PathFollower(Node):
             self.get_logger().info("trajectory completed")
             self.started = False
             self.finished = True
-            self.goal_result_pub.publish(
-                String(data="failed" if self.trajectory_had_failure else "succeeded"))
+            self._publish_result("failed" if self.trajectory_had_failure else "succeeded")
             self.stop_nav()
             return
 
         self._issue_goal()
 
+
+    def _advance_early(self):
+        """advance_distance > 0: keep the goal about advance_distance ahead of the
+        rover's progress along the waypoints (preempting the current goal), so it
+        keeps driving instead of stopping at every waypoint. Progress = the nearest
+        waypoint within 3 m ahead of the last one reached, counted only while the
+        rover is within 1 m of it -- far from the waypoints (e.g. starting from the
+        centre of a spiral) it just drives to the current goal first, rather than
+        skipping every waypoint that happens to be close."""
+        if self.advance_distance <= 0 or self.current_wp_idx >= len(self.point_path) - 1:
+            return False
+        pose = self._current_pose()
+        if pose is None:
+            return False
+        xy = np.array([[p.pose.position.x, p.pose.position.y] for p in self.point_path])
+        cum = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))])
+        hi = int(np.searchsorted(cum, cum[self.progress_idx] + 3.0, side='right'))
+        d = np.hypot(xy[self.progress_idx:hi, 0] - pose[0], xy[self.progress_idx:hi, 1] - pose[1])
+        if len(d) and d.min() < 1.0:
+            self.progress_idx += int(np.argmin(d))
+        target = int(np.searchsorted(cum, cum[self.progress_idx] + self.advance_distance))
+        target = min(max(target, self.progress_idx + 1), len(xy) - 1)
+        if target <= self.current_wp_idx:
+            return False
+        self.current_wp_idx = target
+        self.escapes_this_wp = 0
+        self.stuck_since = None
+        self._issue_goal()
+        return True
+
+    def _dense_path(self):
+        """self.point_path as a nav_msgs/Path with each pose facing the next one."""
+        path = Path()
+        path.header.frame_id = 'world'
+        path.header.stamp = self.get_clock().now().to_msg()
+        pts = [(p.pose.position.x, p.pose.position.y) for p in self.point_path]
+        for i, (x, y) in enumerate(pts):
+            j = min(i + 1, len(pts) - 1)
+            k = j - 1 if j == i else i
+            yaw = np.arctan2(pts[j][1] - pts[k][1], pts[j][0] - pts[k][0])
+            ps = PoseStamped()
+            ps.header = path.header
+            ps.pose.position.x, ps.pose.position.y = float(x), float(y)
+            ps.pose.orientation.z, ps.pose.orientation.w = float(np.sin(yaw / 2)), float(np.cos(yaw / 2))
+            path.poses.append(ps)
+        return path
+
+    def _start_path_mode(self):
+        """follow_mode "path": drive to the path's start with the planner unless
+        the rover is already there, then hand the path to the controller."""
+        pose = self._current_pose()
+        first = self.point_path[0].pose.position
+        if pose is not None and np.hypot(first.x - pose[0], first.y - pose[1]) < 0.5:
+            self._follow_dense_path()
+            return
+        self.path_phase = 'approach'
+        self._issue_goal()
+
+    def _follow_dense_path(self):
+        self.path_phase = 'follow'
+        path = self._dense_path()
+        self.get_logger().info(
+            f"following the {len(path.poses)}-pose path directly with the controller (FollowPath)")
+        self.nav.followPath(path)
+
+    def _step_path_mode(self):
+        if not self.nav.isTaskComplete():
+            return
+        result = self.nav.getResult()
+        if result == TaskResult.CANCELED:
+            # stopped from outside (autonomous_trials ends the trial): no
+            # result to report, as in goals mode
+            self.get_logger().info("trajectory cancelled")
+            self.started = False
+            self.finished = True
+            self.stop_nav()
+            return
+        if self.path_phase == 'approach':
+            if result != TaskResult.SUCCEEDED:
+                self.get_logger().warn(f"approach to the path's start: result={result} -- "
+                                       f"following the path from here anyway")
+            self._follow_dense_path()
+            return
+        self.get_logger().info(f"FollowPath result={result}")
+        self.started = False
+        self.finished = True
+        self._publish_result("succeeded" if result == TaskResult.SUCCEEDED else "failed")
+        self.stop_nav()
+
+    def _publish_result(self, result):
+        self.goal_result_pub.publish(
+            String(data=f"{result}:{self.trial_id}" if self.trial_id else result))
 
     def stop_nav(self):
         stop_msg = TwistStamped()

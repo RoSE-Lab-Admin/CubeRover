@@ -63,6 +63,11 @@ deactivate
 | `async_training` | `false` | `train_from_scratch` only (ignored with a warning otherwise): train each iteration in a background process while the next trial is planned and driven, instead of between trials. Trial *i* then drives on the model trained through trial *i−2* (one trial older than serially); if that model isn't finished when the previous trial ends, the run waits for it. Each background training writes its output to `bag_dir/from_scratch_weights/train_trialNN.log`. |
 | `async_serial_trials` | `15` | With `async_training:=true`: trials 1 to N still train serially (between trials), because early on training is quick and each new trial changes the model the most. The background training starts at trial N+1. `0` = background from the first trained model on. |
 | `terrain_nn` | `false` | With `train_from_scratch` or `retrain_dynamics` (MLP only): train the terrain MLP instead. It also takes the rover's pitch and roll (from OptiTrack) and predicts sideways motion. In MPPI's rollouts, step 0 uses the measured pitch/roll; later steps read them off a GP height map of the arena (refit at every retrain, same GP as `gp_explorer_gpu.py`) at the predicted pose, calibrated to match OptiTrack. Map and calibration are stored inside the model file; the controller recognises a terrain model by itself. Checkpoints are named `mlp<W>_terrain_*` (`from_scratch_weights/`, or `terrain_weights/` with `retrain_dynamics`, where the shared deployed model drives until the first retrain). |
+| `terrain_gp` | `false` | With `train_from_scratch`: instead of an MLP, fit kinematics with slip learned from the slope. The GP height map (as for `terrain_nn`) gives the slope under the rover; a second GP maps it (climb along the direction of travel, side slope) to linear and angular slip ratios: v = v_cmd·(1 − s_x), ω = ω_cmd·(1 − s_ω). Refit every trial (~10 s on the CPU), checkpoints `from_scratch_weights/slip_gp_trialNN.pt`. Takes over from `terrain_nn` if both are set. |
+| `waypoint_mode` | `gp` | How each trial's goal is chosen. `gp`: `gp_explorer_gpu.py`'s information-based goal. `spiral`: the next leg of a spiral (`nav2_stack/spiral.py`) instead -- it starts on a circle of `spiral_radius` around the spiral centre, grows by 0.5 m per loop until it would come within 0.75 m of a wall, then shrinks back, always counter-clockwise. One bag per leg: inner circle -> outside, or outside -> inner circle (or as far as the rover gets). The initial bag still drives to (0, 0) first. Each trial's points are kept as `bag_dir/traj_NN_spiral.csv`. |
+| `spiral_drive` | `waypoints` | `waypoint_mode:=spiral` only. `waypoints`: waypoints every 1 m along the leg, and the goal is kept ~1.5 m ahead of the rover's progress along it, so it is planned by the global planner but the rover never stops in between. `path`: drive to the leg's start, then the leg itself goes straight to the controller (`FollowPath`, no global planner, no replanning). |
+| `spiral_radius` | `1.8` | `waypoint_mode:=spiral` only: radius of the inner circle = the tightest turn (m). Larger than ~2.3 m does not fit the current arena with 0.75 m wall clearance. |
+| `spiral_centre_x`, `spiral_centre_y` | `0.0` | `waypoint_mode:=spiral` only: the spiral's centre. (-1.0, 0.2) leaves the most room in the current arena. |
 | `start_rviz` | `true` | Launches `rviz2` alongside everything else. Set to `false` to skip it. |
 
 Example with retraining on:
@@ -97,6 +102,19 @@ ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir
   e.g. `pitch = 1.06 * pitch_gp + 0.03 * roll_gp -4.55 deg (residual rms 2.0 deg)`. A residual
   well above ~3 deg means the GP map fits the terrain poorly.
 - After each new model, `controller_server` logs `NNDynamics: ... terrain=yes`.
+
+Example with spiral waypoints instead of the GP explorer (any training flags can be added):
+```bash
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
+    waypoint_mode:=spiral spiral_radius:=1.8 spiral_drive:=waypoints
+```
+
+Example with train-from-scratch and the slope-slip GP model (same notes as above; each fit prints
+the slip it learned, e.g. `slip GP linear: ... GP at level +0.21 / climb +10 deg +0.36 / ...`):
+```bash
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
+    train_from_scratch:=true terrain_gp:=true
+```
 
 Other behavior:
 - If `bag_dir` has no `initial_bag` yet, one is collected automatically by driving to the

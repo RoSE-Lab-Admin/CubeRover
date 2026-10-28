@@ -91,6 +91,17 @@ TERRAIN_HEAD_WIDTH = 16  # hidden units of the terrain add-on (TerrainMLP.head)
 # OptiTrack, so the network learns slope trends rather than exact attitudes (and
 # copes with the map-derived attitude of MPPI's future steps)
 ATT_NOISE = np.radians(2.0)
+
+# ── Slip GP (terrain_gp, model_type "slip_gp") ─────────────────────────────────
+# Slip ratios s = 1 - (moved along the command) / (commanded), per 1 deg x 1 deg
+# bin of the slip features (summed over the bin's samples, so the many small
+# per-step ratios average out), then one GP per ratio over the bins.
+SLIP_MIN_CMD = (0.05, 0.05)        # |vx| m/s, |wz| rad/s for a sample to count
+SLIP_BIN = np.radians(1.0)
+SLIP_MIN_SAMPLES = 10              # per bin
+SLIP_GRID_RES = np.radians(0.5)
+SLIP_GRID_MAX = np.radians(25.0)   # climb -25..25 deg, side 0..25 deg
+SLIP_CLAMP = (-1.0, 1.0)
 TERRAIN_GRID_RES = 0.05  # m, slope grid sampled from the GP mean
 # attitude that mirrored copies are reflected about (the calibration offset =
 # what OptiTrack reads on level ground); set by retrain()
@@ -522,6 +533,80 @@ class TerrainMLP(nn.Module):
         return a @ self.calib[:, :2].t() + self.calib[:, 2]
 
 
+def slip_features(pitch_gp: torch.Tensor, roll_gp: torch.Tensor,
+                  vx: torch.Tensor) -> torch.Tensor:
+    """(B, 2) slip GP input [climb, side] in rad from the GP surface's pitch/roll:
+    climb = slope along the direction of travel (+ = uphill, also when reversing up
+    a hill), side = side slope magnitude."""
+    direction = 1.0 - 2.0 * (vx < 0).to(vx.dtype)
+    return torch.stack([-pitch_gp * direction, roll_gp.abs()], dim=1)
+
+
+class TerrainSlipGP(nn.Module):
+    """Kinematics with slip learned from the slope (terrain_gp): the applied
+    v = v_cmd (1 - s_x), w = w_cmd (1 - s_w), with [s_x, s_w] from a GP over
+    slip_features() of the GP height map's surface under the rover. Both GPs are
+    precomputed onto grids (the height map's slope as in TerrainMLP, the slip GP
+    over [climb, side]), so a rollout step is two bilinear lookups. Same interface
+    as TerrainMLP for NNDynamics: forward([normalized vx, wz history, pitch, roll])
+    -> [corr_fwd, lateral (= 0), corr_yaw], attitude(x, y, yaw) -> OptiTrack-like
+    [pitch, roll]; forward() maps the attitude back onto the GP surface through
+    the inverse calibration, so step 0's measured attitude (mounting offset
+    included) and the map's attitude of steps 1.. give the same slip."""
+
+    def __init__(self, history_steps: int, tmap: Dict, slip: Dict,
+                 fmean: np.ndarray, fstd: np.ndarray):
+        super().__init__()
+        self.history_steps: int = history_steps
+        self.terrain: bool = True   # NNDynamics switches to the terrain rollout on this
+        self.dt: float = DT
+        self.grid_x0: float = float(tmap["x0"])
+        self.grid_y0: float = float(tmap["y0"])
+        self.grid_res: float = float(tmap["res"])
+        self.register_buffer("grid", torch.as_tensor(tmap["grid"], dtype=torch.float32))
+        calib = torch.as_tensor(tmap["calib"], dtype=torch.float32)
+        self.register_buffer("calib", calib)
+        self.register_buffer("calib_inv", torch.linalg.inv(calib[:, :2]))
+        self.slip_c0: float = float(slip["c0"])
+        self.slip_s0: float = float(slip["s0"])
+        self.slip_res: float = float(slip["res"])
+        self.slip_min: float = float(SLIP_CLAMP[0])
+        self.slip_max: float = float(SLIP_CLAMP[1])
+        self.register_buffer("slip_grid", torch.as_tensor(slip["grid"], dtype=torch.float32))
+        self.register_buffer("fmean", torch.as_tensor(fmean, dtype=torch.float32))
+        self.register_buffer("fstd", torch.as_tensor(fstd, dtype=torch.float32))
+
+    def slip(self, f: torch.Tensor) -> torch.Tensor:
+        """(B, 2) [s_x, s_w] at slip features f (B, 2); the grid's edge value beyond it."""
+        ny, nx = self.slip_grid.shape[1], self.slip_grid.shape[2]
+        fx = ((f[:, 0] - self.slip_c0) / self.slip_res).clamp(0.0, nx - 1.001)
+        fy = ((f[:, 1] - self.slip_s0) / self.slip_res).clamp(0.0, ny - 1.001)
+        ix = fx.floor()
+        iy = fy.floor()
+        tx = fx - ix
+        ty = fy - iy
+        i00 = iy.long() * nx + ix.long()
+        g = self.slip_grid.reshape(2, ny * nx)
+        s = ((g.index_select(1, i00) * (1 - tx) + g.index_select(1, i00 + 1) * tx) * (1 - ty) +
+             (g.index_select(1, i00 + nx) * (1 - tx) + g.index_select(1, i00 + nx + 1) * tx) * ty)
+        return s.t().clamp(self.slip_min, self.slip_max)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        cmd = x[:, -4:-2] * self.fstd + self.fmean      # this step's [vx, wz]
+        a_gp = (x[:, -2:] - self.calib[:, 2]) @ self.calib_inv.t()
+        s = self.slip(slip_features(a_gp[:, 0], a_gp[:, 1], cmd[:, 0]))
+        corr_fwd = -s[:, 0] * cmd[:, 0] * self.dt
+        corr_yaw = -s[:, 1] * cmd[:, 1] * self.dt
+        return torch.stack([corr_fwd, torch.zeros_like(corr_fwd), corr_yaw], dim=1)
+
+    @torch.jit.export
+    def attitude(self, x: torch.Tensor, y: torch.Tensor, yaw: torch.Tensor) -> torch.Tensor:
+        """(B, 2) [pitch, roll] OptiTrack would read at world pose (x, y, yaw), from the
+        GP surface through the calibration (as TerrainMLP.attitude)."""
+        a = gp_attitude(self.grid, self.grid_x0, self.grid_y0, self.grid_res, x, y, yaw)
+        return a @ self.calib[:, :2].t() + self.calib[:, 2]
+
+
 class LinearModel(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):
         super().__init__()
@@ -763,6 +848,57 @@ def build_terrain_map(bag_paths: List[Path], segments: List[Dict]) -> Dict:
     return tmap
 
 
+def fit_slip_gp(segments: List[Dict], tmap: Dict) -> Dict:
+    """Slip GP grid (2, ny, nx) [s_x, s_w] over [climb, side] (see SLIP_*), fit on
+    segments with the slip features of the height map's surface at the measured
+    poses -- what the rollout sees at steps 1.."""
+    from nav2_stack import gp_explorer_gpu as gpx  # deferred: pulls in gpytorch
+    rows = []
+    for sg in segments:
+        d = torch.from_numpy(sg["data"])
+        cur, nxt = d[:-1], d[1:]   # command and pose at step k, motion over step k
+        a = gp_attitude(tmap["grid"], tmap["x0"], tmap["y0"], tmap["res"],
+                        cur[:, COL_X], cur[:, COL_Y], cur[:, COL_YAW])
+        f = slip_features(a[:, 0], a[:, 1], cur[:, COL_VX_CMD])
+        rows.append(torch.cat([f, cur[:, [COL_VX_CMD, COL_WZ_CMD]],
+                               nxt[:, [COL_DFWD, COL_DYAW]]], 1))
+    R = torch.cat(rows).numpy().astype(np.float64)
+    f, vx, wz, dfwd, dyaw = R[:, :2], R[:, 2], R[:, 3], R[:, 4], R[:, 5]
+
+    nx = int(round(2 * SLIP_GRID_MAX / SLIP_GRID_RES)) + 1
+    ny = int(round(SLIP_GRID_MAX / SLIP_GRID_RES)) + 1
+    cg, sg_ = np.meshgrid(-SLIP_GRID_MAX + np.arange(nx) * SLIP_GRID_RES,
+                          np.arange(ny) * SLIP_GRID_RES)
+    pts = torch.tensor(np.column_stack([cg.ravel(), sg_.ravel()]), dtype=torch.float32)
+    grids, report = [], []
+    for name, cmd, moved, min_cmd in (("linear", vx, dfwd, SLIP_MIN_CMD[0]),
+                                      ("angular", wz, dyaw, SLIP_MIN_CMD[1])):
+        use = np.abs(cmd) > min_cmd
+        keys = np.floor(f[use] / SLIP_BIN).astype(np.int64)
+        _, inv, counts = np.unique(keys, axis=0, return_inverse=True, return_counts=True)
+        inv = inv.ravel()
+        along = np.bincount(inv, moved[use] * np.sign(cmd[use]))   # moved along the command
+        commanded = np.bincount(inv, np.abs(cmd[use]) * DT)
+        fb = np.stack([np.bincount(inv, f[use][:, i]) for i in range(2)], 1) / counts[:, None]
+        keep = counts >= SLIP_MIN_SAMPLES
+        if keep.sum() < 3:
+            raise RuntimeError(f"slip GP: only {int(keep.sum())} {name} slope bins with "
+                               f">= {SLIP_MIN_SAMPLES} samples")
+        s = 1.0 - along[keep] / commanded[keep]
+        gp, _ = gpx.train_gp(fb[keep], s, torch.device("cpu"))
+        with torch.no_grad():
+            grids.append(gp(pts).mean.reshape(ny, nx))
+        flat = float(1.0 - along.sum() / commanded.sum())
+        report.append(f"{name}: {int(keep.sum())} bins from {int(use.sum())} samples, "
+                      f"overall slip {flat:+.2f}, GP at level {grids[-1][0, nx // 2]:+.2f} / "
+                      f"climb +10 deg {grids[-1][0, nx // 2 + 20]:+.2f} / "
+                      f"climb -10 deg {grids[-1][0, nx // 2 - 20]:+.2f} / "
+                      f"side 10 deg {grids[-1][20, nx // 2]:+.2f}")
+    for line in report:
+        print(f"[dynamics_retrain] slip GP {line}", flush=True)
+    return {"grid": torch.stack(grids), "c0": -SLIP_GRID_MAX, "s0": 0.0, "res": SLIP_GRID_RES}
+
+
 # ── Top-level entry point ──────────────────────────────────────────────────────
 def _load_bags(bag_paths: List[Path], typestore, outcomes: Dict[str, str], weighting: bool):
     """bag path -> (segments, failed) for every bag with usable data."""
@@ -786,7 +922,7 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
            history_steps: int = 0, bags: Optional[List[Path]] = None,
            terrain: bool = False) -> dict:
     """
-    Retrains a model (model_type="linear" or "mlp", width required for "mlp")
+    Retrains a model (model_type="linear", "mlp" or "slip_gp", width required for "mlp")
     on bags in bag_dir, always including new_bag_path plus either every other
     bag (subset=False) or a random subset_fraction of them (subset=True).
 
@@ -816,7 +952,8 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
         parameters, not a file.
     """
     # history only for the MLP (the linear model's weights are a fixed 2x2 in the yaml)
-    set_history(history_steps if model_type == "mlp" else 0)
+    # (slip_gp only uses the newest step, but takes the controller's full input window)
+    set_history(history_steps if model_type in ("mlp", "slip_gp") else 0)
     if LOOKBACK:
         print(f"[dynamics_retrain] history: the MLP sees cmd_vel_out of the current step and the "
               f"{LOOKBACK} before it ({IN_DIM_AR} inputs)", flush=True)
@@ -882,6 +1019,26 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
 
     norm = Normalizer(fmean, fstd)
 
+    if model_type == "slip_gp":
+        # terrain_gp: no network -- refit both GPs on every bag used (real data only)
+        segs = [s for b in use_bags for s in loaded[b][0]]
+        tmap = build_terrain_map(all_bags, [s for b in all_bags for s in loaded[b][0]])
+        model = TerrainSlipGP(LOOKBACK, tmap, fit_slip_gp(segs, tmap), fmean, fstd).eval()
+        scripted = torch.jit.script(model)
+        n_in = IN_DIM_AR + 2
+        x = torch.randn(37, n_in) * 0.5
+        p = torch.rand(37, 3) * torch.tensor([10.0, 10.0, 6.3]) - torch.tensor([5.0, 5.0, 3.1])
+        with torch.no_grad():
+            ref = torch.cat([model(x), model.attitude(p[:, 0], p[:, 1], p[:, 2])], 1)
+            got = torch.cat([scripted(x), scripted.attitude(p[:, 0], p[:, 1], p[:, 2])], 1)
+        assert (ref - got).abs().max().item() == 0.0, "scripted model diverges from eager -- aborting export"
+        if save_path is None:
+            raise ValueError("slip_gp needs a save_path (never the shared deployed model)")
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        scripted.save(str(save_path))
+        print(f"[dynamics_retrain] slip GP model exported to {save_path}", flush=True)
+        return {"exported_path": str(save_path)}
+
     if model_type == "linear":
         model = fit_linear_closed_form(train_segs, norm)
         W = model.linear.weight.detach().numpy()
@@ -923,4 +1080,4 @@ def retrain(bag_dir: Path, new_bag_path: Path, model_type: str, width: Optional[
         scripted.save(str(out_path))
         return {"exported_path": str(out_path)}
 
-    raise ValueError(f"model_type must be 'linear' or 'mlp', got {model_type!r}")
+    raise ValueError(f"model_type must be 'linear', 'mlp' or 'slip_gp', got {model_type!r}")
