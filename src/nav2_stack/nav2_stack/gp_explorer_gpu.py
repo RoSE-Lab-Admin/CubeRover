@@ -533,8 +533,14 @@ def main():
             print(f'  [{i+1}/{len(candidates)}]  valid paths so far: {len(valid_goals)}',
                   flush=True)
 
-    node.destroy_node()
-    rclpy.shutdown()
+    # The paths are planned; a slow middleware close (rmw_zenoh: "close operation
+    # timed out") must not crash the run and make autonomous_trials retry/abort.
+    try:
+        node.destroy_node()
+        rclpy.shutdown()
+    except Exception as e:
+        print(f'  WARNING: ROS shutdown failed ({e}) -- continuing, paths are already planned',
+              flush=True)
 
     # ── 4. Batch ALC on GPU ───────────────────────────────────────────────────
     n_valid = len(valid_goals)
