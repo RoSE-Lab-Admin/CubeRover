@@ -30,16 +30,17 @@ OptiTrack:
 each trial runs `gp_explorer_gpu.py` to pick a goal, records a bag while the rover drives there,
 and (optionally) retrains the dynamics model. It is the only terminal needed besides step 0.
 
-**Activate the CUDA env first** — `autonomous_trials.py` calls `gp_explorer_gpu.py` (and the
-dynamics-model training) under whatever Python environment it was itself launched with, so the
-env has to be active *before* the `ros2 launch` call, not inside it:
+**Activate the CUDA env first** — `colcon build` needs it (the MPPI controller builds against its
+PyTorch), and `autonomous_trials.py` calls `gp_explorer_gpu.py` (and the dynamics-model
+training) under whatever Python environment it was itself launched with, so the env has to be
+active *before* `colcon build` and the `ros2 launch` call, not inside it:
 
 ```bash
 cd CubeRover_waypoints/
 source /opt/ros/jazzy/setup.bash
+source ~/cuda_end/bin/activate
 colcon build          # only needed if source files changed
 source install/setup.bash
-source ~/cuda_end/bin/activate
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir
 deactivate
 ```
@@ -127,10 +128,11 @@ They are identical in kinematics mode.
 
 #### Each exploration run
 
-**Terminal 1** — build and launch Nav2:
+**Terminal 1** — build and launch Nav2 (the CUDA env has to be active for `colcon build`):
 ```bash
 cd CubeRover_waypoints/
 source /opt/ros/jazzy/setup.bash
+source ~/cuda_end/bin/activate
 colcon build          # only needed if source files changed
 source install/setup.bash
 ros2 launch nav2_stack nav2.launch.py
