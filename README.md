@@ -28,8 +28,9 @@ OptiTrack:
 ### Autonomous trials (one command, N trials)
 
 `autonomous_trials.launch.py` runs the whole exploration loop: it launches Nav2 itself, then for
-each trial runs `gp_explorer_gpu.py` to pick a goal, records a bag while the rover drives there,
-and (optionally) retrains the dynamics model. It is the only terminal needed besides step 0.
+each trial picks a goal -- `gp_explorer_gpu.py`'s information-based goal by default, or the next
+leg of a spiral with `waypoint_mode:=spiral` -- records a bag while the rover drives there, and
+(optionally) retrains the dynamics model. It is the only terminal needed besides step 0.
 
 **Activate the CUDA env first** — `colcon build` needs it (the MPPI controller builds against its
 PyTorch), and `autonomous_trials.py` calls `gp_explorer_gpu.py` (and the dynamics-model
@@ -103,11 +104,18 @@ ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir
   well above ~3 deg means the GP map fits the terrain poorly.
 - After each new model, `controller_server` logs `NNDynamics: ... terrain=yes`.
 
-Example with spiral waypoints instead of the GP explorer (any training flags can be added):
+Example with spiral waypoints instead of the GP explorer (any training flags can be added, e.g.
+`train_from_scratch:=true terrain_gp:=true`):
 ```bash
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
     waypoint_mode:=spiral spiral_radius:=1.8 spiral_drive:=waypoints
 ```
+- Radii worth trying: 1.5, 1.8, 2.0 m. Legs are ~4-9 m around (0, 0) and up to ~19 m around
+  `spiral_centre_x:=-1.0 spiral_centre_y:=0.2`.
+- Offline (kinematic simulator) so far only: `spiral_drive:=waypoints` often ends up driving the
+  spiral in reverse (the start heading is arbitrary and the planner keeps the gear it is moving
+  in); `spiral_drive:=path` follows it forward, but cuts inside the spiral unless the controller
+  has a `PathAlignCritic`, which `nav2_param2.yaml` does not have yet.
 
 Example with train-from-scratch and the slope-slip GP model (same notes as above; each fit prints
 the slip it learned, e.g. `slip GP linear: ... GP at level +0.21 / climb +10 deg +0.36 / ...`):
@@ -122,9 +130,12 @@ Other behavior:
 - Re-running with an existing `bag_dir` resumes: numbering continues after the last `bag_NN`,
   and `train_from_scratch` continues from the newest checkpoint in `from_scratch_weights/`.
 - If `gp_explorer_gpu.py` fails (e.g. a Nav2 action server isn't up yet), it's retried up to
-  3 times before the whole run aborts with a clear error.
+  3 times before the whole run aborts with a clear error (`waypoint_mode:=gp`).
 - If a trial's rover makes no progress toward its goal for 60 s, that trial is stopped and
-  recorded as stalled (bag kept, possibly short) rather than hanging the whole run.
+  recorded as stalled (bag kept, possibly short) rather than hanging the whole run. With
+  `waypoint_mode:=spiral`, progress is the distance still to go *along the leg*, not the
+  straight-line distance to its end (which does not shrink steadily on a spiral).
+- A trial that recorded no movement at all is discarded and retried (up to 3 times).
 - Each trial bag records `/FitRosey_passive/pose`, `/dynamic_joint_states`, `/cmd_vel`,
   `/roseybot_base_controller/cmd_vel_out`, `/plan`, `/optimal_trajectory`,
   `/optimal_trajectory_model`, `/imu/data` and `/imu/rpy`. Outcomes go to
@@ -134,9 +145,10 @@ Other behavior:
   time is added on top of gp_explorer + drive time), and redeploying briefly cycles
   `controller_server`'s lifecycle between trials — verify this doesn't upset anything on your
   setup with a short 1-2 trial run before trusting it for a full unattended batch.
-- See `src/nav2_stack/nav2_stack/autonomous_trials.py` and `dynamics_retrain.py` for exact
-  behavior — they only sequence/retrain using the same existing scripts and training
-  methodology as the manual steps below, no path-planning/following logic is reimplemented.
+- See `src/nav2_stack/nav2_stack/autonomous_trials.py`, `dynamics_retrain.py` and `spiral.py` for
+  exact behavior. Goals are driven by the same `waypoint.launch.py` / `path_follower.py` as the
+  manual steps below; only `spiral_drive:=path` bypasses the global planner (the leg goes straight
+  to the controller via `FollowPath`).
 
 ---
 
