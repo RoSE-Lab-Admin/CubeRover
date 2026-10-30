@@ -66,7 +66,7 @@ deactivate
 | `terrain_nn` | `false` | With `train_from_scratch` or `retrain_dynamics` (MLP only): train the terrain MLP instead. It also takes the rover's pitch and roll (from OptiTrack) and predicts sideways motion. In MPPI's rollouts, step 0 uses the measured pitch/roll; later steps read them off a GP height map of the arena (refit at every retrain, same GP as `gp_explorer_gpu.py`) at the predicted pose, calibrated to match OptiTrack. Map and calibration are stored inside the model file; the controller recognises a terrain model by itself. Checkpoints are named `mlp<W>_terrain_*` (`from_scratch_weights/`, or `terrain_weights/` with `retrain_dynamics`, where the shared deployed model drives until the first retrain). |
 | `terrain_gp` | `false` | With `train_from_scratch`: instead of an MLP, fit kinematics with slip learned from the slope. The GP height map (as for `terrain_nn`) gives the slope under the rover; a second GP maps it (climb along the direction of travel, side slope) to linear and angular slip ratios: v = v_cmd·(1 − s_x), ω = ω_cmd·(1 − s_ω). Refit every trial (~10 s on the CPU), checkpoints `from_scratch_weights/slip_gp_trialNN.pt`. Takes over from `terrain_nn` if both are set. |
 | `waypoint_mode` | `gp` | How each trial's goal is chosen. `gp`: `gp_explorer_gpu.py`'s information-based goal. `spiral`: the next leg of a spiral (`nav2_stack/spiral.py`) instead -- it starts on a circle of `spiral_radius` around the spiral centre, grows by 0.5 m per loop until it would come within 0.75 m of a wall, then shrinks back, always counter-clockwise. One bag per leg: inner circle -> outside, or outside -> inner circle (or as far as the rover gets). The initial bag still drives to (0, 0) first. Each trial's points are kept as `bag_dir/traj_NN_spiral.csv`. |
-| `spiral_drive` | `waypoints` | `waypoint_mode:=spiral` only. `waypoints`: waypoints every 1 m along the leg, and the goal is kept ~1.5 m ahead of the rover's progress along it, so it is planned by the global planner but the rover never stops in between. `path`: drive to the leg's start, then the leg itself goes straight to the controller (`FollowPath`, no global planner, no replanning). |
+| `spiral_drive` | `path` | `waypoint_mode:=spiral` only. `path`: drive to the leg's start, then the leg itself goes straight to the controller (`FollowPath`, no global planner, no replanning), in whichever gear the rover faces: if it faces more than 90° away from the spiral's direction there, the whole leg is driven in reverse (one gear per leg, no turning around). Needs `PathAlignCritic` on, see below. `waypoints`: waypoints every 1 m along the leg, and the goal is kept ~1.5 m ahead of the rover's progress along it, so it is planned by the global planner but the rover never stops in between. |
 | `spiral_radius` | `1.8` | `waypoint_mode:=spiral` only: radius of the inner circle = the tightest turn (m). Larger than ~2.3 m does not fit the current arena with 0.75 m wall clearance. |
 | `spiral_centre_x`, `spiral_centre_y` | `0.0` | `waypoint_mode:=spiral` only: the spiral's centre. (-1.0, 0.2) leaves the most room in the current arena. |
 | `start_rviz` | `true` | Launches `rviz2` alongside everything else. Set to `false` to skip it. |
@@ -108,14 +108,23 @@ Example with spiral waypoints instead of the GP explorer (any training flags can
 `train_from_scratch:=true terrain_gp:=true`):
 ```bash
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
-    waypoint_mode:=spiral spiral_radius:=1.8 spiral_drive:=waypoints
+    waypoint_mode:=spiral spiral_radius:=1.8
 ```
 - Radii worth trying: 1.5, 1.8, 2.0 m. Legs are ~4-9 m around (0, 0) and up to ~19 m around
   `spiral_centre_x:=-1.0 spiral_centre_y:=0.2`.
-- Offline (kinematic simulator) so far only: `spiral_drive:=waypoints` often ends up driving the
-  spiral in reverse (the start heading is arbitrary and the planner keeps the gear it is moving
-  in); `spiral_drive:=path` follows it forward, but cuts inside the spiral unless the controller
-  has a `PathAlignCritic`, which `nav2_param2.yaml` does not have yet.
+- **Switch `PathAlignCritic` on for `spiral_drive:=path`.** It keeps the controller on the leg
+  instead of cutting inside the spiral (offline, leg of r 1.8 m driven forward: 35-44 cm inside
+  without enough weight, 12 cm at the configured weight 30; reverse: 6 cm). It is in
+  `nav2_param2.yaml`'s critics list but `enabled: false`, because it also changes how planned
+  paths are followed in `waypoint_mode:=gp`. Either set `enabled: true` there (then
+  `colcon build --packages-select nav2_stack`) before launching, or switch it at runtime once
+  Nav2 is up -- no restart needed, and `false` turns it off again:
+  ```bash
+  ros2 param set /controller_server FollowPath.PathAlignCritic.enabled true
+  ```
+- Offline (kinematic simulator) so far only. `spiral_drive:=waypoints` often ends up driving the
+  spiral in reverse while turning (the start heading is arbitrary and the planner keeps the gear
+  it is moving in).
 
 Example with train-from-scratch and the slope-slip GP model (same notes as above; each fit prints
 the slip it learned, e.g. `slip GP linear: ... GP at level +0.21 / climb +10 deg +0.36 / ...`):

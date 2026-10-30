@@ -793,12 +793,13 @@ def main():
                              "information-based goal (default); spiral = the next leg of a spiral "
                              "around --spiral-centre (see nav2_stack/spiral.py): one bag per leg, "
                              "from the inner circle to the outside or back in")
-    parser.add_argument("--spiral-drive", default="waypoints", choices=["waypoints", "path"],
-                        help="waypoint-mode spiral: waypoints = waypoints every 1 m along the leg, "
-                             "the goal kept ~1.5 m ahead of the rover's progress along it so the "
-                             "rover never stops, planned by the global planner (default); path = "
-                             "the leg itself straight to the controller (FollowPath, no global "
-                             "planner)")
+    parser.add_argument("--spiral-drive", default="path", choices=["path", "waypoints"],
+                        help="waypoint-mode spiral: path = drive to the leg's start, then the leg "
+                             "itself straight to the controller (FollowPath, no global planner; "
+                             "default -- drove the spiral forward in the offline simulator); "
+                             "waypoints = waypoints every 1 m along the leg, the goal kept ~1.5 m "
+                             "ahead of the rover's progress along it, planned by the global planner "
+                             "(often ended up driving the spiral in reverse offline)")
     parser.add_argument("--spiral-radius", default=1.8, type=float,
                         help="waypoint-mode spiral: radius of the inner circle = the tightest turn "
                              "(m). Default: 1.8")

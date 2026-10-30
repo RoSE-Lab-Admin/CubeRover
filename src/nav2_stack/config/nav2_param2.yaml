@@ -114,7 +114,7 @@ controller_server:
         plugin: "mppi::DefaultOptimalTrajectoryValidator"
         collision_lookahead_time: 2.0
         consider_footprint: false
-      critics: ["ConstraintCritic", "GoalCritic", "ObstaclesCritic", "CostCritic", "PathFollowCritic", "PathAngleCritic", "PreferForwardCritic", "VelocityDeadbandCritic", "DirectionChangeCritic"]
+      critics: ["ConstraintCritic", "GoalCritic", "ObstaclesCritic", "CostCritic", "PathFollowCritic", "PathAlignCritic", "PathAngleCritic", "PreferForwardCritic", "VelocityDeadbandCritic", "DirectionChangeCritic"]
       ConstraintCritic: # Penalizes paths outside of set dynamics or kinematic constraints
         enabled: true
         cost_weight: 4.0 # weight to apply to term
@@ -152,6 +152,15 @@ controller_server:
         cost_power: 1
         threshold_to_consider: 0.3 # distance between robot and goal to stop considering path following and let goal critic take over
         offset_from_furthest: 20 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
+      PathAlignCritic: # keeps trajectories on the path laterally: mean distance of each trajectory to the path point the same distance along the path (stock Nav2 example values). Off for now; may be needed for spiral_drive:=path, which otherwise cuts inside the spiral (10/28 offline sim)
+        enabled: false # on at runtime: ros2 param set /controller_server FollowPath.PathAlignCritic.enabled true
+        cost_power: 1
+        cost_weight: 30.0 # stock 14; 10/30 offline sim, spiral leg (r 1.8 m) driven forward: 14 -> 35 cm inside the spiral on average, 30 -> 12 cm (reverse: 6 cm already at 14)
+        max_path_occupancy_ratio: 0.05 # skip when obstacles cover more than this share of the path within reach
+        trajectory_point_step: 4
+        threshold_to_consider: 0.5 # off within this distance of the goal
+        offset_from_furthest: 20 # off until the trajectories reach this many path points ahead
+        use_path_orientations: false # false: position only, so driving the path forward or in reverse costs the same
       PathAngleCritic: # penalizes heading misalignment with the planned path to reduce S-curves
         enabled: true
         cost_weight: 10.0

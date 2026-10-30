@@ -552,8 +552,11 @@ class PathFollower(Node):
         self._issue_goal()
         return True
 
-    def _dense_path(self):
-        """self.point_path as a nav_msgs/Path with each pose facing the next one."""
+    def _dense_path(self, reverse=False):
+        """self.point_path as a nav_msgs/Path with each pose facing the next one --
+        or, with reverse, facing away from it: the rover drives the path backwards,
+        encoded like the planner's reverse segments (pose heading = rover heading),
+        which the controller's critics (PathAngleCritic mode 2) follow as such."""
         path = Path()
         path.header.frame_id = 'world'
         path.header.stamp = self.get_clock().now().to_msg()
@@ -561,7 +564,7 @@ class PathFollower(Node):
         for i, (x, y) in enumerate(pts):
             j = min(i + 1, len(pts) - 1)
             k = j - 1 if j == i else i
-            yaw = np.arctan2(pts[j][1] - pts[k][1], pts[j][0] - pts[k][0])
+            yaw = np.arctan2(pts[j][1] - pts[k][1], pts[j][0] - pts[k][0]) + (np.pi if reverse else 0.0)
             ps = PoseStamped()
             ps.header = path.header
             ps.pose.position.x, ps.pose.position.y = float(x), float(y)
@@ -580,11 +583,27 @@ class PathFollower(Node):
         self.path_phase = 'approach'
         self._issue_goal()
 
+    def _path_gear_is_reverse(self):
+        """Gear for the whole path, from how the rover faces right now: reverse if
+        it faces more than 90 deg away from the path's direction of travel at the
+        path point nearest to it (the path has no cusps, so one gear throughout)."""
+        pose = self._current_pose()
+        if pose is None:
+            return False
+        pts = np.array([[p.pose.position.x, p.pose.position.y] for p in self.point_path])
+        i = int(np.argmin(np.hypot(pts[:, 0] - pose[0], pts[:, 1] - pose[1])))
+        j = min(i + 1, len(pts) - 1)
+        k = j - 1 if j == i else i
+        travel = np.arctan2(pts[j, 1] - pts[k, 1], pts[j, 0] - pts[k, 0])
+        return abs(np.arctan2(np.sin(pose[2] - travel), np.cos(pose[2] - travel))) > np.pi / 2
+
     def _follow_dense_path(self):
         self.path_phase = 'follow'
-        path = self._dense_path()
+        reverse = self._path_gear_is_reverse()
+        path = self._dense_path(reverse)
         self.get_logger().info(
-            f"following the {len(path.poses)}-pose path directly with the controller (FollowPath)")
+            f"following the {len(path.poses)}-pose path directly with the controller (FollowPath), "
+            f"{'in REVERSE (the rover faces against the path)' if reverse else 'forward'}")
         self.nav.followPath(path)
 
     def _step_path_mode(self):

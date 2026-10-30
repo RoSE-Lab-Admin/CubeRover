@@ -166,11 +166,11 @@ def generate_launch_description():
         DeclareLaunchArgument('waypoint_mode', default_value='gp',
                               description='gp = information-based goals from gp_explorer_gpu.py; '
                                           'spiral = legs of a spiral, one bag per leg'),
-        DeclareLaunchArgument('spiral_drive', default_value='waypoints',
-                              description='waypoint_mode spiral: waypoints (goal kept ~1.5 m '
-                                          'ahead along the leg, planned, the rover keeps moving) '
-                                          'or path (the leg straight to the controller via '
-                                          'FollowPath)'),
+        DeclareLaunchArgument('spiral_drive', default_value='path',
+                              description='waypoint_mode spiral: path (the leg straight to the '
+                                          'controller via FollowPath; default) or waypoints '
+                                          '(goal kept ~1.5 m ahead along the leg, planned, the '
+                                          'rover keeps moving)'),
         DeclareLaunchArgument('spiral_radius', default_value='1.8',
                               description='waypoint_mode spiral: inner circle radius = tightest '
                                           'turn (m)'),
