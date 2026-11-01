@@ -1,4 +1,4 @@
-nicegui[highcharts]>=1.4.0
+nicegui[highcharts]>=3.18.0
 pandas
 setuptools
 typeguard
