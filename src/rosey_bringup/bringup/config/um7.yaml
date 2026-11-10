@@ -2,7 +2,7 @@
   ros__parameters:
     baud: 115200
     frame_id: imu_link
-    mag_updates: false # may or may not want to change depending on EM noise from robot
+    mag_updates: true # may or may not want to change depending on EM noise from robot
     quat_mode: true
     zero_gyros: true #THIS WILL BREAK IF THE ROBOT IS MOVING ON BOOT, assuming thats not the case
     port: /dev/ttyUSB1

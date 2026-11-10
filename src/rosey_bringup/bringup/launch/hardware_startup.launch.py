@@ -22,8 +22,16 @@ def generate_launch_description():
     control  = IncludeLaunchDescription(
             PythonLaunchDescriptionSource(control_launch)
         )
+
+    #launch file path for the EKF (wheel odometry + IMU)
+    localization_launch = os.path.join(get_package_share_directory('rosey_bringup'),'bringup', 'launch', 'localization.launch.py')
+
+    localization = IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(localization_launch)
+        )
         
     return LaunchDescription([
         imu,
-        control
+        control,
+        localization
     ])

@@ -1,0 +1,72 @@
+# robot_localization EKF: fuses diff_drive wheel odometry with the UM7 IMU.
+# Publishes odom -> base_footprint TF and nav_msgs/Odometry on /odometry/filtered.
+# diff_drive_controller's own odom TF must be off (enable_odom_tf: false in
+# roseybot_controllers.yaml) or two nodes will fight over the same transform.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.5  # covers the 10 Hz controller_manager update rate
+    two_d_mode: true     # planar rover: zero out z, roll, pitch and their rates
+    publish_tf: true
+    publish_acceleration: false
+    print_diagnostics: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint  # URDF root (REP-105), matches diff_drive base_frame_id
+    world_frame: odom                # no absolute source (GPS/mocap) yet
+
+    # Config vector order:
+    # [x,     y,      z,
+    #  roll,  pitch,  yaw,
+    #  vx,    vy,     vz,
+    #  vroll, vpitch, vyaw,
+    #  ax,    ay,     az]
+
+    # Wheel odometry: fuse body velocities only. Fusing vy (always 0 from
+    # diff_drive) enforces the non-holonomic constraint. Integrated pose is
+    # left out so wheel-slip drift isn't fed in twice.
+    odom0: /roseybot_base_controller/odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,
+                   false, false, true,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_differential: false
+    odom0_relative: false
+
+    # IMU: fuse yaw rate only. The gyro rate is far better than wheel-derived
+    # yaw rate on a skid-steer base. Absolute yaw (index 5) is left out: with
+    # mag_updates: false it has no reference and drifts, and with
+    # mag_updates: true it is only trustworthy once the magnetometer is
+    # calibrated away from motor interference. Set index 5 to true at that point.
+    # Accelerations are left out because chassis vibration makes them noisy.
+    imu0: /imu/data
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 10
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: true
+
+    # Process noise (diagonal, same state order as above). Defaults from the
+    # robot_localization template; tune vx/vyaw first if output lags or jitters.
+    process_noise_covariance: [0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.06, 0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025, 0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.025, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.04, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.01, 0.0,  0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.01, 0.0,  0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.02, 0.0,  0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.01, 0.0,  0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.01, 0.0,
+                               0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,   0.0,   0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.015]
