@@ -4,11 +4,12 @@
     <xacro:macro name="connect_joint" params="prefix">
         <joint name="${prefix}_wheel_joint">
             <command_interface name="velocity"/>
-            <!-- RoseyBotSystemHardware expects exactly these five state
+            <!-- RoseyBotSystemHardware expects exactly these six state
                  interfaces, with position first and velocity second. -->
             <state_interface name="position"/>
             <state_interface name="velocity"/>
             <state_interface name="current"/>
+            <state_interface name="effort"/>
             <state_interface name="voltage"/>
             <state_interface name="pwm"/>
         </joint>
@@ -28,6 +29,9 @@
                     <param name="timeout_ms">150</param>
                     <param name="device">/dev/ttyACM0</param>
                     <param name="enc/rev">5281.1</param>
+                    <!-- effort [N*m] = current [A] * torque_constant. Pooled fit of the
+                         four characterized motors (same model/gearbox): 55 mA per kg*cm. -->
+                    <param name="torque_constant">1.784</param>
 
                     <!-- safety_check tuning parameters -->
                     <param name="noise_floor_percent">2</param>

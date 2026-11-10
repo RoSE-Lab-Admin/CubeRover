@@ -70,7 +70,8 @@ private:
   // Parameters for the RoseyBot simulation
   int BAUD_;
   int TIMEOUT_MS_;
-  int ENC_PER_REV_;
+  double ENC_PER_REV_;  // fractional counts/rev (e.g. 5281.1); an int truncated it
+  double TORQUE_CONSTANT_;  // N*m per A at the wheel; effort = current * TORQUE_CONSTANT_
   int STD_ACCEL;
   std::string DEVICE_;
   int32_t NOISE_FLOOR_PCT_;

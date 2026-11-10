@@ -48,7 +48,8 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
   BAUD_ = std::stoi(info_.hardware_parameters["baud"]);
   TIMEOUT_MS_ = std::stoi(info_.hardware_parameters["timeout_ms"]);
   DEVICE_ = info_.hardware_parameters["device"];
-  ENC_PER_REV_ = std::stof(info_.hardware_parameters["enc/rev"]);
+  ENC_PER_REV_ = std::stod(info_.hardware_parameters["enc/rev"]);
+  TORQUE_CONSTANT_ = std::stod(info_.hardware_parameters["torque_constant"]);
   // END
 
   // BEGIN: get safety check params
@@ -93,7 +94,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
 
-    const size_t NUM_STATE_INTERFACES = 5; // Safety check to ensure state interfaces match the urdf.
+    const size_t NUM_STATE_INTERFACES = 6; // Safety check to ensure state interfaces match the urdf.
     if (joint.state_interfaces.size() != NUM_STATE_INTERFACES)
     {
       RCLCPP_FATAL(
@@ -121,7 +122,7 @@ hardware_interface::CallbackReturn RoseyBotSystemHardware::on_init(
     }
 
     // create wheel obj and push back 
-    wheel_map_[joint.name] = std::make_unique<wheel>(ENC_PER_REV_);
+    wheel_map_[joint.name] = std::make_unique<wheel>(ENC_PER_REV_, TORQUE_CONSTANT_);
     RCLCPP_INFO(get_logger(), "Joint %s: added to map:", joint.name.c_str());
   }
 
@@ -145,6 +146,9 @@ std::vector<hardware_interface::StateInterface> RoseyBotSystemHardware::export_s
       state_interfaces.emplace_back(hardware_interface::StateInterface(
         joint.name, "current", &wheel_map_[joint.name]->current_));
       RCLCPP_INFO(get_logger(), "Joint %s: added current state", joint.name.c_str());
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        joint.name, hardware_interface::HW_IF_EFFORT, &wheel_map_[joint.name]->effort_));
+      RCLCPP_INFO(get_logger(), "Joint %s: added effort state", joint.name.c_str());
       state_interfaces.emplace_back(hardware_interface::StateInterface(
         joint.name, "voltage", &wheel_map_[joint.name]->voltage_));
       RCLCPP_INFO(get_logger(), "Joint %s: added voltage state", joint.name.c_str());
