@@ -1,685 +1,466 @@
 <?xml version="1.0"?>
 <!-- RoseyBot Robot Description File
 
-     Links, joints, and mass properties come from the SolidWorks to URDF
-     exporter (URDF2 export). Frames follow REP-103/REP-105:
-       - base_footprint is the root, on the ground plane below base_link.
+     Generated from the SolidWorks to URDF exporter (URDF_FIN export); every
+     link, joint, and mass property comes from that export, except:
+       - base_footprint is the root (REP-105), on the ground plane below
+         base_link; the export had it as a child of base_link.
        - base_footprint, imu_link, and camera_*_optical_link are virtual
          frames with no mass, inertia, or geometry.
        - All wheel joints rotate about +y, so a positive velocity drives the
-         robot forward on both sides. -->
+         robot forward on both sides (the export used -y on the left wheels).
+       - Mesh paths point at this package; meshes are decimated copies.
+       - base_link.STL was exported in the wrong frame (offset by the
+         mocap_mast_joint origin), so its visual/collision origin shifts it
+         back into base_link. -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <!-- Virtual frame: no mass, inertia, or geometry. -->
-  <link
-    name="base_footprint" />
-  <joint
-    name="base_footprint_joint"
-    type="fixed">
-    <!-- base_footprint lies on the ground plane under base_link (150 mm
-         effective wheel radius; the grousers sink into the terrain). -->
-    <origin
-      xyz="0 0 0.264385282852235"
-      rpy="0 0 0" />
-    <parent
-      link="base_footprint" />
-    <child
-      link="base_link" />
-    <axis
-      xyz="0 0 0" />
+  <link name="base_footprint" />
+  <joint name="base_footprint_joint" type="fixed">
+    <!-- base_footprint lies on the ground plane under base_link -->
+    <origin xyz="0 0 0.264385282852235" rpy="0 0 0" />
+    <parent link="base_footprint" />
+    <child link="base_link" />
   </joint>
-  <link
-    name="base_link">
+  <link name="base_link">
     <inertial>
-      <origin
-        xyz="-0.0054525 0.0030219 -0.021701"
-        rpy="0 0 0" />
-      <mass
-        value="7.6408" />
-      <inertia
-        ixx="0.027157"
-        ixy="1.7861E-05"
-        ixz="2.7978E-05"
-        iyy="0.085655"
-        iyz="2.5148E-06"
-        izz="0.10185" />
+      <origin xyz="-0.0049641 0.0030584 -0.022888" rpy="0 0 0" />
+      <mass value="7.5806" />
+      <inertia ixx="0.026723" ixy="1.7861E-05" ixz="2.7985E-05" iyy="0.085611" iyz="2.5148E-06" izz="0.10143" />
     </inertial>
     <visual>
-      <!-- SolidWorks exported base_link.STL relative to a frame 0.264385 m
-           below base_link, so shift it back up into base_link. -->
-      <origin
-        xyz="0 0 -0.264385282852235"
-        rpy="0 0 0" />
+      <!-- export put this mesh in the mocap_mast_joint frame; shift it into base_link -->
+      <origin xyz="0.05 -0.00025 0.3899" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/base_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/base_link.STL" />
       </geometry>
-      <material
-        name="base_link_material">
-        <color
-          rgba="0.75294 0.75294 0.75294 1" />
+      <material name="base_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <!-- SolidWorks exported base_link.STL relative to a frame 0.264385 m
-           below base_link, so shift it back up into base_link. -->
-      <origin
-        xyz="0 0 -0.264385282852235"
-        rpy="0 0 0" />
+      <!-- export put this mesh in the mocap_mast_joint frame; shift it into base_link -->
+      <origin xyz="0.05 -0.00025 0.3899" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/base_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/base_link.STL" />
       </geometry>
     </collision>
   </link>
   <!-- Virtual frame: no mass, inertia, or geometry. -->
-  <link
-    name="imu_link" />
-  <joint
-    name="imu_joint"
-    type="fixed">
-    <origin
-      xyz="0.16256 -0.05 0.017088"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="imu_link" />
-    <axis
-      xyz="0 0 0" />
+  <link name="imu_link" />
+  <joint name="imu_joint" type="fixed">
+    <origin xyz="0.16256 -0.05 0.017088" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="imu_link" />
   </joint>
-  <link
-    name="front_left_wheel_link">
+  <link name="front_left_wheel_link">
     <inertial>
-      <origin
-        xyz="-9.6438E-08 -0.0035297 2.5028E-08"
-        rpy="0 0 0" />
-      <mass
-        value="0.8653" />
-      <inertia
-        ixx="0.0018675"
-        ixy="1.302E-10"
-        ixz="-1.4777E-08"
-        iyy="0.00325"
-        iyz="-1.3427E-10"
-        izz="0.0018676" />
+      <origin xyz="-9.6438E-08 -0.0035297 2.5028E-08" rpy="0 0 0" />
+      <mass value="0.8653" />
+      <inertia ixx="0.0018675" ixy="1.302E-10" ixz="-1.4777E-08" iyy="0.00325" iyz="-1.3427E-10" izz="0.0018676" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/front_left_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/front_left_wheel_link.STL" />
       </geometry>
-      <material
-        name="front_left_wheel_link_material">
-        <color
-          rgba="0.75294 0.75294 0.75294 1" />
+      <material name="front_left_wheel_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/front_left_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/front_left_wheel_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="front_left_wheel_joint"
-    type="continuous">
-    <origin
-      xyz="0.1881 0.16825 -0.11444"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="front_left_wheel_link" />
-    <axis
-      xyz="0 1 0" />
+  <joint name="front_left_wheel_joint" type="continuous">
+    <origin xyz="0.1881 0.16825 -0.11444" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="front_left_wheel_link" />
+    <axis xyz="0 1 0" />
   </joint>
-  <link
-    name="front_right_wheel_link">
+  <link name="front_right_wheel_link">
     <inertial>
-      <origin
-        xyz="9.6438E-08 0.0035297 2.5028E-08"
-        rpy="0 0 0" />
-      <mass
-        value="0.8653" />
-      <inertia
-        ixx="0.0018675"
-        ixy="1.302E-10"
-        ixz="1.4777E-08"
-        iyy="0.00325"
-        iyz="1.3427E-10"
-        izz="0.0018676" />
+      <origin xyz="9.6438E-08 0.0035297 2.5028E-08" rpy="0 0 0" />
+      <mass value="0.8653" />
+      <inertia ixx="0.0018675" ixy="1.302E-10" ixz="1.4777E-08" iyy="0.00325" iyz="1.3427E-10" izz="0.0018676" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/front_right_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/front_right_wheel_link.STL" />
       </geometry>
-      <material
-        name="front_right_wheel_link_material">
-        <color
-          rgba="0.75294 0.75294 0.75294 1" />
+      <material name="front_right_wheel_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/front_right_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/front_right_wheel_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="front_right_wheel_joint"
-    type="continuous">
-    <origin
-      xyz="0.1881 -0.16825 -0.11433"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="front_right_wheel_link" />
-    <axis
-      xyz="0 1 0" />
+  <joint name="front_right_wheel_joint" type="continuous">
+    <origin xyz="0.1881 -0.16825 -0.11433" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="front_right_wheel_link" />
+    <axis xyz="0 1 0" />
   </joint>
-  <link
-    name="back_left_wheel_link">
+  <link name="back_left_wheel_link">
     <inertial>
-      <origin
-        xyz="-9.6438E-08 -0.0035297 2.5028E-08"
-        rpy="0 0 0" />
-      <mass
-        value="0.8653" />
-      <inertia
-        ixx="0.0018675"
-        ixy="1.302E-10"
-        ixz="-1.4777E-08"
-        iyy="0.00325"
-        iyz="-1.3427E-10"
-        izz="0.0018676" />
+      <origin xyz="-9.6438E-08 -0.0035297 2.5028E-08" rpy="0 0 0" />
+      <mass value="0.8653" />
+      <inertia ixx="0.0018675" ixy="1.302E-10" ixz="-1.4777E-08" iyy="0.00325" iyz="-1.3427E-10" izz="0.0018676" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/back_left_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/back_left_wheel_link.STL" />
       </geometry>
-      <material
-        name="back_left_wheel_link_material">
-        <color
-          rgba="0.75294 0.75294 0.75294 1" />
+      <material name="back_left_wheel_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/back_left_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/back_left_wheel_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="back_left_wheel_joint"
-    type="continuous">
-    <origin
-      xyz="-0.1881 0.16825 -0.11433"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="back_left_wheel_link" />
-    <axis
-      xyz="0 1 0" />
+  <joint name="back_left_wheel_joint" type="continuous">
+    <origin xyz="-0.18810262 0.168250000001325 -0.114333174195793" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="back_left_wheel_link" />
+    <axis xyz="0 1 0" />
   </joint>
-  <link
-    name="back_right_wheel_link">
+  <link name="back_right_wheel_link">
     <inertial>
-      <origin
-        xyz="9.6438E-08 0.0035297 2.5028E-08"
-        rpy="0 0 0" />
-      <mass
-        value="0.8653" />
-      <inertia
-        ixx="0.0018675"
-        ixy="1.302E-10"
-        ixz="1.4777E-08"
-        iyy="0.00325"
-        iyz="1.3427E-10"
-        izz="0.0018676" />
+      <origin xyz="9.6438E-08 0.0035297 2.5028E-08" rpy="0 0 0" />
+      <mass value="0.8653" />
+      <inertia ixx="0.0018675" ixy="1.302E-10" ixz="1.4777E-08" iyy="0.00325" iyz="1.3427E-10" izz="0.0018676" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/back_right_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/back_right_wheel_link.STL" />
       </geometry>
-      <material
-        name="back_right_wheel_link_material">
-        <color
-          rgba="0.75294 0.75294 0.75294 1" />
+      <material name="back_right_wheel_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/back_right_wheel_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/back_right_wheel_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="back_right_wheel_joint"
-    type="continuous">
-    <origin
-      xyz="-0.1881 -0.16825 -0.11444"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="back_right_wheel_link" />
-    <axis
-      xyz="0 1 0" />
+  <joint name="back_right_wheel_joint" type="continuous">
+    <origin xyz="-0.18810262 -0.168250000001325 -0.114437379999999" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="back_right_wheel_link" />
+    <axis xyz="0 1 0" />
   </joint>
-  <link
-    name="camera_0_link">
+  <link name="camera_0_link">
     <inertial>
-      <origin
-        xyz="-0.0046466 0.00022408 0.0091953"
-        rpy="0 0 0" />
-      <mass
-        value="0.019933" />
-      <inertia
-        ixx="1.1262E-05"
-        ixy="-4.5237E-08"
-        ixz="9.1405E-07"
-        iyy="6.1143E-06"
-        iyz="8.1423E-08"
-        izz="7.1098E-06" />
+      <origin xyz="-0.0016218 -9.539E-06 0.011066" rpy="0 0 0" />
+      <mass value="0.031889" />
+      <inertia ixx="1.8698E-05" ixy="-1.1201E-08" ixz="9.2265E-07" iyy="9.0493E-06" iyz="8.9682E-09" izz="1.183E-05" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_0_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_0_link.STL" />
       </geometry>
-      <material
-        name="camera_0_link_material">
-        <color
-          rgba="0.75294 0.75294 0.75294 1" />
+      <material name="camera_0_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_0_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_0_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="camera_0_joint"
-    type="fixed">
-    <origin
-      xyz="0.18813 -0.074785 -0.17781"
-      rpy="0 0.1309 1.5708" />
-    <parent
-      link="base_link" />
-    <child
-      link="camera_0_link" />
-    <axis
-      xyz="0 0 0" />
+  <joint name="camera_0_joint" type="fixed">
+    <origin xyz="0.18813 -0.083741 -0.17696" rpy="0 0.2618 1.5708" />
+    <parent link="base_link" />
+    <child link="camera_0_link" />
   </joint>
   <!-- Virtual frame: no mass, inertia, or geometry. -->
-  <link
-    name="camera_0_optical_link" />
-  <joint
-    name="camera_0_optical_joint"
-    type="fixed">
-    <origin
-      xyz="0.0169748 0 0"
-      rpy="-1.5707963267949 0 -1.5707963267949" />
-    <parent
-      link="camera_0_link" />
-    <child
-      link="camera_0_optical_link" />
-    <axis
-      xyz="0 0 0" />
+  <link name="camera_0_optical_link" />
+  <joint name="camera_0_optical_joint" type="fixed">
+    <origin xyz="0.016975 0 0" rpy="-1.5708 0 -1.5708" />
+    <parent link="camera_0_link" />
+    <child link="camera_0_optical_link" />
   </joint>
-  <link
-    name="camera_1_link">
+  <link name="camera_1_link">
     <inertial>
-      <origin
-        xyz="-0.00464663459696391 0.000224076591143291 0.00919530728463955"
-        rpy="0 0 0" />
-      <mass
-        value="0.0199333054151819" />
-      <inertia
-        ixx="1.12618268455886E-05"
-        ixy="-4.52367068876269E-08"
-        ixz="9.14048214484759E-07"
-        iyy="6.11430619035568E-06"
-        iyz="8.14228444575266E-08"
-        izz="7.10984214823996E-06" />
+      <origin xyz="-0.0016218 -9.539E-06 0.011066" rpy="0 0 0" />
+      <mass value="0.031889" />
+      <inertia ixx="1.8698E-05" ixy="-1.1201E-08" ixz="9.2265E-07" iyy="9.0493E-06" iyz="8.9682E-09" izz="1.183E-05" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_1_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_1_link.STL" />
       </geometry>
-      <material
-        name="camera_1_link_material">
-        <color
-          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      <material name="camera_1_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_1_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_1_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="camera_1_joint"
-    type="fixed">
-    <origin
-      xyz="0.18807 0.074785 -0.17781"
-      rpy="0 0.1309 -1.5708" />
-    <parent
-      link="base_link" />
-    <child
-      link="camera_1_link" />
-    <axis
-      xyz="0 0 0" />
+  <joint name="camera_1_joint" type="fixed">
+    <origin xyz="0.188072620000001 0.0837413125629662 -0.176962288952841" rpy="0 0.26179938779915 -1.5707963267949" />
+    <parent link="base_link" />
+    <child link="camera_1_link" />
   </joint>
   <!-- Virtual frame: no mass, inertia, or geometry. -->
-  <link
-    name="camera_1_optical_link" />
-  <joint
-    name="camera_1_optical_joint"
-    type="fixed">
-    <origin
-      xyz="0.0169748 0 0"
-      rpy="-1.5707963267949 0 -1.5707963267949" />
-    <parent
-      link="camera_1_link" />
-    <child
-      link="camera_1_optical_link" />
-    <axis
-      xyz="0 0 0" />
+  <link name="camera_1_optical_link" />
+  <joint name="camera_1_optical_joint" type="fixed">
+    <origin xyz="0.0169748 0 0" rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent link="camera_1_link" />
+    <child link="camera_1_optical_link" />
   </joint>
-  <link
-    name="camera_2_link">
+  <link name="camera_2_link">
     <inertial>
-      <origin
-        xyz="-0.0046466345969639 0.000224076591143346 0.00919530728463952"
-        rpy="0 0 0" />
-      <mass
-        value="0.0199333054151819" />
-      <inertia
-        ixx="1.12618268455886E-05"
-        ixy="-4.52367068876263E-08"
-        ixz="9.14048214484766E-07"
-        iyy="6.1143061903557E-06"
-        iyz="8.14228444575181E-08"
-        izz="7.10984214823997E-06" />
+      <origin xyz="-0.0016218 -9.539E-06 0.011066" rpy="0 0 0" />
+      <mass value="0.031889" />
+      <inertia ixx="1.8698E-05" ixy="-1.1201E-08" ixz="9.2265E-07" iyy="9.0493E-06" iyz="8.9682E-09" izz="1.183E-05" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_2_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_2_link.STL" />
       </geometry>
-      <material
-        name="camera_2_link_material">
-        <color
-          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      <material name="camera_2_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_2_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_2_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="camera_2_joint"
-    type="fixed">
-    <origin
-      xyz="-0.18807 -0.074785 -0.17781"
-      rpy="0 0.1309 1.5708" />
-    <parent
-      link="base_link" />
-    <child
-      link="camera_2_link" />
-    <axis
-      xyz="0 0 0" />
+  <joint name="camera_2_joint" type="fixed">
+    <origin xyz="-0.188072620000001 -0.0837413125629662 -0.176962288952841" rpy="0 0.26179938779915 1.5707963267949" />
+    <parent link="base_link" />
+    <child link="camera_2_link" />
   </joint>
   <!-- Virtual frame: no mass, inertia, or geometry. -->
-  <link
-    name="camera_2_optical_link" />
-  <joint
-    name="camera_2_optical_joint"
-    type="fixed">
-    <origin
-      xyz="0.0169748 0 0"
-      rpy="-1.5707963267949 0 -1.5707963267949" />
-    <parent
-      link="camera_2_link" />
-    <child
-      link="camera_2_optical_link" />
-    <axis
-      xyz="0 0 0" />
+  <link name="camera_2_optical_link" />
+  <joint name="camera_2_optical_joint" type="fixed">
+    <origin xyz="0.0169748 0 0" rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent link="camera_2_link" />
+    <child link="camera_2_optical_link" />
   </joint>
-  <link
-    name="camera_3_link">
+  <link name="camera_3_link">
     <inertial>
-      <origin
-        xyz="-0.00464663459696388 0.000224076591143318 0.0091953072846396"
-        rpy="0 0 0" />
-      <mass
-        value="0.0199333054151819" />
-      <inertia
-        ixx="1.12618268455886E-05"
-        ixy="-4.52367068876303E-08"
-        ixz="9.14048214484761E-07"
-        iyy="6.11430619035569E-06"
-        iyz="8.14228444575291E-08"
-        izz="7.10984214823997E-06" />
+      <origin xyz="-0.0016217985830603 -9.53898887873228E-06 0.0110661846437231" rpy="0 0 0" />
+      <mass value="0.0318888915810098" />
+      <inertia ixx="1.86977480781623E-05" ixy="-1.12010474076737E-08" ixz="9.22651306776749E-07" iyy="9.04928290279352E-06" iyz="8.96819238725222E-09" izz="1.18299164113568E-05" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_3_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_3_link.STL" />
       </geometry>
-      <material
-        name="camera_3_link_material">
-        <color
-          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      <material name="camera_3_link_material">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/camera_3_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/camera_3_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="camera_3_joint"
-    type="fixed">
-    <origin
-      xyz="-0.18813 0.074785 -0.17781"
-      rpy="0 0.1309 -1.5708" />
-    <parent
-      link="base_link" />
-    <child
-      link="camera_3_link" />
-    <axis
-      xyz="0 0 0" />
+  <joint name="camera_3_joint" type="fixed">
+    <origin xyz="-0.188132620000001 0.0837413125629662 -0.176962288952841" rpy="0 0.26179938779915 -1.5707963267949" />
+    <parent link="base_link" />
+    <child link="camera_3_link" />
   </joint>
   <!-- Virtual frame: no mass, inertia, or geometry. -->
-  <link
-    name="camera_3_optical_link" />
-  <joint
-    name="camera_3_optical_joint"
-    type="fixed">
-    <origin
-      xyz="0.0169748 0 0"
-      rpy="-1.5707963267949 0 -1.5707963267949" />
-    <parent
-      link="camera_3_link" />
-    <child
-      link="camera_3_optical_link" />
-    <axis
-      xyz="0 0 0" />
+  <link name="camera_3_optical_link" />
+  <joint name="camera_3_optical_joint" type="fixed">
+    <origin xyz="0.0169748 0 0" rpy="-1.5707963267949 0 -1.5707963267949" />
+    <parent link="camera_3_link" />
+    <child link="camera_3_optical_link" />
   </joint>
-  <link
-    name="mocap_origin_link">
+  <link name="realsense_front_link">
     <inertial>
-      <origin
-        xyz="0.133097306252821 -0.0683857803026376 -0.0528171152723194"
-        rpy="0 0 0" />
-      <mass
-        value="0.107749962743113" />
-      <inertia
-        ixx="7.45485791686811E-06"
-        ixy="-1.61999451002995E-15"
-        ixz="8.58214338682135E-07"
-        iyy="7.43060022663629E-06"
-        iyz="1.27959501424391E-07"
-        izz="4.36492640075189E-06" />
+      <origin xyz="-0.0092531 -0.047467 0.012924" rpy="0 0 0" />
+      <mass value="2.5691" />
+      <inertia ixx="0.0055293" ixy="5.9789E-07" ixz="-5.7057E-05" iyy="0.0011912" iyz="1.238E-06" izz="0.0048651" />
     </inertial>
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/mocap_origin_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/realsense_front_link.STL" />
       </geometry>
-      <material
-        name="mocap_origin_link_material">
-        <color
-          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      <material name="realsense_front_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/mocap_origin_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/realsense_front_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="mocap_origin_joint"
-    type="fixed">
-    <origin
-      xyz="-0.23356 0.05 0.114"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="mocap_origin_link" />
-    <axis
-      xyz="0 0 0" />
+  <joint name="realsense_joint" type="fixed">
+    <origin xyz="0.236602527122993 -0.0477500000000016 0.224551697487009" rpy="3.14159265358979 0.174532925199431 0" />
+    <parent link="base_link" />
+    <child link="realsense_front_link" />
   </joint>
-  <link
-    name="realsense_link">
+  <link name="mocap_1_link">
     <inertial>
-      <origin
-        xyz="-0.0091476 -0.047459 -0.012668"
-        rpy="0 0 0" />
-      <mass
-        value="2.5457871005553" />
-      <inertia
-        ixx="0.00541121222483047"
-        ixy="5.97829816391115E-07"
-        ixz="4.49788092705714E-05"
-        iyy="0.00115194956857122"
-        iyz="1.23773290018687E-06"
-        izz="0.00477606793112727" />
+      <origin xyz="-2.3974E-11 0.0062616 -0.034473" rpy="0 0 0" />
+      <mass value="0.016916" />
+      <inertia ixx="2.4138E-06" ixy="-1.62E-15" ixz="-2.6674E-14" iyy="2.0842E-06" iyz="4.2911E-07" izz="7.1477E-07" />
     </inertial>
     <visual>
-      <!-- offset compensates for realsense_link origin moved +21.347 mm along link x; STL is referenced to the old origin -->
-      <origin
-        xyz="-0.021347 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/realsense_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/mocap_1_link.STL" />
       </geometry>
-      <material
-        name="realsense_link_material">
-        <color
-          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      <material name="mocap_1_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
       </material>
     </visual>
     <collision>
-      <origin
-        xyz="-0.021347 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://rosey_description/description/meshes/realsense_link.STL" />
+        <mesh filename="package://rosey_description/description/meshes/mocap_1_link.STL" />
       </geometry>
     </collision>
   </link>
-  <joint
-    name="realsense_joint"
-    type="fixed">
-    <origin
-      xyz="0.236602527122989 0.0472499999999953 0.224551697487006"
-      rpy="0 0.17453 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="realsense_link" />
-    <axis
-      xyz="0 0 0" />
+  <joint name="mocap_1_joint" type="fixed">
+    <origin xyz="-0.159999999999991 -0.12725 0.113999999999967" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="mocap_1_link" />
+  </joint>
+  <link name="mocap_2_link">
+    <inertial>
+      <origin xyz="-2.3974E-11 0.0062616 -0.034473" rpy="0 0 0" />
+      <mass value="0.016916" />
+      <inertia ixx="2.4138E-06" ixy="-1.62E-15" ixz="-2.6674E-14" iyy="2.0842E-06" iyz="4.2911E-07" izz="7.1477E-07" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_2_link.STL" />
+      </geometry>
+      <material name="mocap_2_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_2_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="mocap_2_joint" type="fixed">
+    <origin xyz="-0.0599999999999915 -0.12725 0.113999999999967" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="mocap_2_link" />
+  </joint>
+  <link name="mocap_3_link">
+    <inertial>
+      <origin xyz="2.7756E-17 0 -0.00023587" rpy="0 0 0" />
+      <mass value="0.0041071" />
+      <inertia ixx="1.6158E-07" ixy="-7.7187E-39" ixz="4.6184E-25" iyy="1.6158E-07" iyz="-1.1324E-24" izz="1.7003E-07" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_3_link.STL" />
+      </geometry>
+      <material name="mocap_3_link_material">
+        <color rgba="0.90196 0.92157 0.92157 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_3_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="mocap_3_joint" type="fixed">
+    <origin xyz="0.20556262 -0.0997500000000013 0.2165" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="mocap_3_link" />
+  </joint>
+  <link name="mocap_4_link">
+    <inertial>
+      <origin xyz="0 0 -0.00023587" rpy="0 0 0" />
+      <mass value="0.0041071" />
+      <inertia ixx="1.6158E-07" ixy="-7.7187E-39" ixz="4.6184E-25" iyy="1.6158E-07" iyz="-1.1324E-24" izz="1.7003E-07" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_4_link.STL" />
+      </geometry>
+      <material name="mocap_4_link_material">
+        <color rgba="0.90196 0.92157 0.92157 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_4_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="mocap_4_joint" type="fixed">
+    <origin xyz="0.20556262 0.0992499999999987 0.2165" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="mocap_4_link" />
+  </joint>
+  <link name="mocap_mast_link">
+    <inertial>
+      <origin xyz="1.1111E-07 0.00014799 -0.2299" rpy="0 0 0" />
+      <mass value="0.89557" />
+      <inertia ixx="0.0031286" ixy="-1.2659E-10" ixz="2.6986E-09" iyy="0.001037" iyz="-1.9067E-08" izz="0.0027846" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_mast_link.STL" />
+      </geometry>
+      <material name="mocap_mast_link_material">
+        <color rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://rosey_description/description/meshes/mocap_mast_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="mocap_mast_joint" type="fixed">
+    <origin xyz="0.05 -0.00025 0.3899" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="mocap_mast_link" />
   </joint>
 </robot>

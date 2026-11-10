@@ -3,7 +3,7 @@
 <package format="3">
   <name>rosey_description</name>
   <version>0.0.0</version>
-  <description>URDF description of RoseyBot (SolidWorks URDF2 export) with its ros2_control hardware interface</description>
+  <description>URDF description of RoseyBot (SolidWorks URDF_FIN export) with its ros2_control hardware interface</description>
   <maintainer email="enderman9523@gmail.com">cameron</maintainer>
   <license>TODO: License declaration</license>
 
