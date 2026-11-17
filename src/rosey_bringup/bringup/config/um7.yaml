@@ -5,6 +5,6 @@
     mag_updates: true # may or may not want to change depending on EM noise from robot
     quat_mode: true
     zero_gyros: true #THIS WILL BREAK IF THE ROBOT IS MOVING ON BOOT, assuming thats not the case
-    port: /dev/ttyUSB1
+    port: /dev/ttyUSB
     tf_ned_to_enu: true
     update_rate: 60
