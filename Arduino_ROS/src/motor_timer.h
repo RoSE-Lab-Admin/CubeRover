@@ -1,7 +1,7 @@
 #ifndef MOTOR_TIMER
 #define MOTOR_TIMER
 
-#include <elapsedMillis.h>
+#include "elapsedMillis.h"
 
 class MotorTimer {
   private:

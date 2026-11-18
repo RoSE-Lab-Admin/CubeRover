@@ -1,8 +1,8 @@
 #ifndef MOTOR
 #define MOTOR
 
-#include "src/RoboClaw.h"
-#include "src/elapsedMillis.h"
+#include "RoboClaw.h"
+#include "elapsedMillis.h"
 
 void set_motor_speed(int motorIndex, uint32_t speed);
 void set_motor_speeds(uint32_t lSpeed, uint32_t rSpeed);

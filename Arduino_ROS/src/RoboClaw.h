@@ -4,8 +4,8 @@
 #include <stdarg.h>
 
 #include <inttypes.h>
-#include <Stream.h>
-#include <HardwareSerial.h>
+#include "Stream.h"
+#include "HardwareSerial.h"
 #ifdef __AVR__
 	#include <SoftwareSerial.h>
 #endif
