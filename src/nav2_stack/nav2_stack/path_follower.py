@@ -7,6 +7,9 @@ from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped, Vector3
 from std_msgs.msg import String
 from lifecycle_msgs.srv import GetState
+from action_msgs.msg import GoalStatus
+from nav2_msgs.action import ComputePathToPose
+from rclpy.action import ActionClient
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_ros import TransformBroadcaster
@@ -51,6 +54,14 @@ class PathFollower(Node):
         #  - "path": goToPose to the first waypoint, then the waypoints themselves
         #    (dense, e.g. a spiral leg) go straight to the controller via
         #    FollowPath -- no global planner, no replanning.
+        #  - "pose": drive to the first waypoint and arrive facing along the line
+        #    to the second one, either way round (autonomous_trials' initial bag in
+        #    the spiral / lawnmower modes: the rover ends up lined up with the first
+        #    leg). Both headings are planned and the shorter plan is driven once,
+        #    gear segment by gear segment (FollowPath), replanned only if the rover
+        #    is not there at the end (up to POSE_MAX_PLANS). The heading only counts
+        #    if GridBasedCustom has ignore_goal_heading and arc_mode_enabled off --
+        #    autonomous_trials switches them for this drive.
         self.declare_parameter('follow_mode', 'goals')
         self.declare_parameter('advance_distance', 0.0)
         # tag for /trial_goal_result ("<result>:<trial_id>"), so autonomous_trials
@@ -65,9 +76,11 @@ class PathFollower(Node):
         self.follow_mode = self.get_parameter('follow_mode').value
         self.advance_distance = float(self.get_parameter('advance_distance').value)
         self.trial_id = self.get_parameter('trial_id').value
-        if self.follow_mode not in ('goals', 'path'):
-            raise ValueError(f"follow_mode must be 'goals' or 'path', got {self.follow_mode!r}")
-        self.path_phase = None   # follow_mode "path": "approach" (goToPose) then "follow"
+        if self.follow_mode not in ('goals', 'path', 'pose'):
+            raise ValueError(f"follow_mode must be 'goals', 'path' or 'pose', got {self.follow_mode!r}")
+        self.path_phase = None   # follow_mode "path": "approach" (goToPose) then "follow"; "pose": "pose"
+        self._plan_ac = None     # follow_mode "pose": ComputePathToPose client on self.nav
+        self.pose_heading, self.pose_segments, self.pose_plans = None, [], 0
         self.progress_idx = 0    # advance_distance > 0: waypoint the rover has got to
 
         # create callback group so it can execute while nav2 blocks
@@ -95,6 +108,12 @@ class PathFollower(Node):
         # 0.542m > 0.5m tolerance and eventually gave up as "stalled"), so
         # this publishes the real result for it to trust instead.
         self.goal_result_pub = self.create_publisher(String, '/trial_goal_result', 10)
+        # follow_mode "path" / "pose": the path handed to the controller is not
+        # planned, so the planner never publishes it -- publish it on /plan
+        # (rviz, bags, analysis scripts), again every second while it is driven
+        self.plan_pub = self.create_publisher(Path, '/plan', 1)
+        self.shown_plan = None
+        self.create_timer(1.0, self._republish_plan, callback_group=self.opti_group)
         self.trajectory_had_failure = False
 
         # initialize nav2
@@ -443,10 +462,13 @@ class PathFollower(Node):
             if self.follow_mode == 'path':
                 self._start_path_mode()
                 return
+            if self.follow_mode == 'pose':
+                self._start_pose_mode()
+                return
             self._issue_goal()
             return
 
-        if self.follow_mode == 'path':
+        if self.follow_mode in ('path', 'pose'):
             self._step_path_mode()
             return
 
@@ -583,6 +605,180 @@ class PathFollower(Node):
         self.path_phase = 'approach'
         self._issue_goal()
 
+    POSE_MAX_PLANS = 3   # follow_mode "pose": plans driven before giving up
+    POSE_GOAL_TOLERANCE = 0.5   # m, the controller's goal checker (PositionGoalChecker xy)
+
+    def _plan(self, goal, timeout_sec=10.0):
+        """The planner's path (nav_msgs/Path) from the rover to goal (PoseStamped),
+        None if it finds none. Spins self.nav, with timeouts (BasicNavigator's
+        getPath has none)."""
+        if self._plan_ac is None:
+            self._plan_ac = ActionClient(self.nav, ComputePathToPose, 'compute_path_to_pose')
+        if not self._plan_ac.wait_for_server(timeout_sec=5.0):
+            return None
+        g = ComputePathToPose.Goal()
+        g.goal = goal
+        g.planner_id = default_planner_id()
+        g.use_start = False   # from the rover's current pose, like the behaviour tree
+        fut = self._plan_ac.send_goal_async(g)
+        rclpy.spin_until_future_complete(self.nav, fut, timeout_sec=5.0)
+        handle = fut.result() if fut.done() else None
+        if handle is None or not handle.accepted:
+            return None
+        res = handle.get_result_async()
+        rclpy.spin_until_future_complete(self.nav, res, timeout_sec=timeout_sec)
+        if not res.done() or res.result() is None:
+            return None
+        path = res.result().result.path
+        if res.result().status != GoalStatus.STATUS_SUCCEEDED or len(path.poses) < 2:
+            return None
+        return path
+
+    @staticmethod
+    def _path_length(path):
+        xy = np.array([[p.pose.position.x, p.pose.position.y] for p in path.poses])
+        return float(np.hypot(*np.diff(xy, axis=0).T).sum())
+
+    @staticmethod
+    def _gear_segments(path):
+        """Split a planner path at its cusps into one-gear pieces (nav_msgs/Path);
+        a pose's yaw is the rover's heading, so a step against it is reverse."""
+        poses = path.poses
+        xy = np.array([[p.pose.position.x, p.pose.position.y] for p in poses])
+        yaw = np.array([2.0 * np.arctan2(p.pose.orientation.z, p.pose.orientation.w) for p in poses])
+        step = np.diff(xy, axis=0)
+        move = np.arctan2(step[:, 1], step[:, 0])
+        rev = np.abs(np.arctan2(np.sin(move - yaw[:-1]), np.cos(move - yaw[:-1]))) > np.pi / 2
+        segs, start = [], 0
+        for i in range(1, len(rev) + 1):
+            if i == len(rev) or rev[i] != rev[start]:
+                seg = Path()
+                seg.header = path.header
+                seg.poses = poses[start:i + 1]
+                if len(seg.poses) >= 2 and np.hypot(*(xy[i] - xy[start])) > 0.05:
+                    segs.append((bool(rev[start]), seg))
+                start = i
+        return segs
+
+    def _pose_goal(self, h):
+        p0 = self.point_path[0].pose.position
+        goal = PoseStamped()
+        goal.header.frame_id = 'world'
+        goal.header.stamp = self.get_clock().now().to_msg()
+        goal.pose.position.x, goal.pose.position.y = p0.x, p0.y
+        goal.pose.orientation.z, goal.pose.orientation.w = float(np.sin(h / 2)), float(np.cos(h / 2))
+        return goal
+
+    def _start_pose_mode(self):
+        """follow_mode "pose": plan to the first waypoint facing towards the second
+        and facing away from it, drive the shorter plan."""
+        p0 = self.point_path[0].pose.position
+        p1 = self.point_path[min(1, len(self.point_path) - 1)].pose.position
+        yaw = float(np.arctan2(p1.y - p0.y, p1.x - p0.x))
+        options = []
+        for h in (yaw, yaw + np.pi):
+            path = self._plan(self._pose_goal(h))
+            self.get_logger().info(
+                f"start pose ({p0.x:.2f}, {p0.y:.2f}) heading {np.degrees(np.arctan2(np.sin(h), np.cos(h))):.0f} deg: "
+                + (f"path {self._path_length(path):.2f} m" if path is not None else "no path"))
+            options.append((h, path))
+        found = [o for o in options if o[1] is not None]
+        if found:
+            self.pose_heading = min(found, key=lambda o: self._path_length(o[1]))[0]
+        else:
+            pose = self._current_pose()
+            th = pose[2] if pose is not None else yaw
+            self.pose_heading = min((yaw, yaw + np.pi), key=lambda h: abs(np.arctan2(np.sin(h - th), np.cos(h - th))))
+        self.path_phase = 'pose'
+        self.pose_plans = 0
+        self._drive_pose_plan(dict(options)[self.pose_heading])
+
+    def _drive_pose_plan(self, path=None):
+        """Drive one plan to the start pose, gear segment by gear segment, each
+        straight to the controller (FollowPath stops at its end, i.e. at the cusp;
+        MPPI would not stop there on its own). No replanning while driving it --
+        replanning a heading-constrained goal every second flipped between
+        manoeuvres (bench test, 11/18)."""
+        if path is None:
+            path = self._plan(self._pose_goal(self.pose_heading))
+        self.pose_plans += 1
+        if path is None:
+            self.get_logger().warn(f"start pose: no path (plan {self.pose_plans}/{self.POSE_MAX_PLANS})")
+            self.pose_segments = []
+            return False
+        self.pose_segments = self._gear_segments(path)
+        if self.pose_segments:
+            # FollowPath stops POSE_GOAL_TOLERANCE short of a segment's end, which on
+            # the last one is where the heading turns onto the leg (bench: 49 deg off).
+            # Run the last segment that far on, straight along the final heading, so
+            # it stops at about the start pose, lined up.
+            rev, seg = self.pose_segments[-1]
+            last = seg.poses[-1]
+            th = 2.0 * np.arctan2(last.pose.orientation.z, last.pose.orientation.w) + (np.pi if rev else 0.0)
+            for k in range(1, int(round(self.POSE_GOAL_TOLERANCE / 0.05)) + 1):
+                ps = copy.deepcopy(last)
+                ps.pose.position.x += k * 0.05 * np.cos(th)
+                ps.pose.position.y += k * 0.05 * np.sin(th)
+                seg.poses.append(ps)
+        shown = Path()
+        shown.header = path.header
+        shown.poses = [p for _, sg in self.pose_segments for p in sg.poses]
+        self._show_plan(shown)
+        self.get_logger().info(
+            f"start pose: driving plan {self.pose_plans}/{self.POSE_MAX_PLANS}, heading "
+            f"{np.degrees(np.arctan2(np.sin(self.pose_heading), np.cos(self.pose_heading))):.0f} deg, "
+            f"{self._path_length(path):.2f} m in {len(self.pose_segments)} segment(s): "
+            + ", ".join(f"{'reverse' if r else 'forward'} {self._path_length(sg):.2f} m"
+                        for r, sg in self.pose_segments))
+        return self._next_pose_segment()
+
+    def _show_plan(self, path):
+        self.shown_plan = path
+        self._republish_plan()
+
+    def _republish_plan(self):
+        path = self.shown_plan
+        if path is None or self.finished:
+            return
+        path.header.stamp = self.get_clock().now().to_msg()
+        self.plan_pub.publish(path)
+
+    def _next_pose_segment(self):
+        if not self.pose_segments:
+            return False
+        _, seg = self.pose_segments.pop(0)
+        self.nav.followPath(seg)
+        return True
+
+    def _step_pose_mode(self, result):
+        """A segment finished (not cancelled): next segment, or check the arrival
+        and replan if the rover is not there."""
+        if result != TaskResult.SUCCEEDED:
+            self.get_logger().warn(f"start pose: segment result={result}")
+            self.pose_segments = []
+        if self._next_pose_segment():
+            return
+        pose = self._current_pose()
+        p0 = self.point_path[0].pose.position
+        dist = np.hypot(p0.x - pose[0], p0.y - pose[1]) if pose is not None else np.inf
+        if dist < 0.5:
+            err = np.degrees(abs(np.arctan2(np.sin(pose[2] - self.pose_heading), np.cos(pose[2] - self.pose_heading))))
+            self.get_logger().info(f"start pose reached: {dist:.2f} m away, heading off by {err:.0f} deg")
+            self._finish_pose("succeeded")
+            return
+        while self.pose_plans < self.POSE_MAX_PLANS:
+            self.get_logger().info(f"start pose: {dist:.2f} m away after the plan -- replanning")
+            if self._drive_pose_plan():
+                return
+        self.get_logger().warn(f"start pose not reached ({dist:.2f} m away) after {self.pose_plans} plan(s)")
+        self._finish_pose("failed")
+
+    def _finish_pose(self, result):
+        self.started = False
+        self.finished = True
+        self._publish_result(result)
+        self.stop_nav()
+
     def _path_gear_is_reverse(self):
         """Gear for the whole path, from how the rover faces right now: reverse if
         it faces more than 90 deg away from the path's direction of travel at the
@@ -601,6 +797,7 @@ class PathFollower(Node):
         self.path_phase = 'follow'
         reverse = self._path_gear_is_reverse()
         path = self._dense_path(reverse)
+        self._show_plan(path)
         self.get_logger().info(
             f"following the {len(path.poses)}-pose path directly with the controller (FollowPath), "
             f"{'in REVERSE (the rover faces against the path)' if reverse else 'forward'}")
@@ -617,6 +814,9 @@ class PathFollower(Node):
             self.started = False
             self.finished = True
             self.stop_nav()
+            return
+        if self.path_phase == 'pose':
+            self._step_pose_mode(result)
             return
         if self.path_phase == 'approach':
             if result != TaskResult.SUCCEEDED:

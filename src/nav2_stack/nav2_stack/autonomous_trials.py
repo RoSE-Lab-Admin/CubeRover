@@ -17,6 +17,7 @@ it works standalone too if Nav2 is already up elsewhere.
 """
 
 import argparse
+import contextlib
 import csv
 import math
 import os
@@ -102,6 +103,8 @@ class PoseWatcher(Node):
         self.create_subscription(String, "/trial_goal_result", self._goal_result_cb, 10)
         self.set_params_client = self.create_client(
             SetParameters, "/controller_server/set_parameters")
+        self.planner_params_client = self.create_client(
+            SetParameters, "/planner_server/set_parameters")
         # controller_server has its own lifecycle manager (nav2.launch.py), so
         # reloading the dynamics model cycles only it, not the whole stack
         self.manage_nodes_client = self.create_client(
@@ -179,7 +182,8 @@ def wait_for_nav2_active():
     log(f"Nav2 fully active after {time.monotonic() - t0:.1f}s")
 
 
-def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=None) -> str:
+def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=None,
+                  stop_on_distance=True) -> str:
     """Spins until path_follower reports its authoritative trajectory
     outcome, the real pose is within XY_GOAL_TOLERANCE of goal_xy (a
     secondary/fallback "reached" signal -- see below), no progress has been
@@ -212,7 +216,9 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=N
     The distance check is kept as a fallback "reached" trigger too -- it can
     only ever fire *correctly* (same 0.5m tolerance Nav2's own goal checker
     uses), so keeping it can't reintroduce that bug, only catch a reached
-    goal if /trial_goal_result were ever dropped."""
+    goal if /trial_goal_result were ever dropped. stop_on_distance=False turns
+    it off (path_follower follow_mode "pose": the rover may pass the goal
+    mid-manoeuvre, before it faces the right way)."""
     node.reset_trial_state(trial_id)
     best_dist = math.inf
     first_dist = None
@@ -247,7 +253,8 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=N
             if first_dist is None:
                 first_dist = dist
                 best_dist = dist
-            if goal_dist < XY_GOAL_TOLERANCE and (route is None or dist < XY_GOAL_TOLERANCE + 1.0):
+            if (stop_on_distance and goal_dist < XY_GOAL_TOLERANCE
+                    and (route is None or dist < XY_GOAL_TOLERANCE + 1.0)):
                 log(f"{label}: goal reached (dist={goal_dist:.3f}m)")
                 return "reached"
             if dist < best_dist - MIN_IMPROVEMENT_M:
@@ -303,7 +310,7 @@ def next_trial_start_index(bag_dir: Path) -> int:
 
 
 def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str,
-                  follow_args=(), route=None) -> str:
+                  follow_args=(), route=None, stop_on_distance=True) -> str:
     """Returns 'reached', 'stalled', 'no_movement', or 'safety_stop' (see wait_for_goal).
     follow_args: extra waypoint.launch.py arguments (follow_mode, advance_distance);
     route: see wait_for_goal."""
@@ -318,11 +325,61 @@ def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_no
     ])
 
     try:
-        outcome = wait_for_goal(pose_node, goal_xy, label, route, trial_id)
+        outcome = wait_for_goal(pose_node, goal_xy, label, route, trial_id, stop_on_distance)
     finally:
         stop_process(wp_proc, "waypoint.launch.py")
         stop_process(bag_proc, "ros2 bag record")
     return outcome
+
+
+@contextlib.contextmanager
+def initial_bag_setup(node: PoseWatcher, pattern_mode: bool, live_mode: str):
+    """Spiral / lawnmower initial bag (pattern_mode): driven under kinematics, and
+    the planner (GridBasedCustom) plans to the goal's heading -- ignore_goal_heading
+    and arc_mode_enabled (one arc through the goal, any heading) off. Everything is
+    put back afterwards, also if the initial bag raises. No-op otherwise."""
+    if not pattern_mode:
+        yield
+        return
+    from nav2_stack.escape import default_planner_id
+    import yaml
+    planner = default_planner_id()
+    cfg = yaml.safe_load(open(Path(get_package_share_directory("nav2_stack")) / "config"
+                              / "nav2_param2.yaml"))["planner_server"]["ros__parameters"].get(planner, {})
+    restore = {}
+    for name, value in (("ignore_goal_heading", False), ("arc_mode_enabled", False)):
+        if name not in cfg:
+            continue        # stock GridBased: no such param, it plans to the heading anyway
+        try:
+            set_controller_param(node, f"{planner}.{name}", value, server="planner_server")
+            restore[name] = cfg[name]
+        except Exception as e:
+            log(f"WARNING: could not set {planner}.{name}={value} ({e}) -- the initial bag may "
+                f"not arrive lined up with the first leg")
+    if restore:
+        log(f"initial_bag: {planner} plans to the goal heading "
+            f"({', '.join(f'{k}=false' for k in restore)})")
+    forced = live_mode != "kinematics"
+    if forced:
+        log(f"initial_bag: driving it under kinematics (deployed: {live_mode})")
+        push_dynamics_mode(node, "kinematics")
+        reload_controller(node)
+    try:
+        yield
+    finally:
+        for name, value in restore.items():
+            try:
+                set_controller_param(node, f"{planner}.{name}", bool(value), server="planner_server")
+            except Exception as e:
+                log(f"WARNING: could not restore {planner}.{name}={value} ({e}) -- restart the "
+                    f"launch before relying on the planner")
+        if restore:
+            log(f"initial_bag: {planner} planner settings restored "
+                f"({', '.join(f'{k}={str(v).lower()}' for k, v in restore.items())})")
+        if forced:
+            log(f"initial_bag: back to {live_mode}")
+            push_dynamics_mode(node, live_mode)
+            reload_controller(node)
 
 
 def parse_bool(s: str) -> bool:
@@ -389,16 +446,18 @@ def _param_value(value) -> ParameterValue:
 
 
 def set_controller_param(node: PoseWatcher, name: str, value, timeout_sec=15.0,
-                          service_wait_sec=10.0):
-    """Sets a /controller_server parameter via a persistent rclpy service
-    client (see PoseWatcher docstring for why not `ros2 param set`), with an
-    explicit timeout and a bounded retry instead of hanging indefinitely."""
+                          service_wait_sec=10.0, server="controller_server"):
+    """Sets a /controller_server parameter (or /planner_server with
+    server="planner_server") via a persistent rclpy service client (see
+    PoseWatcher docstring for why not `ros2 param set`), with an explicit
+    timeout and a bounded retry instead of hanging indefinitely."""
+    client = node.planner_params_client if server == "planner_server" else node.set_params_client
     def _do():
-        if not node.set_params_client.wait_for_service(timeout_sec=service_wait_sec):
-            raise RuntimeError(f"/controller_server/set_parameters not available "
+        if not client.wait_for_service(timeout_sec=service_wait_sec):
+            raise RuntimeError(f"/{server}/set_parameters not available "
                                 f"after {service_wait_sec}s")
         req = SetParameters.Request(parameters=[ParameterMsg(name=name, value=_param_value(value))])
-        future = node.set_params_client.call_async(req)
+        future = client.call_async(req)
         rclpy.spin_until_future_complete(node, future, timeout_sec=timeout_sec)
         if not future.done():
             raise RuntimeError(f"timed out after {timeout_sec}s waiting for response")
@@ -982,17 +1041,20 @@ def main():
         log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
             f"in nav2_param2.yaml's critics list?")
 
+    live_mode = parsed["dynamics_mode"]   # dynamics_mode the controller runs right now
     if fs_cfg is not None and fs_cfg["current_weights_path"] is not None:
         log(f"train_from_scratch: deploying checkpoint {fs_cfg['current_weights_path']} "
             f"(neural_network) for the first new trial")
         push_model_path(pose_node, fs_cfg["current_weights_path"])
         push_dynamics_mode(pose_node, "neural_network")
         reload_controller(pose_node)
+        live_mode = "neural_network"
     elif fs_cfg is not None and parsed["dynamics_mode"] != "kinematics":
         log("train_from_scratch: forcing dynamics_mode=kinematics for the bootstrap phase "
             "(regardless of what nav2_param2.yaml currently has deployed)")
         push_dynamics_mode(pose_node, "kinematics")
         reload_controller(pose_node)
+        live_mode = "kinematics"
 
     if retrain_cfg is not None and retrain_cfg["terrain"]:
         if retrain_cfg["current_weights_path"] is not None:
@@ -1008,24 +1070,39 @@ def main():
     try:
         initial_bag = bag_dir / "initial_bag"
         if not initial_bag.exists():
-            log(f"no initial_bag found in {bag_dir} -- collecting one at the origin")
             origin_csv = bag_dir / "initial_goal.csv"
-            with open(origin_csv, "w") as f:
-                f.write("x,y,z\n0.0,0.0,0.0\n")
-            for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
-                outcome = run_one_trial(bag_dir, "initial_bag", origin_csv, (0.0, 0.0), pose_node,
-                                        "initial_bag")
-                if outcome != "no_movement":
-                    break
-                log(f"initial_bag: no movement detected (attempt {attempt}/"
-                    f"{NO_MOVEMENT_MAX_ATTEMPTS}) -- discarding {initial_bag} and retrying")
-                shutil.rmtree(initial_bag, ignore_errors=True)
+            if pattern is None:
+                log(f"no initial_bag found in {bag_dir} -- collecting one at the origin")
+                initial_xy, initial_args = (0.0, 0.0), ()
+                with open(origin_csv, "w") as f:
+                    f.write("x,y,z\n0.0,0.0,0.0\n")
             else:
-                log(f"initial_bag: no movement detected {NO_MOVEMENT_MAX_ATTEMPTS} times in a "
-                    f"row -- giving up, treating as a normal stall")
-                outcome = "stalled"
+                # spiral / lawnmower: drive to the first leg's start and arrive lined
+                # up with it (either way round), so trial 1 starts on the leg
+                (x0, y0), (x1, y1) = pattern["legs"][0].points[:2]
+                d = math.hypot(x1 - x0, y1 - y0)
+                initial_xy, initial_args = (x0, y0), ("follow_mode:=pose",)
+                log(f"no initial_bag found in {bag_dir} -- collecting one by driving to the "
+                    f"first {pattern['name']} leg's start ({x0:.2f}, {y0:.2f}), lined up with it")
+                with open(origin_csv, "w") as f:
+                    f.write(f"x,y,z\n{x0:.4f},{y0:.4f},0.0\n"
+                            f"{x0 + (x1 - x0) / d:.4f},{y0 + (y1 - y0) / d:.4f},0.0\n")
+            with initial_bag_setup(pose_node, pattern is not None, live_mode):
+                for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
+                    outcome = run_one_trial(bag_dir, "initial_bag", origin_csv, initial_xy, pose_node,
+                                            "initial_bag", initial_args,
+                                            stop_on_distance=pattern is None)
+                    if outcome != "no_movement":
+                        break
+                    log(f"initial_bag: no movement detected (attempt {attempt}/"
+                        f"{NO_MOVEMENT_MAX_ATTEMPTS}) -- discarding {initial_bag} and retrying")
+                    shutil.rmtree(initial_bag, ignore_errors=True)
+                else:
+                    log(f"initial_bag: no movement detected {NO_MOVEMENT_MAX_ATTEMPTS} times in a "
+                        f"row -- giving up, treating as a normal stall")
+                    outcome = "stalled"
 
-            record_outcome(bag_dir, "initial_bag", outcome, (0.0, 0.0))
+            record_outcome(bag_dir, "initial_bag", outcome, initial_xy)
             if fs_cfg is not None:
                 record_deployed_model(bag_dir, "initial_bag", fs_cfg)
             if outcome == "reached":
