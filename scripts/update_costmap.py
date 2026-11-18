@@ -91,11 +91,21 @@ DEFAULT_LABELS = ["1 SE", "2 SSW", "3 SWW", "4 W", "5 NW", "6 N", "7 NE"]
 # (E:/perception-data/costmap-calib-data/11172026), diameters measured with a tape (feet),
 # radius = diameter / 2 + a 0.3 m safety margin. Until 11/17 only the south crater, at its
 # 10/27 centre (-0.1587, -3.6945) with r 1.0.
+# 11/18: CraterW and CraterNE instead from the closest the rover (OptiTrack pose) should get,
+# given on 11/18: radius = that point's distance from the centre - ROVER_REACH, the rule used
+# for the crater figures (the rover centre gets about this close to a drawn circle).
 FT = 0.3048
 CRATER_MARGIN = 0.3
+ROVER_REACH = 0.4
+
+
+def _radius_to(cx, cy, px, py):
+    return math.hypot(px - cx, py - cy) - ROVER_REACH
+
+
 DEFAULT_OBSTACLES = [
-    ( 2.6848,  1.4989, 4.0 * FT / 2 + CRATER_MARGIN),   # CraterNE, 4 ft across
-    (-3.7534,  0.9315, 4.5 * FT / 2 + CRATER_MARGIN),   # CraterW, 4.5 ft across
+    ( 2.6848,  1.4989, _radius_to(2.6848, 1.4989, 1.7033, 0.7777)),    # CraterNE, closest (1.703, 0.778): r 0.82 (was 0.91)
+    (-3.7534,  0.9315, 1.10),  # CraterW: r 1.10 (11/18; was 0.99; the closest point (-2.329, 0.902) alone gives 1.02)
     (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across
 ]
 # Every arena edge is moved this far towards the inside before rasterizing (10/28/26:
