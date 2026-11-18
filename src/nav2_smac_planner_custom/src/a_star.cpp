@@ -417,7 +417,10 @@ bool AStarAlgorithm<NodeT>::isGoal(NodePtr & node)
   if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
     if (_search_info.ignore_goal_heading) {
       return node == getGoal() ||
-             node->getIndex() / getSizeDim3() == getGoal()->getIndex() / getSizeDim3();
+             (node->getIndex() / getSizeDim3() == getGoal()->getIndex() / getSizeDim3() &&
+              goalHeadingBinOk(
+                node->getIndex() % getSizeDim3(), _goal_coordinates.theta, getSizeDim3(),
+                _search_info.goal_heading_tolerance_deg));
     }
   }
   return node == getGoal();

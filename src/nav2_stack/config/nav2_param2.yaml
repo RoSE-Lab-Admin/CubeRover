@@ -283,6 +283,7 @@ planner_server:
       motion_threshold: 0.02 # fork-only: meters of displacement along the heading within motion_window to count as moving; below = at rest (plans as from rest)
       motion_stale_timeout: 0.5 # fork-only: seconds without a pose before the gear is treated as unknown
       ignore_goal_heading: true # fork-only: goal is position-only -- any final heading in the goal cell is accepted, so the planner picks the end yaw (e.g. lets a 3-point turn end however it naturally ends instead of forcing the caller's arc-derived yaw)
+      goal_heading_tolerance_deg: -1.0 # fork-only: with ignore_goal_heading, only final headings within this many deg of the goal yaw, either way round, count; -1 = any heading. autonomous_trials sets it for lawnmower_drive zigzag_heading
       # fork-only: constant-curvature arc mode -- if the single arc tangent to the start heading
       # through the goal (forward if the goal is ahead, reverse if behind) has radius >= arc_min_radius,
       # stays collision free and does not reverse a moving rover, plan exactly that arc; Hybrid-A*

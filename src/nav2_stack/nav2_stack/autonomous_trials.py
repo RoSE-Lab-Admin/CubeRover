@@ -754,7 +754,8 @@ def write_pattern_trial(bag_dir: Path, traj_name: str, leg, drive: str, name: st
     """The leg's points for waypoint.launch.py's pose_csv: every
     spiral.WAYPOINT_SPACING m for "waypoints" (spiral option A), the dense leg for
     "path". Kept in bag_dir as <traj_name>_<name>.csv (name: spiral / lawnmower)."""
-    pts = leg.waypoints() if drive == "waypoints" else leg.points
+    pts = (leg.waypoints() if drive == "waypoints"
+           else leg.points[-1:] if drive in ZIGZAG_DRIVES else leg.points)
     path = bag_dir / f"{traj_name}_{name}.csv"
     with open(path, "w") as f:
         f.write("x,y,z\n")
@@ -763,9 +764,17 @@ def write_pattern_trial(bag_dir: Path, traj_name: str, leg, drive: str, name: st
     return path
 
 
-def spiral_follow_args(drive: str):
+ZIGZAG_DRIVES = ("zigzag", "zigzag_heading")
+
+
+def pattern_follow_args(drive: str, leg):
+    """waypoint.launch.py arguments for one spiral / lawnmower leg."""
     if drive == "waypoints":
         return ["follow_mode:=goals", f"advance_distance:={SPIRAL_ADVANCE_DISTANCE}"]
+    if drive == "zigzag":
+        return ["follow_mode:=goals"]
+    if drive == "zigzag_heading":   # the planner arrives within the tolerance of E-W
+        return ["follow_mode:=goals", f"goal_yaw:={leg.yaw}"]
     return ["follow_mode:=path"]
 
 
@@ -866,6 +875,16 @@ def main():
                              "(m). Default: 1.8")
     parser.add_argument("--lawnmower-spacing", default=0.8, type=float,
                         help="waypoint-mode lawnmower: distance between lanes (m). Default: 0.8")
+    parser.add_argument("--lawnmower-drive", default="path",
+                        choices=["path", "zigzag", "zigzag_heading"],
+                        help="waypoint-mode lawnmower: path = S-curve lanes straight to the "
+                             "controller (default); zigzag = one planned goal per trial, the next "
+                             "lane's end on the other side (any arrival heading); zigzag_heading = "
+                             "the same, but the planner has to arrive heading E-W (either way) "
+                             "within --lawnmower-heading-tolerance")
+    parser.add_argument("--lawnmower-heading-tolerance", default=20.0, type=float,
+                        help="lawnmower-drive zigzag_heading: allowed arrival heading off E-W "
+                             "(deg). Default: 20")
     parser.add_argument("--spiral-centre-x", default=0.0, type=float)
     parser.add_argument("--spiral-centre-y", default=0.0, type=float)
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
@@ -996,18 +1015,28 @@ def main():
             f"{min(L.length for L in legs):.1f}-{max(L.length for L in legs):.1f} m long")
     elif args.waypoint_mode == "lawnmower":
         from nav2_stack.spiral import Clearance
-        from nav2_stack.lawnmower import lawnmower_legs
+        from nav2_stack.lawnmower import lawnmower_legs, zigzag_legs, zigzag_start
         map_yaml = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.yaml"
-        legs = lawnmower_legs(Clearance(map_yaml), args.n_trajectories, args.lawnmower_spacing)
+        clearance = Clearance(map_yaml)
+        if args.lawnmower_drive == "path":
+            legs = lawnmower_legs(clearance, args.n_trajectories, args.lawnmower_spacing)
+            start = None
+        else:
+            legs = zigzag_legs(clearance, args.n_trajectories, args.lawnmower_spacing)
+            start = zigzag_start(clearance, args.lawnmower_spacing)
         if not legs:
             sys.exit(f"FATAL: fewer than 2 lawnmower lanes {args.lawnmower_spacing} m apart fit the map")
-        pattern = {"name": "lawnmower", "legs": legs, "drive": "path"}
+        pattern = {"name": "lawnmower", "legs": legs, "drive": args.lawnmower_drive, "start": start}
         per_pass = {}
         for L in legs:
             per_pass[L.pass_no] = L.n_lanes
+        how = {"path": "S-curve lane changes, path mode",
+               "zigzag": "zigzag: one planned goal per trial, the next lane's end on the other side",
+               "zigzag_heading": f"zigzag: one planned goal per trial, the next lane's end on the "
+                                 f"other side, arriving within {args.lawnmower_heading_tolerance:.0f} "
+                                 f"deg of E-W"}[args.lawnmower_drive]
         log(f"waypoint mode lawnmower: lanes {args.lawnmower_spacing} m apart, shifted by a third "
-            f"of that every pass; lanes per pass {list(per_pass.values())}; S-curve lane changes, "
-            f"path mode; {len(legs)} legs, "
+            f"of that every pass; lanes per pass {list(per_pass.values())}; {how}; {len(legs)} legs, "
             f"{min(L.length for L in legs):.1f}-{max(L.length for L in legs):.1f} m long")
 
     gp_explorer_path = Path(__file__).resolve().parent / "gp_explorer_gpu.py"
@@ -1040,6 +1069,20 @@ def main():
     except Exception as e:
         log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
             f"in nav2_param2.yaml's critics list?")
+    # lawnmower zigzag_heading: GridBasedCustom only accepts final headings within the
+    # tolerance of the goal yaw (either way); put back when the run ends
+    heading_tol_set = None
+    if pattern is not None and pattern["drive"] == "zigzag_heading":
+        planner = default_planner_id()
+        try:
+            set_controller_param(pose_node, f"{planner}.goal_heading_tolerance_deg",
+                                 float(args.lawnmower_heading_tolerance), server="planner_server")
+            heading_tol_set = planner
+            log(f"{planner}: goal_heading_tolerance_deg={args.lawnmower_heading_tolerance:.0f} "
+                f"(arrive within it of E-W)")
+        except Exception as e:
+            log(f"WARNING: could not set {planner}.goal_heading_tolerance_deg ({e}) -- the planner "
+                f"needs the GridBasedCustom build with it; the zigzag runs with any arrival heading")
 
     live_mode = parsed["dynamics_mode"]   # dynamics_mode the controller runs right now
     if fs_cfg is not None and fs_cfg["current_weights_path"] is not None:
@@ -1079,7 +1122,7 @@ def main():
             else:
                 # spiral / lawnmower: drive to the first leg's start and arrive lined
                 # up with it (either way round), so trial 1 starts on the leg
-                (x0, y0), (x1, y1) = pattern["legs"][0].points[:2]
+                (x0, y0), (x1, y1) = (pattern.get("start") or pattern["legs"][0].points)[:2]
                 d = math.hypot(x1 - x0, y1 - y0)
                 initial_xy, initial_args = (x0, y0), ("follow_mode:=pose",)
                 log(f"no initial_bag found in {bag_dir} -- collecting one by driving to the "
@@ -1152,8 +1195,8 @@ def main():
                     log(f"{traj_name}: {what}, {leg.length:.1f} m, from ({leg.points[0][0]:.2f}, "
                         f"{leg.points[0][1]:.2f}) to ({goal_xy[0]:.2f}, {goal_xy[1]:.2f})")
                     outcome = run_one_trial(bag_dir, bag_name, trial_csv, goal_xy, pose_node,
-                                            traj_name, spiral_follow_args(pattern["drive"]),
-                                            leg.points)
+                                            traj_name, pattern_follow_args(pattern["drive"], leg),
+                                            None if pattern["drive"] in ZIGZAG_DRIVES else leg.points)
                 else:
                     if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
                         sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} "
@@ -1210,6 +1253,14 @@ def main():
                 f"{n_success}/{args.n_trajectories} successful")
     finally:
         abort_background_from_scratch(pending)
+        if heading_tol_set is not None:
+            try:
+                set_controller_param(pose_node, f"{heading_tol_set}.goal_heading_tolerance_deg", -1.0,
+                                     server="planner_server")
+                log(f"{heading_tol_set}: goal_heading_tolerance_deg back to -1 (any heading)")
+            except Exception as e:
+                log(f"WARNING: could not reset {heading_tol_set}.goal_heading_tolerance_deg ({e}) -- "
+                    f"restart the launch before other runs")
         pose_node.destroy_node()
         rclpy.shutdown()
 

@@ -34,6 +34,7 @@ def launch_setup(context):
     follow_mode = LaunchConfiguration('follow_mode').perform(context)
     advance_distance = float(LaunchConfiguration('advance_distance').perform(context))
     trial_id = LaunchConfiguration('trial_id').perform(context)
+    goal_yaw = float(LaunchConfiguration('goal_yaw').perform(context))
 
     if rover_type not in ROVER_CONFIGS:
         raise ValueError(f"Unknown rover_type '{rover_type}'. Choose from: {list(ROVER_CONFIGS)}")
@@ -69,6 +70,7 @@ def launch_setup(context):
             'follow_mode':  follow_mode,
             'advance_distance': advance_distance,
             'trial_id':     trial_id,
+            'goal_yaw':     goal_yaw,
         }]
     )
 
@@ -129,6 +131,9 @@ def generate_launch_description():
         # path_follower: "goals" (goToPose per waypoint) or "path" (FollowPath along
         # the waypoints); advance_distance > 0 sends the next goal that early
         DeclareLaunchArgument('follow_mode', default_value='goals'),
+        DeclareLaunchArgument('goal_yaw', default_value='nan',
+                              description='follow_mode goals: fixed goal yaw (rad) for every '
+                                          'waypoint; nan = arc heading'),
         DeclareLaunchArgument('advance_distance', default_value='0.0'),
         # tags path_follower's /trial_goal_result (autonomous_trials passes the trial name)
         DeclareLaunchArgument('trial_id', default_value=''),

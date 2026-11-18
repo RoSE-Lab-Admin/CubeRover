@@ -104,6 +104,11 @@ typename AnalyticExpansion<NodeT>::NodePtr AnalyticExpansion<NodeT>::tryAnalytic
           std::vector<std::pair<float, unsigned int>> candidates;
           candidates.reserve(_dim_3_size);
           for (unsigned int bin = 0; bin < _dim_3_size; ++bin) {
+            if (!goalHeadingBinOk(
+                bin, original_goal_theta, _dim_3_size, _search_info.goal_heading_tolerance_deg))
+            {
+              continue;  // outside goal_heading_tolerance_deg
+            }
             to[2] = current_node->motion_table.getAngleFromBin(bin);
             const float d = state_space->distance(from(), to());
             if (d <= _search_info.analytic_expansion_max_length) {

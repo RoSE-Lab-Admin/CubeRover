@@ -68,6 +68,11 @@ class PathFollower(Node):
         # can tell this trial's result from a late one of the previous trial's
         # path_follower (which it may already have stopped by distance)
         self.declare_parameter('trial_id', '')
+        # follow_mode "goals": send every goal with this yaw (rad) instead of the arc
+        # heading -- autonomous_trials' lawnmower zigzag_heading, where the planner
+        # (GridBasedCustom goal_heading_tolerance_deg) has to arrive within a
+        # tolerance of it. NaN (default): the arc heading, as before.
+        self.declare_parameter('goal_yaw', float('nan'))
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
@@ -76,6 +81,7 @@ class PathFollower(Node):
         self.follow_mode = self.get_parameter('follow_mode').value
         self.advance_distance = float(self.get_parameter('advance_distance').value)
         self.trial_id = self.get_parameter('trial_id').value
+        self.goal_yaw = float(self.get_parameter('goal_yaw').value)
         if self.follow_mode not in ('goals', 'path', 'pose'):
             raise ValueError(f"follow_mode must be 'goals', 'path' or 'pose', got {self.follow_mode!r}")
         self.path_phase = None   # follow_mode "path": "approach" (goToPose) then "follow"; "pose": "pose"
@@ -425,7 +431,7 @@ class PathFollower(Node):
 
     def _issue_goal(self):
         wp = copy.deepcopy(self.point_path[self.current_wp_idx])
-        heading = self._arc_heading()
+        heading = self.goal_yaw if np.isfinite(self.goal_yaw) else self._arc_heading()
         if heading is not None:
             q_new = R.from_euler('z', heading).as_quat()
             wp.pose.orientation.x = float(q_new[0])

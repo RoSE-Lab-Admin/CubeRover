@@ -97,6 +97,8 @@ def launch_setup(context):
             '--spiral-centre-x', LaunchConfiguration('spiral_centre_x'),
             '--spiral-centre-y', LaunchConfiguration('spiral_centre_y'),
             '--lawnmower-spacing', LaunchConfiguration('lawnmower_spacing'),
+            '--lawnmower-drive', LaunchConfiguration('lawnmower_drive'),
+            '--lawnmower-heading-tolerance', LaunchConfiguration('lawnmower_heading_tolerance'),
         ],
     )
 
@@ -178,6 +180,15 @@ def generate_launch_description():
                                           'turn (m)'),
         DeclareLaunchArgument('lawnmower_spacing', default_value='0.8',
                               description='waypoint_mode lawnmower: distance between lanes (m)'),
+        DeclareLaunchArgument('lawnmower_drive', default_value='path',
+                              description='waypoint_mode lawnmower: path (S-curve lanes, path '
+                                          'mode), zigzag (one planned goal per trial: the next '
+                                          'lane end on the other side, any heading) or '
+                                          'zigzag_heading (the same, arriving E-W within '
+                                          'lawnmower_heading_tolerance)'),
+        DeclareLaunchArgument('lawnmower_heading_tolerance', default_value='20.0',
+                              description='lawnmower_drive zigzag_heading: allowed arrival '
+                                          'heading off E-W (deg)'),
         DeclareLaunchArgument('spiral_centre_x', default_value='0.0'),
         DeclareLaunchArgument('spiral_centre_y', default_value='0.0'),
         DeclareLaunchArgument('start_rviz', default_value='true',

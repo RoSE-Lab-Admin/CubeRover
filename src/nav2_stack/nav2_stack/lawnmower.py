@@ -1,4 +1,5 @@
-"""Lawnmower legs for autonomous_trials' waypoint_mode "lawnmower" (driven in path mode).
+"""Lawnmower legs for autonomous_trials' waypoint_mode "lawnmower" (lawnmower_drive path: S-curve
+lanes driven in path mode; zigzag / zigzag_heading: one planned goal per lane, see zigzag_legs).
 
 Lanes run along x, `spacing` apart in y. Each lane is the longest stretch at its height that keeps
 CLEARANCE from everything occupied in the Nav2 map (walls and craters), at least MIN_LANE long; only
@@ -150,4 +151,59 @@ def lawnmower_legs(clearance, n_legs: int, spacing: float = SPACING, clr: float 
         lane = [(x, yc) for x in np.arange(x0, far + 1e-9 * d, DENSE_STEP * d)]
         legs.append(LaneLeg(head + lane, j, n_in_pass, d, up, pass_no, shift))
         x_end, d = far, -d
+    return legs
+
+
+class ZigzagLeg:
+    """One zigzag trial: a single goal, the end of the next lane on the other side
+    (planned and driven like a GP goal). points = [where the leg starts, the goal]."""
+
+    def __init__(self, start, goal, lane: int, n_lanes: int, direction: int, going_up: bool,
+                 pass_no: int, shift: float):
+        self.points = [tuple(start), tuple(goal)]
+        self.lane, self.n_lanes = lane, n_lanes
+        self.direction, self.going_up = direction, going_up    # direction: +1 = goal on the east side
+        self.pass_no, self.shift = pass_no, shift
+
+    @property
+    def length(self) -> float:
+        (x0, y0), (x1, y1) = self.points
+        return math.hypot(x1 - x0, y1 - y0)
+
+    @property
+    def yaw(self) -> float:
+        """Heading along the lanes in the direction of travel (E = 0, W = pi)."""
+        return 0.0 if self.direction > 0 else math.pi
+
+    @property
+    def label(self) -> str:
+        return (f"zigzag pass {self.pass_no} ({'up' if self.going_up else 'down'}, lanes shifted "
+                f"+{self.shift:.2f} m) to lane {self.lane + 1}/{self.n_lanes}'s "
+                f"{'east' if self.direction > 0 else 'west'} end")
+
+
+def zigzag_start(clearance, spacing: float = SPACING, clr: float = CLEARANCE):
+    """Where the zigzag starts (the first lane's west end) and a point 1 m east of it."""
+    seq = _sequence(clearance, spacing, clr, 1)
+    if not seq:
+        return None
+    y, a = seq[0][0], seq[0][1]
+    return [(a, y), (a + 1.0, y)]
+
+
+def zigzag_legs(clearance, n_legs: int, spacing: float = SPACING, clr: float = CLEARANCE) -> List[ZigzagLeg]:
+    """Zigzag across the lanes of lawnmower_legs (same lanes, passes and shifts): start
+    at the first lane's west end, then every leg's goal is the next lane's end on the
+    other side -- east, west, east, ... -- one lane further north (south on the way
+    back). [] if fewer than 2 lanes fit."""
+    seq = _sequence(clearance, spacing, clr, n_legs + 1)
+    if len(seq) < 2:
+        return []
+    legs, d = [], +1
+    prev = (seq[0][1], seq[0][0])
+    for i in range(1, min(n_legs + 1, len(seq))):
+        y, a, b, pass_no, shift, j, n_in_pass, up = seq[i]
+        goal = (b if d > 0 else a, y)
+        legs.append(ZigzagLeg(prev, goal, j, n_in_pass, d, up, pass_no, shift))
+        prev, d = goal, -d
     return legs

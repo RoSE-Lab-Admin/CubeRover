@@ -69,6 +69,8 @@ deactivate
 | `spiral_drive` | `path` | `waypoint_mode:=spiral` only. `path`: drive to the leg's start, then the leg itself goes straight to the controller (`FollowPath`, no global planner, no replanning), in whichever gear the rover faces: if it faces more than 90° away from the spiral's direction there, the whole leg is driven in reverse (one gear per leg, no turning around). Needs `PathAlignCritic` on, see below. `waypoints`: waypoints every 1 m along the leg, and the goal is kept ~1.5 m ahead of the rover's progress along it, so it is planned by the global planner but the rover never stops in between. |
 | `spiral_radius` | `1.8` | `waypoint_mode:=spiral` only: radius of the inner circle = the tightest turn (m). Larger than ~2.3 m does not fit the current arena with 0.75 m wall clearance. |
 | `lawnmower_spacing` | `0.8` | `waypoint_mode:=lawnmower` only: distance between lanes (m). |
+| `lawnmower_drive` | `path` | `waypoint_mode:=lawnmower` only. `path`: the S-curve lanes above, straight to the controller (path mode). `zigzag`: one goal per trial, planned and driven like a GP goal -- the next lane's end on the other side (east, west, east, ... one lane further north each time, back south on the shifted lanes), any arrival heading. `zigzag_heading`: the same, but `GridBasedCustom` only accepts plans that arrive heading E-W (either way) within `lawnmower_heading_tolerance` (fork param `goal_heading_tolerance_deg`, set at startup and reset to -1 = off when the run ends). In both zigzag modes `PathAlignCritic` stays off. |
+| `lawnmower_heading_tolerance` | `20.0` | `lawnmower_drive:=zigzag_heading` only: allowed arrival heading off E-W (deg). |
 | `spiral_centre_x`, `spiral_centre_y` | `0.0` | `waypoint_mode:=spiral` only: the spiral's centre. (-1.0, 0.2) leaves the most room in the current arena. |
 | `start_rviz` | `true` | Launches `rviz2` alongside everything else. Set to `false` to skip it. |
 
@@ -127,6 +129,14 @@ Example with the lawnmower (lanes 0.8 m apart, path mode, `PathAlignCritic` on a
 ```bash
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
     waypoint_mode:=lawnmower lawnmower_spacing:=0.8
+```
+
+Zigzag versions (one planned goal per lane end, like GP goals; with or without the E-W heading):
+```bash
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
+    waypoint_mode:=lawnmower lawnmower_drive:=zigzag
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
+    waypoint_mode:=lawnmower lawnmower_drive:=zigzag_heading lawnmower_heading_tolerance:=20
 ```
 
 Example with train-from-scratch and the slope-slip GP model (same notes as above; each fit prints

@@ -189,6 +189,13 @@ void SmacPlannerHybrid::configure(
     node, name + ".ignore_goal_heading", rclcpp::ParameterValue(false));
   node->get_parameter(name + ".ignore_goal_heading", _search_info.ignore_goal_heading);
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".goal_heading_tolerance_deg", rclcpp::ParameterValue(-1.0));
+  {
+    double tol;
+    node->get_parameter(name + ".goal_heading_tolerance_deg", tol);
+    _search_info.goal_heading_tolerance_deg = static_cast<float>(tol);
+  }
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".motion_reversal_penalty", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".motion_reversal_penalty", _motion_reversal_penalty_m);
 
@@ -803,6 +810,9 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _max_planning_time = parameter.as_double();
       } else if (name == _name + ".tolerance") {
         _tolerance = static_cast<float>(parameter.as_double());
+      } else if (name == _name + ".goal_heading_tolerance_deg") {
+        _search_info.goal_heading_tolerance_deg = static_cast<float>(parameter.as_double());
+        reinit_a_star = true;
       } else if (name == _name + ".lookup_table_size") {
         reinit_a_star = true;
         _lookup_table_size = parameter.as_double();
@@ -924,6 +934,7 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       } else if (name == _name + ".ignore_goal_heading") {
         _search_info.ignore_goal_heading = parameter.as_bool();
         reinit_a_star = true;
+
       } else if (name == _name + ".smooth_path") {
         if (parameter.as_bool()) {
           reinit_smoother = true;
@@ -1056,6 +1067,17 @@ bool SmacPlannerHybrid::tryArcPlan(
     reason = "sweep " + std::to_string(sweep_deg) + " deg > " + std::to_string(max_sweep) +
       " deg" + (held ? " (held)" : "");
     return false;
+  }
+  // goal_heading_tolerance_deg: the arc's end heading has to be within it too
+  if (_search_info.ignore_goal_heading && _search_info.goal_heading_tolerance_deg >= 0.0f) {
+    const double end_th = th0 + k * s_goal;
+    double off = std::fabs(angles::normalize_angle(end_th - tf2::getYaw(goal.pose.orientation)));
+    off = std::min(off, M_PI - off);  // either way round
+    if (off * 180.0 / M_PI > _search_info.goal_heading_tolerance_deg) {
+      reason = "end heading " + std::to_string(off * 180.0 / M_PI) + " deg off > " +
+        std::to_string(_search_info.goal_heading_tolerance_deg) + " deg tolerance";
+      return false;
+    }
   }
   const double length = std::fabs(s_goal);
   if (length > _arc_max_length) {

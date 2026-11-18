@@ -16,6 +16,8 @@
 #define NAV2_SMAC_PLANNER_CUSTOM__TYPES_HPP_
 
 #include <vector>
+#include <cmath>
+#include <algorithm>
 #include <utility>
 #include <string>
 #include <memory>
@@ -119,6 +121,11 @@ struct SearchInfo
   // instead of only the requested goal yaw. Hybrid-A* only. Default false
   // is a no-op.
   bool ignore_goal_heading{false};
+  // With ignore_goal_heading: only final headings within this many degrees of
+  // the goal pose's yaw, either way round (yaw or yaw + 180), count -- e.g.
+  // "arrive roughly E-W, either direction". < 0 (default): any heading.
+  // nav2_smac_planner_custom addition, Hybrid-A* only.
+  float goal_heading_tolerance_deg{-1.0f};
   float analytic_expansion_ratio{3.5};
   float analytic_expansion_max_length{60.0};
   float analytic_expansion_max_cost{200.0};
@@ -268,6 +275,24 @@ struct MotionPrimitive
 
 typedef std::vector<MotionPrimitive> MotionPrimitives;
 typedef std::vector<MotionPrimitive *> MotionPrimitivePtrs;
+
+/**
+ * @brief Whether heading bin `bin` is within tolerance_deg of goal_bin, either way
+ * round (SearchInfo::goal_heading_tolerance_deg). Always true for tolerance < 0.
+ */
+inline bool goalHeadingBinOk(
+  unsigned int bin, float goal_bin, unsigned int bins, float tolerance_deg)
+{
+  if (tolerance_deg < 0.0f || bins < 2) {
+    return true;
+  }
+  const unsigned int half = bins / 2;
+  const unsigned int g = static_cast<unsigned int>(std::lround(goal_bin)) % bins;
+  unsigned int d = (bin % bins + bins - g) % bins;
+  d %= half;                      // the opposite heading counts too
+  d = std::min(d, half - d);
+  return static_cast<float>(d) * 360.0f / static_cast<float>(bins) <= tolerance_deg + 1e-3f;
+}
 
 }  // namespace nav2_smac_planner_custom
 
