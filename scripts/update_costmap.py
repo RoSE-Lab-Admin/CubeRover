@@ -87,8 +87,17 @@ DEFAULT_CORNERS = [
     ( 2.9994,  3.0196),   # 7 NE (not measured, see the docstring)
 ]
 DEFAULT_LABELS = ["1 SE", "2 SSW", "3 SWW", "4 W", "5 NW", "6 N", "7 NE"]
-# (x, y, radius): the crater, 1.5 m measured, inflated to 2.0 m diameter
-DEFAULT_OBSTACLES = [(-0.1587, -3.6945, 1.0)]
+# (x, y, radius): craters, centres from OptiTrack markers on 11/17/26
+# (E:/perception-data/costmap-calib-data/11172026), diameters measured with a tape (feet),
+# radius = diameter / 2 + a 0.3 m safety margin. Until 11/17 only the south crater, at its
+# 10/27 centre (-0.1587, -3.6945) with r 1.0.
+FT = 0.3048
+CRATER_MARGIN = 0.3
+DEFAULT_OBSTACLES = [
+    ( 2.6848,  1.4989, 4.0 * FT / 2 + CRATER_MARGIN),   # CraterNE, 4 ft across
+    (-3.7534,  0.9315, 4.5 * FT / 2 + CRATER_MARGIN),   # CraterW, 4.5 ft across
+    (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across
+]
 # Every arena edge is moved this far towards the inside before rasterizing (10/28/26:
 # 7 in tighter than the surveyed edges). --inset overrides it, 0 = the surveyed polygon.
 DEFAULT_INSET = 7 * 0.0254
@@ -341,7 +350,7 @@ def main():
     )
     ap.add_argument(
         "--no-default-obstacles", action="store_true",
-        help="Leave out the default obstacles (the crater)"
+        help="Leave out the default obstacles (the craters)"
     )
     ap.add_argument(
         "--out-map", default=str(MAP_PGM),
