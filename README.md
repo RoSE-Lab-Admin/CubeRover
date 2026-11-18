@@ -114,11 +114,11 @@ ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir
 - Radii worth trying: 1.5, 1.8, 2.0 m. Legs are ~4-9 m around (0, 0) and up to ~19 m around
   `spiral_centre_x:=-1.0 spiral_centre_y:=0.2`.
 - `PathAlignCritic` is switched on automatically for `spiral_drive:=path` (and the lawnmower).
-- In path mode the leg being driven is not planned, so `path_follower` publishes it on `/plan` itself (every second while it is driven) -- an rviz Path display on `/plan` (fixed frame `world`) shows it, and the bags record it.
   It keeps the controller on the leg instead of cutting inside the spiral (offline, leg of r 1.8 m
   driven forward: 35-44 cm inside without enough weight, 12 cm at the configured weight 30;
   reverse: 6 cm). In `nav2_param2.yaml` it stays `enabled: false` -- with GP goals (replanned every
   second) it did worse on 11/06 -- and `autonomous_trials` sets it per waypoint mode at startup.
+- In path mode the leg being driven is not planned, so `path_follower` publishes it on `/plan` itself (every second while it is driven) -- an rviz Path display on `/plan` (fixed frame `world`) shows it, and the bags record it.
 - Offline (kinematic simulator) so far only. `spiral_drive:=waypoints` often ends up driving the
   spiral in reverse while turning (the start heading is arbitrary and the planner keeps the gear
   it is moving in).
