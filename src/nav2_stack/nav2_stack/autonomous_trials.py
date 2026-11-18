@@ -691,12 +691,12 @@ def abort_background_from_scratch(pending):
 SPIRAL_ADVANCE_DISTANCE = 1.5  # m: option A keeps its goal this far ahead of the rover along the leg
 
 
-def write_spiral_trial(bag_dir: Path, traj_name: str, leg, drive: str) -> Path:
+def write_pattern_trial(bag_dir: Path, traj_name: str, leg, drive: str, name: str) -> Path:
     """The leg's points for waypoint.launch.py's pose_csv: every
-    spiral.WAYPOINT_SPACING m for "waypoints" (option A), the dense leg for
-    "path" (option B). Kept in bag_dir as <traj_name>_spiral.csv."""
+    spiral.WAYPOINT_SPACING m for "waypoints" (spiral option A), the dense leg for
+    "path". Kept in bag_dir as <traj_name>_<name>.csv (name: spiral / lawnmower)."""
     pts = leg.waypoints() if drive == "waypoints" else leg.points
-    path = bag_dir / f"{traj_name}_spiral.csv"
+    path = bag_dir / f"{traj_name}_{name}.csv"
     with open(path, "w") as f:
         f.write("x,y,z\n")
         for x, y in pts:
@@ -788,11 +788,13 @@ def main():
                              "(climb along the direction of travel, side slope) to linear and "
                              "angular slip ratios, refit every trial. Takes over from --terrain-nn "
                              "if both are set. Default: false")
-    parser.add_argument("--waypoint-mode", default="gp", choices=["gp", "spiral"],
+    parser.add_argument("--waypoint-mode", default="gp", choices=["gp", "spiral", "lawnmower"],
                         help="How each trial's goal is chosen: gp = gp_explorer_gpu.py's "
                              "information-based goal (default); spiral = the next leg of a spiral "
                              "around --spiral-centre (see nav2_stack/spiral.py): one bag per leg, "
-                             "from the inner circle to the outside or back in")
+                             "from the inner circle to the outside or back in; lawnmower = lanes "
+                             "along x joined by S-curves (see nav2_stack/lawnmower.py), one bag per "
+                             "lane, up and back down, driven in path mode")
     parser.add_argument("--spiral-drive", default="path", choices=["path", "waypoints"],
                         help="waypoint-mode spiral: path = drive to the leg's start, then the leg "
                              "itself straight to the controller (FollowPath, no global planner; "
@@ -803,6 +805,8 @@ def main():
     parser.add_argument("--spiral-radius", default=1.8, type=float,
                         help="waypoint-mode spiral: radius of the inner circle = the tightest turn "
                              "(m). Default: 1.8")
+    parser.add_argument("--lawnmower-spacing", default=0.8, type=float,
+                        help="waypoint-mode lawnmower: distance between lanes (m). Default: 0.8")
     parser.add_argument("--spiral-centre-x", default=0.0, type=float)
     parser.add_argument("--spiral-centre-y", default=0.0, type=float)
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
@@ -918,7 +922,7 @@ def main():
     # Same package directory as gp_explorer_gpu.py (source or installed -- this
     # script and gp_explorer_gpu.py are always siblings either way), so this is
     # robust regardless of how autonomous_trials.py itself was invoked.
-    spiral = None
+    pattern = None   # waypoint_mode spiral / lawnmower: {"name", "legs", "drive"}
     if args.waypoint_mode == "spiral":
         from nav2_stack.spiral import Clearance, spiral_legs
         map_yaml = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.yaml"
@@ -927,9 +931,24 @@ def main():
         if not legs:
             sys.exit(f"FATAL: no spiral leg of radius {args.spiral_radius} m around "
                      f"({args.spiral_centre_x}, {args.spiral_centre_y}) fits the map")
-        spiral = {"legs": legs, "drive": args.spiral_drive}
+        pattern = {"name": "spiral", "legs": legs, "drive": args.spiral_drive}
         log(f"waypoint mode spiral: r_min {args.spiral_radius} m around ({args.spiral_centre_x}, "
             f"{args.spiral_centre_y}), drive={args.spiral_drive}; {len(legs)} legs, "
+            f"{min(L.length for L in legs):.1f}-{max(L.length for L in legs):.1f} m long")
+    elif args.waypoint_mode == "lawnmower":
+        from nav2_stack.spiral import Clearance
+        from nav2_stack.lawnmower import lawnmower_legs
+        map_yaml = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.yaml"
+        legs = lawnmower_legs(Clearance(map_yaml), args.n_trajectories, args.lawnmower_spacing)
+        if not legs:
+            sys.exit(f"FATAL: fewer than 2 lawnmower lanes {args.lawnmower_spacing} m apart fit the map")
+        pattern = {"name": "lawnmower", "legs": legs, "drive": "path"}
+        per_pass = {}
+        for L in legs:
+            per_pass[L.pass_no] = L.n_lanes
+        log(f"waypoint mode lawnmower: lanes {args.lawnmower_spacing} m apart, shifted by a third "
+            f"of that every pass; lanes per pass {list(per_pass.values())}; S-curve lane changes, "
+            f"path mode; {len(legs)} legs, "
             f"{min(L.length for L in legs):.1f}-{max(L.length for L in legs):.1f} m long")
 
     gp_explorer_path = Path(__file__).resolve().parent / "gp_explorer_gpu.py"
@@ -951,6 +970,17 @@ def main():
     from nav2_stack.escape import Escaper, default_planner_id
     escaper = Escaper(pose_node, pose_node.pose, default_planner_id())
     wait_for_nav2_active()
+    # PathAlignCritic keeps MPPI on the line of a path that is not replanned (spiral /
+    # lawnmower in path mode); with GP goals (replanned every second) it is off -- 11/06
+    # weight-30 trials did worse with it. Live-reconfigurable, persists across reloads.
+    path_align = pattern is not None and pattern["drive"] == "path"
+    try:
+        set_controller_param(pose_node, "FollowPath.PathAlignCritic.enabled", path_align)
+        log(f"PathAlignCritic {'enabled' if path_align else 'disabled'} for waypoint_mode "
+            f"{args.waypoint_mode}")
+    except Exception as e:
+        log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
+            f"in nav2_param2.yaml's critics list?")
 
     if fs_cfg is not None and fs_cfg["current_weights_path"] is not None:
         log(f"train_from_scratch: deploying checkpoint {fs_cfg['current_weights_path']} "
@@ -1035,15 +1065,17 @@ def main():
                 ok, msg = escaper.run((0.0, 0.0))
                 if msg != "not stuck":
                     log(f"pre-explorer escape: {'freed' if ok else 'not freed'} ({msg})")
-                if spiral is not None:
-                    leg = spiral["legs"][(i - 1) % len(spiral["legs"])]
-                    trial_csv = write_spiral_trial(bag_dir, traj_name, leg, spiral["drive"])
+                if pattern is not None:
+                    leg = pattern["legs"][(i - 1) % len(pattern["legs"])]
+                    trial_csv = write_pattern_trial(bag_dir, traj_name, leg, pattern["drive"],
+                                                    pattern["name"])
                     goal_xy = leg.points[-1]
-                    log(f"{traj_name}: spiral leg {i} {leg.direction}, r {leg.r0:.2f} -> "
-                        f"{leg.r1:.2f} m, {leg.length:.1f} m, from ({leg.points[0][0]:.2f}, "
+                    what = (f"spiral leg {i} {leg.direction}, r {leg.r0:.2f} -> {leg.r1:.2f} m"
+                            if pattern["name"] == "spiral" else f"lawnmower {leg.label}")
+                    log(f"{traj_name}: {what}, {leg.length:.1f} m, from ({leg.points[0][0]:.2f}, "
                         f"{leg.points[0][1]:.2f}) to ({goal_xy[0]:.2f}, {goal_xy[1]:.2f})")
                     outcome = run_one_trial(bag_dir, bag_name, trial_csv, goal_xy, pose_node,
-                                            traj_name, spiral_follow_args(spiral["drive"]),
+                                            traj_name, spiral_follow_args(pattern["drive"]),
                                             leg.points)
                 else:
                     if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):

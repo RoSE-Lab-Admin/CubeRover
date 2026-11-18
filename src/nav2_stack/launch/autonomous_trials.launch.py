@@ -96,6 +96,7 @@ def launch_setup(context):
             '--spiral-radius', LaunchConfiguration('spiral_radius'),
             '--spiral-centre-x', LaunchConfiguration('spiral_centre_x'),
             '--spiral-centre-y', LaunchConfiguration('spiral_centre_y'),
+            '--lawnmower-spacing', LaunchConfiguration('lawnmower_spacing'),
         ],
     )
 
@@ -165,7 +166,8 @@ def generate_launch_description():
                                           'slope -> linear/angular slip) instead of an MLP'),
         DeclareLaunchArgument('waypoint_mode', default_value='gp',
                               description='gp = information-based goals from gp_explorer_gpu.py; '
-                                          'spiral = legs of a spiral, one bag per leg'),
+                                          'spiral = legs of a spiral, one bag per leg; lawnmower = '
+                                          'lanes joined by S-curves, one bag per lane (path mode)'),
         DeclareLaunchArgument('spiral_drive', default_value='path',
                               description='waypoint_mode spiral: path (the leg straight to the '
                                           'controller via FollowPath; default) or waypoints '
@@ -174,6 +176,8 @@ def generate_launch_description():
         DeclareLaunchArgument('spiral_radius', default_value='1.8',
                               description='waypoint_mode spiral: inner circle radius = tightest '
                                           'turn (m)'),
+        DeclareLaunchArgument('lawnmower_spacing', default_value='0.8',
+                              description='waypoint_mode lawnmower: distance between lanes (m)'),
         DeclareLaunchArgument('spiral_centre_x', default_value='0.0'),
         DeclareLaunchArgument('spiral_centre_y', default_value='0.0'),
         DeclareLaunchArgument('start_rviz', default_value='true',
