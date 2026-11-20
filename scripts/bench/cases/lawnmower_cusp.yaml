@@ -1,0 +1,15 @@
+# Lawnmower zigzag_heading: GridBasedCustom.cusp_heading_tolerance_deg off vs 30 deg,
+# with the sim rover under-turning (yaw_scale 0.7, as on the slope), from the poses
+# the live rover had at the start of the lanes where it shuffled N-S on 11/20
+# (AL_scripts/rosbags_11_20_26_lawnmower_test_heading, bag_25 and bag_03).
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20}
+cases:
+  - {name: lane25_off, start: [-1.71, 0.47, 1.548], resume_at: 25}
+  - {name: lane25_cusp30, start: [-1.71, 0.47, 1.548], resume_at: 25, args: {lawnmower_cusp_tolerance: 30}}
+  - {name: lane03_off, start: [-1.86, -0.46, 2.431], resume_at: 3}
+  - {name: lane03_cusp30, start: [-1.86, -0.46, 2.431], resume_at: 3, args: {lawnmower_cusp_tolerance: 30}}
+  # the first 6 lanes from the default sim start
+  - {name: six_off, n: 6}
+  - {name: six_cusp30, n: 6, args: {lawnmower_cusp_tolerance: 30}}
