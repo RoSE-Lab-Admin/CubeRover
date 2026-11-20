@@ -151,6 +151,10 @@ struct HybridMotionTable
   float motion_reversal_penalty;
   // Position-only goal (see SearchInfo in types.hpp).
   bool ignore_goal_heading;
+  // Cusps only near the goal yaw's axis (see SearchInfo in types.hpp);
+  // cusp_axis_bin is the goal's heading bin, set by AStarAlgorithm::setGoal().
+  float cusp_heading_tolerance_deg{-1.0f};
+  float cusp_axis_bin{0.0f};
   ompl::base::StateSpacePtr state_space;
   std::vector<std::vector<double>> delta_xs;
   std::vector<std::vector<double>> delta_ys;

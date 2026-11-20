@@ -150,6 +150,7 @@ void HybridMotionTable::initDubin(
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   escalate_only_on_reset = search_info.escalate_only_on_reset;
   ignore_goal_heading = search_info.ignore_goal_heading;
+  cusp_heading_tolerance_deg = search_info.cusp_heading_tolerance_deg;
   motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
@@ -291,6 +292,7 @@ void HybridMotionTable::initReedsShepp(
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   escalate_only_on_reset = search_info.escalate_only_on_reset;
   ignore_goal_heading = search_info.ignore_goal_heading;
+  cusp_heading_tolerance_deg = search_info.cusp_heading_tolerance_deg;
   motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
@@ -1063,8 +1065,15 @@ void NodeHybrid::getNeighbors(
   NodePtr neighbor = nullptr;
   Coordinates initial_node_coords;
   const MotionPoses motion_projections = motion_table.getProjections(this);
+  // Cusps only near the goal yaw's axis (see SearchInfo::cusp_heading_tolerance_deg)
+  const bool cusp_heading_ok = goalHeadingBinOk(
+    static_cast<unsigned int>(std::lround(pose.theta)), motion_table.cusp_axis_bin,
+    motion_table.num_angle_quantization, motion_table.cusp_heading_tolerance_deg);
 
   for (unsigned int i = 0; i != motion_projections.size(); i++) {
+    if (!cusp_heading_ok && isGearFlip(this, motion_projections[i]._turn_dir)) {
+      continue;
+    }
     index = NodeHybrid::getIndex(
       static_cast<unsigned int>(motion_projections[i]._x),
       static_cast<unsigned int>(motion_projections[i]._y),

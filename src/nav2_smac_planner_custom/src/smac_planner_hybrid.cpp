@@ -196,6 +196,13 @@ void SmacPlannerHybrid::configure(
     _search_info.goal_heading_tolerance_deg = static_cast<float>(tol);
   }
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".cusp_heading_tolerance_deg", rclcpp::ParameterValue(-1.0));
+  {
+    double tol;
+    node->get_parameter(name + ".cusp_heading_tolerance_deg", tol);
+    _search_info.cusp_heading_tolerance_deg = static_cast<float>(tol);
+  }
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".motion_reversal_penalty", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".motion_reversal_penalty", _motion_reversal_penalty_m);
 
@@ -484,6 +491,15 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
   std::function<bool()> cancel_checker)
 {
   std::lock_guard<std::mutex> lock_reinit(_mutex);
+  return createPlanImpl(start, goal, cancel_checker, false);
+}
+
+nav_msgs::msg::Path SmacPlannerHybrid::createPlanImpl(
+  const geometry_msgs::msg::PoseStamped & start,
+  const geometry_msgs::msg::PoseStamped & goal,
+  std::function<bool()> cancel_checker,
+  bool cusp_fallback)
+{
   steady_clock::time_point a = steady_clock::now();
 
   // Grid-cell params (turning radius, momentum zone, analytic expansion
@@ -645,7 +661,8 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
   }
 
   // Constant-curvature arc mode: one arc for the whole path when feasible
-  if (_arc_mode_enabled) {
+  // (not again in the cusp fallback: the arc was already rejected for this request)
+  if (_arc_mode_enabled && !cusp_fallback) {
     std::string reason;
     if (tryArcPlan(start, goal, costmap, moving_gear, plan, reason)) {
       if (_raw_plan_publisher->get_subscription_count() > 0) {
@@ -687,6 +704,25 @@ nav_msgs::msg::Path SmacPlannerHybrid::createPlan(
     // Note: If the start is blocked only one iteration will occur before failure
     if (num_iterations == 1) {
       throw nav2_core::StartOccupied("Start occupied");
+    }
+
+    // Cusps only near the goal axis (SearchInfo::cusp_heading_tolerance_deg): if
+    // that leaves no path at all, plan this request without it. The rule stays
+    // set, so the next request (BT replans at 1 Hz) is constrained again.
+    const float cusp_tol = NodeHybrid::motion_table.cusp_heading_tolerance_deg;
+    if (!cusp_fallback && cusp_tol >= 0.0f && num_iterations < _a_star->getMaxIterations()) {
+      RCLCPP_WARN(
+        _logger, "%s: no path with gear changes only within %.0f deg of the goal axis -- "
+        "planning this request without that rule (cusp fallback)", _name.c_str(), cusp_tol);
+      NodeHybrid::motion_table.cusp_heading_tolerance_deg = -1.0f;
+      try {
+        auto fallback_plan = createPlanImpl(start, goal, cancel_checker, true);
+        NodeHybrid::motion_table.cusp_heading_tolerance_deg = cusp_tol;
+        return fallback_plan;
+      } catch (...) {
+        NodeHybrid::motion_table.cusp_heading_tolerance_deg = cusp_tol;
+        throw;
+      }
     }
 
     if (num_iterations < _a_star->getMaxIterations()) {
@@ -812,6 +848,9 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
         _tolerance = static_cast<float>(parameter.as_double());
       } else if (name == _name + ".goal_heading_tolerance_deg") {
         _search_info.goal_heading_tolerance_deg = static_cast<float>(parameter.as_double());
+        reinit_a_star = true;
+      } else if (name == _name + ".cusp_heading_tolerance_deg") {
+        _search_info.cusp_heading_tolerance_deg = static_cast<float>(parameter.as_double());
         reinit_a_star = true;
       } else if (name == _name + ".lookup_table_size") {
         reinit_a_star = true;

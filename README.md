@@ -70,7 +70,8 @@ deactivate
 | `spiral_radius` | `1.8` | `waypoint_mode:=spiral` only: radius of the inner circle = the tightest turn (m). Larger than ~2.3 m does not fit the current arena with 0.75 m wall clearance. |
 | `lawnmower_spacing` | `0.8` | `waypoint_mode:=lawnmower` only: distance between lanes (m). |
 | `lawnmower_drive` | `path` | `waypoint_mode:=lawnmower` only. `path`: the S-curve lanes above, straight to the controller (path mode). `zigzag`: one goal per trial, planned and driven like a GP goal -- the next lane's end on the other side (east, west, east, ... one lane further north each time, back south on the shifted lanes), any arrival heading. `zigzag_heading`: the same, but `GridBasedCustom` only accepts plans that arrive heading E-W (either way) within `lawnmower_heading_tolerance` (fork param `goal_heading_tolerance_deg`, set at startup and reset to -1 = off when the run ends). In both zigzag modes `PathAlignCritic` stays off. |
-| `lawnmower_heading_tolerance` | `20.0` | `lawnmower_drive:=zigzag_heading` only: allowed arrival heading off E-W (deg). |
+| `lawnmower_heading_tolerance` | `20.0` | `lawnmower_drive:=zigzag_heading` only: allowed arrival heading off E-W (deg). The planner's "close enough" shortcut (a plan ending within its 0.25 m `tolerance` of the goal) has to meet it too. |
+| `lawnmower_cusp_tolerance` | `-1.0` | `lawnmower_drive:=zigzag` / `zigzag_heading`: `GridBasedCustom` only plans a gear change (three-point turn) while the rover points within this many deg of E-W, so turns shuffle along the lanes instead of N-S across them (fork param `cusp_heading_tolerance_deg`, set at startup, reset to -1 when the run ends). If no path exists under the rule, that one plan is made without it (logged as `cusp fallback`); the next 1 Hz replan tries the rule again. `< 0` = off. |
 | `spiral_centre_x`, `spiral_centre_y` | `0.0` | `waypoint_mode:=spiral` only: the spiral's centre. (-1.0, 0.2) leaves the most room in the current arena. |
 | `start_rviz` | `true` | Launches `rviz2` alongside everything else. Set to `false` to skip it. |
 
@@ -137,6 +138,9 @@ ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
     waypoint_mode:=lawnmower lawnmower_drive:=zigzag
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
     waypoint_mode:=lawnmower lawnmower_drive:=zigzag_heading lawnmower_heading_tolerance:=20
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
+    waypoint_mode:=lawnmower lawnmower_drive:=zigzag_heading lawnmower_heading_tolerance:=20 \
+    lawnmower_cusp_tolerance:=30
 ```
 
 Example with train-from-scratch and the slope-slip GP model (same notes as above; each fit prints

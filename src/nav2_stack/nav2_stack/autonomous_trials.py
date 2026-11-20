@@ -767,13 +767,14 @@ def write_pattern_trial(bag_dir: Path, traj_name: str, leg, drive: str, name: st
 ZIGZAG_DRIVES = ("zigzag", "zigzag_heading")
 
 
-def pattern_follow_args(drive: str, leg):
-    """waypoint.launch.py arguments for one spiral / lawnmower leg."""
+def pattern_follow_args(drive: str, leg, cusp_axis: bool = False):
+    """waypoint.launch.py arguments for one spiral / lawnmower leg. cusp_axis: the
+    goal yaw (E-W) is also the axis cusps are kept to (--lawnmower-cusp-tolerance)."""
     if drive == "waypoints":
         return ["follow_mode:=goals", f"advance_distance:={SPIRAL_ADVANCE_DISTANCE}"]
-    if drive == "zigzag":
+    if drive == "zigzag" and not cusp_axis:
         return ["follow_mode:=goals"]
-    if drive == "zigzag_heading":   # the planner arrives within the tolerance of E-W
+    if drive in ZIGZAG_DRIVES:   # zigzag_heading: the planner arrives within the tolerance of E-W
         return ["follow_mode:=goals", f"goal_yaw:={leg.yaw}"]
     return ["follow_mode:=path"]
 
@@ -885,6 +886,11 @@ def main():
     parser.add_argument("--lawnmower-heading-tolerance", default=20.0, type=float,
                         help="lawnmower-drive zigzag_heading: allowed arrival heading off E-W "
                              "(deg). Default: 20")
+    parser.add_argument("--lawnmower-cusp-tolerance", default=-1.0, type=float,
+                        help="lawnmower-drive zigzag / zigzag_heading: the planner only plans a "
+                             "gear change (three-point turn) while the rover points within this "
+                             "many deg of E-W, so turns shuffle along the lanes, not N-S across "
+                             "them. < 0: off (default)")
     parser.add_argument("--spiral-centre-x", default=0.0, type=float)
     parser.add_argument("--spiral-centre-y", default=0.0, type=float)
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
@@ -1070,19 +1076,26 @@ def main():
         log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
             f"in nav2_param2.yaml's critics list?")
     # lawnmower zigzag_heading: GridBasedCustom only accepts final headings within the
-    # tolerance of the goal yaw (either way); put back when the run ends
+    # tolerance of the goal yaw (either way); --lawnmower-cusp-tolerance: gear changes only
+    # near E-W. Put back to -1 when the run ends.
+    planner_tols = {}
+    if pattern is not None and pattern["drive"] in ZIGZAG_DRIVES:
+        if pattern["drive"] == "zigzag_heading":
+            planner_tols["goal_heading_tolerance_deg"] = (args.lawnmower_heading_tolerance,
+                                                          "arrive within it of E-W")
+        if args.lawnmower_cusp_tolerance >= 0:
+            planner_tols["cusp_heading_tolerance_deg"] = (args.lawnmower_cusp_tolerance,
+                                                          "gear changes only within it of E-W")
     heading_tol_set = None
-    if pattern is not None and pattern["drive"] == "zigzag_heading":
+    for pname, (val, what) in planner_tols.items():
         planner = default_planner_id()
         try:
-            set_controller_param(pose_node, f"{planner}.goal_heading_tolerance_deg",
-                                 float(args.lawnmower_heading_tolerance), server="planner_server")
+            set_controller_param(pose_node, f"{planner}.{pname}", float(val), server="planner_server")
             heading_tol_set = planner
-            log(f"{planner}: goal_heading_tolerance_deg={args.lawnmower_heading_tolerance:.0f} "
-                f"(arrive within it of E-W)")
+            log(f"{planner}: {pname}={val:.0f} ({what})")
         except Exception as e:
-            log(f"WARNING: could not set {planner}.goal_heading_tolerance_deg ({e}) -- the planner "
-                f"needs the GridBasedCustom build with it; the zigzag runs with any arrival heading")
+            log(f"WARNING: could not set {planner}.{pname} ({e}) -- the planner needs the "
+                f"GridBasedCustom build with it; the zigzag runs without it")
 
     live_mode = parsed["dynamics_mode"]   # dynamics_mode the controller runs right now
     if fs_cfg is not None and fs_cfg["current_weights_path"] is not None:
@@ -1195,7 +1208,7 @@ def main():
                     log(f"{traj_name}: {what}, {leg.length:.1f} m, from ({leg.points[0][0]:.2f}, "
                         f"{leg.points[0][1]:.2f}) to ({goal_xy[0]:.2f}, {goal_xy[1]:.2f})")
                     outcome = run_one_trial(bag_dir, bag_name, trial_csv, goal_xy, pose_node,
-                                            traj_name, pattern_follow_args(pattern["drive"], leg),
+                                            traj_name, pattern_follow_args(pattern["drive"], leg, args.lawnmower_cusp_tolerance >= 0),
                                             None if pattern["drive"] in ZIGZAG_DRIVES else leg.points)
                 else:
                     if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
@@ -1253,13 +1266,13 @@ def main():
                 f"{n_success}/{args.n_trajectories} successful")
     finally:
         abort_background_from_scratch(pending)
-        if heading_tol_set is not None:
+        for pname in (planner_tols if heading_tol_set is not None else ()):
             try:
-                set_controller_param(pose_node, f"{heading_tol_set}.goal_heading_tolerance_deg", -1.0,
+                set_controller_param(pose_node, f"{heading_tol_set}.{pname}", -1.0,
                                      server="planner_server")
-                log(f"{heading_tol_set}: goal_heading_tolerance_deg back to -1 (any heading)")
+                log(f"{heading_tol_set}: {pname} back to -1 (off)")
             except Exception as e:
-                log(f"WARNING: could not reset {heading_tol_set}.goal_heading_tolerance_deg ({e}) -- "
+                log(f"WARNING: could not reset {heading_tol_set}.{pname} ({e}) -- "
                     f"restart the launch before other runs")
         pose_node.destroy_node()
         rclpy.shutdown()

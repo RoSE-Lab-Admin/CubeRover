@@ -231,6 +231,11 @@ void AStarAlgorithm<NodeT>::setGoal(
 
   _goal_coordinates = goal_coords;
   _goal->setPose(_goal_coordinates);
+
+  if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+    // axis for SearchInfo::cusp_heading_tolerance_deg
+    NodeHybrid::motion_table.cusp_axis_bin = static_cast<float>(dim_3);
+  }
 }
 
 template<typename NodeT>
@@ -462,6 +467,20 @@ float AStarAlgorithm<NodeT>::getHeuristicCost(const NodePtr & node)
     NodeT::getCoords(node->getIndex(), getSizeX(), getSizeDim3());
   float heuristic = NodeT::getHeuristicCost(
     node_coords, _goal_coordinates);
+
+  if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+    // The best-node shortcut (a path ending within `tolerance` of the goal, see
+    // createPath()) must honour goal_heading_tolerance_deg like isGoal() does, or
+    // it returns paths ending near the goal at any heading (seen live 11/20:
+    // lawnmower zigzag_heading plans whose last leg ended pointing N-S).
+    if (_search_info.ignore_goal_heading &&
+      !goalHeadingBinOk(
+        node->getIndex() % getSizeDim3(), _goal_coordinates.theta, getSizeDim3(),
+        _search_info.goal_heading_tolerance_deg))
+    {
+      return heuristic;
+    }
+  }
 
   if (heuristic < _best_heuristic_node.first) {
     _best_heuristic_node = {heuristic, node->getIndex()};

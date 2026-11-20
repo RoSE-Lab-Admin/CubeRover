@@ -99,6 +99,7 @@ def launch_setup(context):
             '--lawnmower-spacing', LaunchConfiguration('lawnmower_spacing'),
             '--lawnmower-drive', LaunchConfiguration('lawnmower_drive'),
             '--lawnmower-heading-tolerance', LaunchConfiguration('lawnmower_heading_tolerance'),
+            '--lawnmower-cusp-tolerance', LaunchConfiguration('lawnmower_cusp_tolerance'),
         ],
     )
 
@@ -189,6 +190,10 @@ def generate_launch_description():
         DeclareLaunchArgument('lawnmower_heading_tolerance', default_value='20.0',
                               description='lawnmower_drive zigzag_heading: allowed arrival '
                                           'heading off E-W (deg)'),
+        DeclareLaunchArgument('lawnmower_cusp_tolerance', default_value='-1.0',
+                              description='lawnmower_drive zigzag / zigzag_heading: gear changes '
+                                          '(three-point turns) only while the rover points '
+                                          'within this many deg of E-W; < 0 = off'),
         DeclareLaunchArgument('spiral_centre_x', default_value='0.0'),
         DeclareLaunchArgument('spiral_centre_y', default_value='0.0'),
         DeclareLaunchArgument('start_rviz', default_value='true',

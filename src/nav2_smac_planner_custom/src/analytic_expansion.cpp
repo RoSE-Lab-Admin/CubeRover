@@ -275,6 +275,11 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
       float since_reset = node->getDistanceSinceMomentumReset();
       int last_sign = at_path_start ? 0 : node_sign;
       int cusps = 0;
+      // heading along the shortcut (OMPL: L adds the signed segment length, R subtracts)
+      double heading = from[2];
+      const float cusp_tol = node->motion_table.cusp_heading_tolerance_deg;
+      const double cusp_axis = node->motion_table.getAngleFromBin(
+        static_cast<unsigned int>(std::lround(node->motion_table.cusp_axis_bin)));
       for (int i = 0; i < 5; ++i) {
         // OMPL pads RS words with zero-length segments (e.g. a pure straight
         // reverse can come back as L(0) S(-d) R(0)); those are not motion and
@@ -288,8 +293,20 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
         if (last_sign != 0 && seg_sign != last_sign) {
           ++cusps;
           since_reset = 0.0f;
+          // Cusp heading (see SearchInfo::cusp_heading_tolerance_deg)
+          if (cusp_tol >= 0.0f) {
+            double off = std::fabs(std::remainder(heading - cusp_axis, M_PI));
+            if (off * 180.0 / M_PI > cusp_tol + 1e-3) {
+              return AnalyticExpansionNodes();
+            }
+          }
         }
         last_sign = seg_sign;
+        if (rs_path.type_[i] == ompl::base::ReedsSheppStateSpace::RS_LEFT) {
+          heading += rs_path.length_[i];
+        } else if (rs_path.type_[i] == ompl::base::ReedsSheppStateSpace::RS_RIGHT) {
+          heading -= rs_path.length_[i];
+        }
 
         // (1) Momentum zone (see SearchInfo::momentum_zone_length in types.hpp)
         const bool turns = rs_path.type_[i] != ompl::base::ReedsSheppStateSpace::RS_STRAIGHT;

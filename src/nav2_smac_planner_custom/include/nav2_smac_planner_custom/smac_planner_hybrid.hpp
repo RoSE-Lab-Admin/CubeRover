@@ -94,6 +94,18 @@ public:
 
 protected:
   /**
+   * @brief createPlan() without the reinit lock. With cusp_heading_tolerance_deg
+   * set and no path found under it, calls itself once more with that rule off
+   * (cusp_fallback), so a gear change at any heading is only planned when there
+   * is no other way; the next plan request tries the rule again.
+   */
+  nav_msgs::msg::Path createPlanImpl(
+    const geometry_msgs::msg::PoseStamped & start,
+    const geometry_msgs::msg::PoseStamped & goal,
+    std::function<bool()> cancel_checker,
+    bool cusp_fallback);
+
+  /**
    * @brief Callback executed when a paramter change is detected
    * @param parameters list of changed parameters
    */

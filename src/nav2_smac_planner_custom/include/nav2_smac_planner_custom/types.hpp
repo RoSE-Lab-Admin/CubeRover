@@ -126,6 +126,12 @@ struct SearchInfo
   // "arrive roughly E-W, either direction". < 0 (default): any heading.
   // nav2_smac_planner_custom addition, Hybrid-A* only.
   float goal_heading_tolerance_deg{-1.0f};
+  // Gear changes (cusps) only while the rover points within this many degrees
+  // of the goal pose's yaw axis, either way round -- e.g. lawnmower lanes:
+  // a three-point turn shuffles along E-W, never N-S across the lanes. The
+  // start is exempt (the first move may be either gear). < 0 (default): off.
+  // nav2_smac_planner_custom addition, Hybrid-A* only.
+  float cusp_heading_tolerance_deg{-1.0f};
   float analytic_expansion_ratio{3.5};
   float analytic_expansion_max_length{60.0};
   float analytic_expansion_max_cost{200.0};
