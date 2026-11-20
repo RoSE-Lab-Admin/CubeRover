@@ -1,12 +1,12 @@
 // Heavy inspiration from the ros_arduino_bridge repo: https://github.com/hbrobotics/ros_arduino_bridge
 
 // define header files to handle commands
-#include "src/commands.h"
-#include "src/motor_driver.h"
+#include "commands.h"
+#include "motor_driver.h"
 
 //include Arduino packages
-#include "src/elapsedMillis.h"
-#include "src/RoboClaw.h"
+#include "elapsedMillis.h"
+#include "RoboClaw.h"
 
 // global definitions
 #define BAUDRATE 115200

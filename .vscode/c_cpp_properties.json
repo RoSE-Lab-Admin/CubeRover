@@ -1,0 +1,71 @@
+{
+  "configurations": [
+    {
+      "name": "ros2",
+      "browse": {
+        "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "${workspaceFolder}/**",
+        "/opt/ros/jazzy/include/**",
+        "/usr/include/**"
+      ],
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++17"
+    },
+    {
+      "name": "teensy41",
+      "includePath": [
+        "/home/devuser/.arduino15/packages/teensy/hardware/avr/1.62.0/cores/teensy4",
+        "/home/devuser/.arduino15/packages/teensy/hardware/avr/1.62.0/libraries/**",
+        "/home/devuser/Arduino/libraries/RoboClaw",
+        "/home/devuser/Arduino/libraries/**",
+        "/home/devuser/Arduino/libraries/**",
+        "${workspaceFolder}/**"
+      ],
+      "defines": [
+        "ARDUINO=10819",
+        "TEENSYDUINO=162",
+        "__IMXRT1062__",
+        "ARDUINO_TEENSY41",
+        "USB_SERIAL",
+        "F_CPU=600000000",
+        "LAYOUT_US_ENGLISH"
+      ],
+      "compilerPath": "/home/devuser/.arduino15/packages/teensy/tools/teensy-compile/15.2.1/arm/bin/arm-none-eabi-g++",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "linux-gcc-arm"
+    },
+    {
+      "name": "arduino-mega",
+      "includePath": [
+        "/home/devuser/.arduino15/packages/arduino/hardware/avr/1.8.8/cores/arduino",
+        "/home/devuser/.arduino15/packages/arduino/hardware/avr/1.8.8/variants/mega",
+        "/home/devuser/.arduino15/packages/arduino/hardware/avr/1.8.8/libraries/EEPROM/src",
+        "/home/devuser/.arduino15/packages/arduino/hardware/avr/1.8.8/libraries/SoftwareSerial/src",
+        "/home/devuser/Arduino/libraries/RoboClaw",
+        "/home/devuser/Arduino/libraries/**",
+        "/home/devuser/Arduino/libraries/**",
+        "${workspaceFolder}/**"
+      ],
+      "defines": [
+        "ARDUINO=10819",
+        "ARDUINO_AVR_MEGA2560",
+        "ARDUINO_ARCH_AVR",
+        "__AVR_ATmega2560__"
+      ],
+      "compilerPath": "/home/devuser/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-gcc",
+      "compilerArgs": [
+        "-mmcu=atmega2560"
+      ],
+      "cStandard": "c11",
+      "cppStandard": "c++11",
+      "intelliSenseMode": "gcc-x86"
+    }
+  ],
+  "version": 4
+}
