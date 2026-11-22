@@ -1,0 +1,6 @@
+# 11/22: cusp tail 0.25 m after gear changes only + momentum zone 0.4 m as the yaml defaults (all runs).
+defaults:
+  yaw_scale: 0.25
+cases:
+  - {name: gp_defaults, n: 2, args: {waypoint_mode: gp}}
+  - {name: lawn_defaults, n: 2, args: {waypoint_mode: lawnmower}}

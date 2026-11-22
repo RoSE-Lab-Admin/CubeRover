@@ -215,15 +215,17 @@ def generate_launch_description():
         DeclareLaunchArgument('record_markers', default_value='false',
                               description='also record every OptiTrack marker of the rigid body in '
                                           'the trial bags (rigid body -> base_link calibration check)'),
-        DeclareLaunchArgument('lawnmower_cusp_tail', default_value='0.25',
-                              description='lawnmower_drive zigzag / zigzag_heading: GridBasedCustom '
-                                          'cusp_tail_length (m) for the run; < 0 = keep the yaml value'),
+        DeclareLaunchArgument('lawnmower_cusp_tail', default_value='-1.0',
+                              description='lawnmower_drive zigzag / zigzag_heading: override GridBasedCustom '
+                                          'cusp_tail_length (m) for the run; < 0 (default) = keep the yaml '
+                                          'value (0.25, after gear changes only)'),
         DeclareLaunchArgument('lawnmower_cusp_tail_before', default_value='false',
                               description='with lawnmower_cusp_tail: tail also before a gear change '
                                           '(false = only after it)'),
-        DeclareLaunchArgument('lawnmower_momentum_zone', default_value='0.4',
-                              description='lawnmower_drive zigzag / zigzag_heading: GridBasedCustom '
-                                          'momentum_zone_length (m) for the run; < 0 = keep the yaml value'),
+        DeclareLaunchArgument('lawnmower_momentum_zone', default_value='-1.0',
+                              description='lawnmower_drive zigzag / zigzag_heading: override GridBasedCustom '
+                                          'momentum_zone_length (m) for the run; < 0 (default) = keep the '
+                                          'yaml value (0.4)'),
         DeclareLaunchArgument('lawnmower_free_start_reversal', default_value='false',
                               description='lawnmower_drive zigzag / zigzag_heading: stopping and '
                                           'reversing the moving rover does not count toward the '

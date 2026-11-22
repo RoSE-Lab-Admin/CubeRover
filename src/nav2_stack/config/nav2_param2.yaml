@@ -277,12 +277,12 @@ planner_server:
       lookup_table_size: 20.0
       debug_visualizations: true
       # -- fork-only params, no equivalent in stock GridBased --
-      momentum_zone_length: 0.5 # meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
+      momentum_zone_length: 0.4 # 11/22: was 0.5 (V6 lawnmower setting, now for all runs) -- meters since path-start/last direction-change where turning is heavily discouraged (no momentum yet)
       momentum_zone_penalty: 20.0 # was 5.0 -- raised substantially alongside the others, same reasoning
       momentum_zone_min_radius: 2.0 # fork-only: progressive zone -- right after a stop/cusp only turns with radius >= 2.0 m avoid the penalty; the allowed radius shrinks linearly to minimum_turning_radius over momentum_zone_length (needs allow_primitive_interpolation)
       curvature_penalty: 4.0 # fork-only: turning primitive cost x (1 + 4 * (minimum_turning_radius / R)^2) -- tightest turns pay the most, gentle ones almost nothing
-      cusp_tail_length: 0.6 # fork-only: at every gear change (cusp) the rover drives >= 0.6 m without a tight turn (radius < momentum_zone_min_radius) right before and right after it, so three-point turns turn away from the cusp with more room (bag 19, 10/04). Counts what the rover already drove in its current gear (from motion_pose_topic). 0 = off
-      cusp_tail_before: true # fork-only: false = the cusp tail applies only AFTER a gear change (before it the rover has momentum). autonomous_trials sets false (+ cusp_tail_length 0.25, momentum_zone_length 0.4) for the lawnmower zigzag drives (lawnmower_cusp_tail*, lawnmower_momentum_zone)
+      cusp_tail_length: 0.25 # 11/22: was 0.6 (V6, now for all runs; with cusp_tail_before false: only after a gear change) -- fork-only: at every gear change (cusp) the rover drives >= 0.6 m without a tight turn (radius < momentum_zone_min_radius) right before and right after it, so three-point turns turn away from the cusp with more room (bag 19, 10/04). Counts what the rover already drove in its current gear (from motion_pose_topic). 0 = off
+      cusp_tail_before: false # 11/22: was true -- fork-only: false = the cusp tail applies only AFTER a gear change (before it the rover still has momentum, so turning into the gear change is fine); true = both sides. The V6 lawnmower setting (11/21), now the default for all runs
       allow_primitive_interpolation: true # adds gentle turning primitives (~R 3.3 / 1.7 / 1.1 m) next to the minimum-radius one
       extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
       motion_reversal_penalty: 3.0 # was 1.0 -- fork-only: extra cost (meters of equivalent driving) for a replan whose first move reverses the rover's current motion (see motion_pose_topic); 1.0 let near-tie replans next to walls flip the rover's gear

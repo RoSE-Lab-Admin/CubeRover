@@ -944,17 +944,18 @@ def main():
     parser.add_argument("--record-markers", default="false", type=parse_bool,
                         help="also record every OptiTrack marker of the rigid body in the trial bags "
                              "(calibration check, ~1000 msg/s). Default: false")
-    parser.add_argument("--lawnmower-cusp-tail", default=0.25, type=float,
-                        help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom cusp_tail_length "
-                             "(m) for the run; < 0: keep nav2_param2.yaml's. Default: 0.25 (11/21)")
+    parser.add_argument("--lawnmower-cusp-tail", default=-1.0, type=float,
+                        help="lawnmower-drive zigzag / zigzag_heading: override GridBasedCustom "
+                             "cusp_tail_length (m) for the run; < 0 (default): keep nav2_param2.yaml's "
+                             "(0.25 m, after gear changes only, since 11/22)")
     parser.add_argument("--lawnmower-cusp-tail-before", default="false", type=parse_bool,
                         help="with --lawnmower-cusp-tail >= 0: cusp tail also BEFORE a gear change "
                              "(false: only after it -- before it the rover still has momentum). "
                              "Default: false")
-    parser.add_argument("--lawnmower-momentum-zone", default=0.4, type=float,
-                        help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom "
-                             "momentum_zone_length (m) for the run; < 0: keep nav2_param2.yaml's. "
-                             "Default: 0.4 (11/21)")
+    parser.add_argument("--lawnmower-momentum-zone", default=-1.0, type=float,
+                        help="lawnmower-drive zigzag / zigzag_heading: override GridBasedCustom "
+                             "momentum_zone_length (m) for the run; < 0 (default): keep "
+                             "nav2_param2.yaml's (0.4 m since 11/22)")
     parser.add_argument("--lawnmower-free-start-reversal", default="false", type=parse_bool,
                         help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom "
                              "free_start_reversal -- stopping and reversing the moving rover at "
