@@ -506,6 +506,46 @@ def gp_attitude(grid: torch.Tensor, x0: float, y0: float, res: float,
     return torch.stack([-torch.atan(along), torch.atan(across)], dim=1)
 
 
+def grid_height(hgrid: torch.Tensor, x0: float, y0: float, res: float,
+                x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """Bilinear lookup of a height grid (ny, nx) with node (0, 0) at (x0, y0) at the points (x, y);
+    beyond the grid the edge value. CUDA-graph safe (no host tensors, no syncs)."""
+    ny, nx = hgrid.shape[0], hgrid.shape[1]
+    fx = ((x - x0) / res).clamp(0.0, nx - 1.001)
+    fy = ((y - y0) / res).clamp(0.0, ny - 1.001)
+    ix = fx.floor()
+    iy = fy.floor()
+    tx = fx - ix
+    ty = fy - iy
+    i00 = iy.long() * nx + ix.long()
+    g = hgrid.reshape(ny * nx)
+    return ((g.index_select(0, i00) * (1 - tx) + g.index_select(0, i00 + 1) * tx) * (1 - ty) +
+            (g.index_select(0, i00 + nx) * (1 - tx) + g.index_select(0, i00 + nx + 1) * tx) * ty)
+
+
+def plane_attitude(hgrid: torch.Tensor, x0: float, y0: float, res: float, wheels: torch.Tensor,
+                   plane: torch.Tensor, x: torch.Tensor, y: torch.Tensor,
+                   yaw: torch.Tensor) -> torch.Tensor:
+    """(B, 2) [pitch, roll] in rad of the rover at base_link pose (x, y, yaw) on the ground height
+    map hgrid (GP of the wheel contact points, 11/22 Phase 2): the four wheel contacts (wheels (4, 2)
+    in base_link, placed with a level rover) looked up on the map and a least-squares plane through
+    them (plane (3, 4) = pinv of [1, wheel x, wheel y]) -> its slopes forward and to the left.
+    Replaces gp_attitude (slope of the map at the rover centre). CUDA-graph safe."""
+    c = torch.cos(yaw).unsqueeze(1)
+    s = torch.sin(yaw).unsqueeze(1)
+    wx = x.unsqueeze(1) + c * wheels[:, 0] - s * wheels[:, 1]      # (B, 4)
+    wy = y.unsqueeze(1) + s * wheels[:, 0] + c * wheels[:, 1]
+    z = grid_height(hgrid, x0, y0, res, wx.reshape(-1), wy.reshape(-1)).reshape(-1, 4)
+    coef = z @ plane.t()                                            # (B, 3) [z0, dz/dx', dz/dy']
+    return torch.stack([-torch.atan(coef[:, 1]), torch.atan(coef[:, 2])], dim=1)
+
+
+def map_attitude(tmap: Dict, x: torch.Tensor, y: torch.Tensor, yaw: torch.Tensor) -> torch.Tensor:
+    """plane_attitude on a terrain map dict from build_terrain_map (training side)."""
+    return plane_attitude(tmap["grid"], tmap["x0"], tmap["y0"], tmap["res"], tmap["wheels"],
+                          tmap["plane"], x, y, yaw)
+
+
 class TerrainMLP(nn.Module):
     """[normalized vx, wz history, pitch, roll (rad)] -> [corr_fwd, lateral, corr_yaw]:
     the plain command MLP (net: commands only -> [corr_fwd, corr_yaw]) plus a small
@@ -534,8 +574,10 @@ class TerrainMLP(nn.Module):
         self.grid_x0: float = float(tmap["x0"])
         self.grid_y0: float = float(tmap["y0"])
         self.grid_res: float = float(tmap["res"])
-        self.register_buffer("grid", torch.as_tensor(tmap["grid"], dtype=torch.float32))
-        # rows pitch, roll: OptiTrack ~= calib @ [pitch_gp, roll_gp, 1]
+        self.register_buffer("grid", torch.as_tensor(tmap["grid"], dtype=torch.float32))   # heights (ny, nx)
+        self.register_buffer("wheels", torch.as_tensor(tmap["wheels"], dtype=torch.float32))
+        self.register_buffer("plane", torch.as_tensor(tmap["plane"], dtype=torch.float32))
+        # rows pitch, roll: measured (base_link) ~= calib @ [pitch_map, roll_map, 1]
         self.register_buffer("calib", torch.as_tensor(tmap["calib"], dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -545,9 +587,10 @@ class TerrainMLP(nn.Module):
 
     @torch.jit.export
     def attitude(self, x: torch.Tensor, y: torch.Tensor, yaw: torch.Tensor) -> torch.Tensor:
-        """(B, 2) [pitch, roll] OptiTrack would read at world pose (x, y, yaw), from the
-        GP surface through the calibration."""
-        a = gp_attitude(self.grid, self.grid_x0, self.grid_y0, self.grid_res, x, y, yaw)
+        """(B, 2) [pitch, roll] of the rover at base_link pose (x, y, yaw): wheel plane on the
+        ground map (plane_attitude) through the calibration."""
+        a = plane_attitude(self.grid, self.grid_x0, self.grid_y0, self.grid_res, self.wheels,
+                           self.plane, x, y, yaw)
         return a @ self.calib[:, :2].t() + self.calib[:, 2]
 
 
@@ -581,7 +624,9 @@ class TerrainSlipGP(nn.Module):
         self.grid_x0: float = float(tmap["x0"])
         self.grid_y0: float = float(tmap["y0"])
         self.grid_res: float = float(tmap["res"])
-        self.register_buffer("grid", torch.as_tensor(tmap["grid"], dtype=torch.float32))
+        self.register_buffer("grid", torch.as_tensor(tmap["grid"], dtype=torch.float32))   # heights (ny, nx)
+        self.register_buffer("wheels", torch.as_tensor(tmap["wheels"], dtype=torch.float32))
+        self.register_buffer("plane", torch.as_tensor(tmap["plane"], dtype=torch.float32))
         calib = torch.as_tensor(tmap["calib"], dtype=torch.float32)
         self.register_buffer("calib", calib)
         self.register_buffer("calib_inv", torch.linalg.inv(calib[:, :2]))
@@ -619,9 +664,10 @@ class TerrainSlipGP(nn.Module):
 
     @torch.jit.export
     def attitude(self, x: torch.Tensor, y: torch.Tensor, yaw: torch.Tensor) -> torch.Tensor:
-        """(B, 2) [pitch, roll] OptiTrack would read at world pose (x, y, yaw), from the
-        GP surface through the calibration (as TerrainMLP.attitude)."""
-        a = gp_attitude(self.grid, self.grid_x0, self.grid_y0, self.grid_res, x, y, yaw)
+        """(B, 2) [pitch, roll] of the rover at base_link pose (x, y, yaw): wheel plane on the
+        ground map through the calibration (as TerrainMLP.attitude)."""
+        a = plane_attitude(self.grid, self.grid_x0, self.grid_y0, self.grid_res, self.wheels,
+                           self.plane, x, y, yaw)
         return a @ self.calib[:, :2].t() + self.calib[:, 2]
 
 
@@ -820,11 +866,11 @@ def augment_symmetry(segments: List[Dict], weights: Dict[str, float] = SYM_WEIGH
 
 # ── Terrain map (terrain_nn) ───────────────────────────────────────────────────
 def build_terrain_map(bag_paths: List[Path], segments: List[Dict]) -> Dict:
-    """GP height map of every bag's mocap poses, fit exactly as gp_explorer_gpu does
-    (10 cm cell means of z, ExactGP, its train_gp) but on the CPU; its gradient is
-    sampled on a TERRAIN_GRID_RES grid over the Nav2 map. Then the linear
-    calibration GP attitude -> OptiTrack attitude is fit on every sample of
-    segments (real data, not mirrored)."""
+    """GP ground map of every bag's wheel contact points (gp_explorer_gpu.load_bags,
+    MAP_POINTS "contacts": 10 cm cell means, ExactGP, its train_gp) but on the CPU; its mean
+    height is sampled on a TERRAIN_GRID_RES grid over the Nav2 map, with the wheel positions
+    for plane_attitude. Then the linear calibration map attitude -> measured (base_link)
+    attitude is fit on every sample of segments (real data, not mirrored)."""
     from nav2_stack import gp_explorer_gpu as gpx  # deferred: pulls in gpytorch
     try:
         X, z = gpx.load_bags(None, bags=bag_paths)
@@ -837,18 +883,23 @@ def build_terrain_map(bag_paths: List[Path], segments: List[Dict]) -> Dict:
     gx, gy = np.meshgrid(gpx.MAP_ORIG_X + np.arange(nx) * TERRAIN_GRID_RES,
                          gpx.MAP_ORIG_Y + np.arange(ny) * TERRAIN_GRID_RES)
     pts = torch.tensor(np.column_stack([gx.ravel(), gy.ravel()]), dtype=torch.float32)
-    grads = []
-    for chunk in pts.split(10000):
-        chunk = chunk.clone().requires_grad_(True)
-        g, = torch.autograd.grad(gp(chunk).mean.sum(), chunk)
-        grads.append(g.detach())
-    grid = torch.cat(grads).T.reshape(2, ny, nx).contiguous()
-    tmap = {"grid": grid, "x0": gpx.MAP_ORIG_X, "y0": gpx.MAP_ORIG_Y, "res": TERRAIN_GRID_RES}
+    import gpytorch
+    heights = []
+    with torch.no_grad(), gpytorch.settings.max_cholesky_size(1_000_000):
+        for chunk in pts.split(10000):
+            heights.append(gp(chunk).mean.detach())
+    grid = torch.cat(heights).reshape(ny, nx).contiguous()
+    from nav2_stack import rover_geometry
+    wheels = rover_geometry.load()["wheels"][:, :2]
+    plane = np.linalg.pinv(np.column_stack([np.ones(4), wheels]))       # (3, 4)
+    tmap = {"grid": grid, "x0": gpx.MAP_ORIG_X, "y0": gpx.MAP_ORIG_Y, "res": TERRAIN_GRID_RES,
+            "wheels": torch.as_tensor(wheels, dtype=torch.float32),
+            "plane": torch.as_tensor(plane, dtype=torch.float32)}
 
     data = np.concatenate([sg["data"] for sg in segments])
     t = torch.from_numpy(data)
-    a_gp = gp_attitude(grid, tmap["x0"], tmap["y0"], tmap["res"],
-                       t[:, COL_X], t[:, COL_Y], t[:, COL_YAW]).numpy().astype(np.float64)
+    a_gp = map_attitude(tmap, t[:, COL_X].float(), t[:, COL_Y].float(),
+                        t[:, COL_YAW].float()).numpy().astype(np.float64)
     A = np.column_stack([a_gp, np.ones(len(a_gp))])
     calib = np.zeros((2, 3))
     for i, c in enumerate(ATT_COLS):
@@ -857,7 +908,7 @@ def build_terrain_map(bag_paths: List[Path], segments: List[Dict]) -> Dict:
     resid = data[:, ATT_COLS] - A @ calib.T
     ls = gp.covar_module.base_kernel.lengthscale.item()
     print(f"[dynamics_retrain] terrain map: GP on {len(X)} cells (lengthscale {ls:.2f} m), "
-          f"slope grid {nx}x{ny} at {TERRAIN_GRID_RES * 100:.0f} cm; calibration on "
+          f"height grid {nx}x{ny} at {TERRAIN_GRID_RES * 100:.0f} cm (wheel-plane attitude); calibration on "
           f"{len(data)} samples:", flush=True)
     for i, n in enumerate(("pitch", "roll")):
         print(f"[dynamics_retrain]   {n} = {calib[i, 0]:.3f} * pitch_gp + {calib[i, 1]:.3f} * "
@@ -875,8 +926,7 @@ def fit_slip_gp(segments: List[Dict], tmap: Dict) -> Dict:
     for sg in segments:
         d = torch.from_numpy(sg["data"])
         cur, nxt = d[:-1], d[1:]   # command and pose at step k, motion over step k
-        a = gp_attitude(tmap["grid"], tmap["x0"], tmap["y0"], tmap["res"],
-                        cur[:, COL_X], cur[:, COL_Y], cur[:, COL_YAW])
+        a = map_attitude(tmap, cur[:, COL_X].float(), cur[:, COL_Y].float(), cur[:, COL_YAW].float())
         f = slip_features(a[:, 0], a[:, 1], cur[:, COL_VX_CMD])
         rows.append(torch.cat([f, cur[:, [COL_VX_CMD, COL_WZ_CMD]],
                                nxt[:, [COL_DFWD, COL_DYAW]]], 1))

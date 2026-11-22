@@ -217,6 +217,29 @@ def _geometry():
     return _GEOMETRY
 
 
+def wheel_tracks(pts: np.ndarray) -> np.ndarray:
+    """(2n, 2) left and right wheel tracks of a planned base_link path pts (n, 2): each point moved
+    sideways by the wheels' half track (config/rover_geometry.yaml), normal to the local path
+    direction (front and rear wheels share a track)."""
+    half = float(np.abs(_geometry()["wheels"][:, 1]).mean())
+    d = np.gradient(pts, axis=0)
+    n = np.linalg.norm(d, axis=1, keepdims=True)
+    d = np.where(n > 1e-9, d / np.maximum(n, 1e-9), np.array([1.0, 0.0]))
+    normal = np.column_stack([-d[:, 1], d[:, 0]])
+    return np.vstack([pts + half * normal, pts - half * normal])
+
+
+def moving_span(X: np.ndarray) -> slice:
+    """Index slice of X without the stationary start and end (see trim_stationary)."""
+    if len(X) < 2:
+        return slice(0, len(X))
+    disp = np.linalg.norm(np.diff(X, axis=0), axis=1)
+    moving = np.where(disp > STATIONARY_THRESH)[0]
+    if len(moving) == 0:
+        return slice(0, 0)
+    return slice(moving[0], moving[-1] + 2)
+
+
 def trim_stationary(X: np.ndarray, z: np.ndarray):
     if len(X) < 2:
         return X, z
@@ -228,9 +251,19 @@ def trim_stationary(X: np.ndarray, z: np.ndarray):
     return X[start:end + 1], z[start:end + 1]
 
 
-def load_bags(bag_dir: Path, bags=None):
-    """bags: read exactly these bag directories instead of every one in bag_dir
+# What the terrain GP is fit on (11/22, Phase 2): "contacts" = the four wheel contact points of every
+# pose (rover_geometry.wheel_contacts: a map of the ground itself, 4 points per pose, ~1.5x the 10 cm
+# cells of the centre track); "centre" = the base_link position and height (before 11/22).
+MAP_POINTS = "contacts"
+
+
+def load_bags(bag_dir: Path, bags=None, points=None):
+    """(X (n,2), z (n,)) training points of the terrain GP, one per GP_CELL cell: the wheel contact
+    points (MAP_POINTS / points="contacts") or the base_link position (points="centre") of every
+    pose of every bag (rigid-body poses converted through config/rover_geometry.yaml).
+    bags: read exactly these bag directories instead of every one in bag_dir
     (dynamics_retrain's terrain map, which must not read a bag still recording)."""
+    points = points or MAP_POINTS
     try:
         typestore = get_typestore(Stores.ROS2_JAZZY)
     except AttributeError:
@@ -265,16 +298,21 @@ def load_bags(bag_dir: Path, bags=None):
             continue
         bag_X = np.array(bag_X, dtype=float)
         bag_z = np.array(bag_z, dtype=float)
+        rot_bl = None
         if pose_topic == POSE_TOPIC:
             # rigid body (rear-right marker) -> base_link (rover centre), config/rover_geometry.yaml
-            pos_bl, _ = rover_geometry.base_link_poses(
+            pos_bl, rot_bl = rover_geometry.base_link_poses(
                 _geometry(), np.column_stack([bag_X, bag_z]), np.array(bag_q, dtype=float))
             bag_X, bag_z = pos_bl[:, :2], pos_bl[:, 2]
         else:
             print(f'    {pose_topic}: old rigid body, no base_link calibration -- used as is')
         n_raw = len(bag_X)
-        bag_X, bag_z = trim_stationary(bag_X, bag_z)
+        span = moving_span(bag_X)
+        bag_X, bag_z = bag_X[span], bag_z[span]
         print(f'    {n_raw} raw → {len(bag_X)} after trimming stationary ends')
+        if points == "contacts" and rot_bl is not None and len(bag_X):
+            c = rover_geometry.wheel_contacts(_geometry(), np.column_stack([bag_X, bag_z]), rot_bl[span])
+            bag_X, bag_z = c[:, :, :2].reshape(-1, 2), c[:, :, 2].reshape(-1)
         if len(bag_X) == 0:
             print(f'    skipping — no movement detected')
             continue
@@ -288,7 +326,7 @@ def load_bags(bag_dir: Path, bags=None):
     z = np.concatenate(z_list)
     n_poses = len(X)
     X, z = bin_to_cells(X, z, GP_CELL)
-    print(f'  {n_poses} poses → {len(X)} training points (one per {GP_CELL * 100:.0f} cm cell)')
+    print(f'  {n_poses} {points} points → {len(X)} training points (one per {GP_CELL * 100:.0f} cm cell)')
     return X, z
 
 
@@ -559,7 +597,8 @@ def main():
 
         valid_goals.append((gx, gy))
         valid_paths.append(pts)
-        eval_paths.append(pts_eval)
+        # the GP map is of the wheel contacts (MAP_POINTS): score where the wheels will run
+        eval_paths.append(wheel_tracks(pts_eval) if MAP_POINTS == "contacts" else pts_eval)
         path_lengths_m.append(length)
 
         if (i + 1) % 20 == 0 or i == len(candidates) - 1:

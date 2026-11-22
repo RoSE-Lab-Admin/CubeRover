@@ -2,8 +2,8 @@
 """
 Global uncertainty of the terrain GP (x, y -> z) after a trial.
 
-Trains the same GP as gp_explorer_gpu.py (same bag loading, 10 cm binning, kernel and
-hyperparameter fit) on every bag in --bag-dir, then evaluates the GP's latent variance
+Trains the same GP as gp_explorer_gpu.py (same bag loading -- the wheel contact points, 10 cm
+binning, kernel and hyperparameter fit) on every bag in --bag-dir, then evaluates the GP's latent variance
 var[f(x, y)] -- the uncertainty of the terrain height itself, without the measurement-noise
 term, which never shrinks -- on a FIXED regular grid over the reachable arena (every point at
 least INFLATION = 0.75 m from walls and craters in the map). The same grid every trial, so the
@@ -46,10 +46,12 @@ except ImportError:                     # imported from the package
 
 GRID_RES = 0.10     # m between evaluation points
 # Fixed GP hyperparameters for integrated_var_fixed: fit once (300 Adam iterations) on all live
-# lawnmower bags of 11/21 (V5b, V5c, V6, V7, V8 pooled: 127 bags, 1642 10-cm cells). Keep them
-# unchanged, or runs are no longer comparable.
-FIXED_LENGTHSCALE = 0.72    # m
-FIXED_OUTPUTSCALE = 0.0049  # m^2 (prior std ~7 cm)
+# lawnmower bags of 11/21 (V5b, V5c, V6, V7, V8 pooled: 127 bags), on the wheel-contact ground map
+# (gp_explorer_gpu.MAP_POINTS "contacts", 11/22: 2074 10-cm cells). Keep them unchanged, or runs are
+# no longer comparable. (Before 11/22: centre-track map, 0.72 m / 0.0049 / 1.0e-4 -- rows from then
+# are not comparable with later ones.)
+FIXED_LENGTHSCALE = 0.69    # m
+FIXED_OUTPUTSCALE = 0.0050  # m^2 (prior std ~7 cm)
 FIXED_NOISE = 1.0e-4        # m^2 (~1 cm)
 CSV_NAME = "gp_uncertainty.csv"
 COLUMNS = ("time,bag,n_bags,n_train,lengthscale,outputscale,noise,integrated_var,"

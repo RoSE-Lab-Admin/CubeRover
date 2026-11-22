@@ -1,0 +1,6 @@
+# Phase 2 (11/22): GP explorer on the wheel-contact ground map, candidates scored along the wheel tracks;
+# gp_uncertainty on the same map. Realistic turn rate.
+defaults:
+  args: {waypoint_mode: gp}
+cases:
+  - {name: p2_gp, n: 3, yaw_scale: 0.25}
