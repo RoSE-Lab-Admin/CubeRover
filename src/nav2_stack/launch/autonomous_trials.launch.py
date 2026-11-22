@@ -233,10 +233,11 @@ def generate_launch_description():
                                           'reversing the moving rover does not count toward the '
                                           '2-gear-change ban (GridBasedCustom free_start_reversal)'),
         DeclareLaunchArgument('path_align', default_value='auto',
-                              description='PathAlignCritic: auto (as before) | on | off | alternate '
-                                          '(odd trials on, even off; per trial in path_align.csv)'),
+                              description='PathAlignCritic: auto (on for gp at path_align_weight, spiral/lawnmower '
+                                          'as before) | on | off | alternate (odd trials on, even off); '
+                                          'per trial in path_align.csv'),
         DeclareLaunchArgument('path_align_weight', default_value='14.0',
-                              description='with path_align on/off/alternate: PathAlignCritic cost_weight'),
+                              description='PathAlignCritic cost_weight for gp trials (auto) and path_align on/off/alternate'),
         DeclareLaunchArgument('lawnmower_path_align', default_value='true',
                               description='lawnmower_drive zigzag / zigzag_heading: PathAlignCritic '
                                           'on (pulls MPPI back onto the plan); default true (V6)'),

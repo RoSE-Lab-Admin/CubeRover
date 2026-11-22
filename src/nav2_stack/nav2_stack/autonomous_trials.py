@@ -963,14 +963,16 @@ def main():
                              "ban (still costs motion_reversal_penalty), so a moving rover can "
                              "plan a 3-point turn instead of a long loop. Default: false")
     parser.add_argument("--path-align", default="auto", choices=["auto", "on", "off", "alternate"],
-                        help="PathAlignCritic for every waypoint mode: auto = as before (on for the "
-                             "spiral / lawnmower path drives, --lawnmower-path-align for the zigzag "
-                             "drives, off for gp); on / off = every trial; alternate = odd trials on, "
-                             "even trials (and the initial bag) off, for an A/B comparison within one "
-                             "run. on/off/alternate use --path-align-weight and are written per trial "
-                             "to <bag-dir>/path_align.csv. Default: auto")
+                        help="PathAlignCritic for every waypoint mode: auto = on for gp (at "
+                             "--path-align-weight) and the spiral / lawnmower path drives (yaml "
+                             "weight), --lawnmower-path-align for the zigzag drives; on / off = every "
+                             "trial; alternate = odd trials on, even trials (and the initial bag) off, "
+                             "for an A/B comparison within one run (on/off/alternate use "
+                             "--path-align-weight). Every trial's setting is written to "
+                             "<bag-dir>/path_align.csv. Default: auto")
     parser.add_argument("--path-align-weight", default=14.0, type=float,
-                        help="with --path-align on/off/alternate: PathAlignCritic cost_weight. Default: 14")
+                        help="PathAlignCritic cost_weight for gp trials (auto) and with --path-align "
+                             "on/off/alternate. Default: 14 (= --lawnmower-path-align-weight)")
     parser.add_argument("--lawnmower-path-align", default="true", type=parse_bool,
                         help="lawnmower-drive zigzag / zigzag_heading: switch PathAlignCritic on "
                              "(pulls MPPI back onto the plan's line) with cost_weight "
@@ -1157,50 +1159,54 @@ def main():
     escaper = Escaper(pose_node, pose_node.pose, default_planner_id())
     wait_for_nav2_active()
     # PathAlignCritic keeps MPPI on the line of a path that is not replanned (spiral /
-    # lawnmower in path mode); with GP goals (replanned every second) it is off -- 11/06
-    # weight-30 trials did worse with it. Live-reconfigurable, persists across reloads.
-    # --lawnmower-path-align: also on for the zigzag drives (11/21 V5 test), at its own weight
-    # (the controller_server starts fresh from nav2_param2.yaml with every launch).
+    # lawnmower in path mode, at nav2_param2.yaml's weight 30). --lawnmower-path-align: also on
+    # for the zigzag drives (11/21 V5 test), at its own weight. GP trials: on at
+    # --path-align-weight (14, = lawnmower) since 11/22 -- the 11/22 alternate A/B (45 NN trials)
+    # found no clear tracking difference (5% slower), and on everywhere keeps GP and lawnmower
+    # runs comparable (11/06: weight 30 did worse with GP goals). Live-reconfigurable; the
+    # controller_server starts fresh from nav2_param2.yaml with every launch.
     zigzag_align = (pattern is not None and pattern["drive"] in ZIGZAG_DRIVES
                     and args.lawnmower_path_align)
-    path_align = pattern is not None and (pattern["drive"] == "path" or zigzag_align)
+    gp_align = pattern is None
+    path_align = gp_align or (pattern is not None and (pattern["drive"] == "path" or zigzag_align))
+    if args.path_align != "auto" or gp_align:
+        align_weight = float(args.path_align_weight)
+    elif zigzag_align:
+        align_weight = float(args.lawnmower_path_align_weight)
+    else:   # spiral / lawnmower path drive: the yaml's weight
+        import yaml
+        align_weight = float(yaml.safe_load(open(yaml_path))["controller_server"]["ros__parameters"]
+                             ["FollowPath"]["PathAlignCritic"]["cost_weight"])
     try:
-        if zigzag_align:
-            set_controller_param(pose_node, "FollowPath.PathAlignCritic.cost_weight",
-                                 float(args.lawnmower_path_align_weight))
+        if zigzag_align or gp_align or args.path_align != "auto":
+            set_controller_param(pose_node, "FollowPath.PathAlignCritic.cost_weight", align_weight)
         set_controller_param(pose_node, "FollowPath.PathAlignCritic.enabled", path_align)
         log(f"PathAlignCritic {'enabled' if path_align else 'disabled'} for waypoint_mode "
-            f"{args.waypoint_mode}"
-            + (f" (lawnmower_path_align, cost_weight {args.lawnmower_path_align_weight:g})"
-               if zigzag_align else ""))
+            f"{args.waypoint_mode} (cost_weight {align_weight:g}"
+            + (", lawnmower_path_align" if zigzag_align else "") + ")"
+            + (f"; path_align {args.path_align} sets it per trial" if args.path_align != "auto" else ""))
     except Exception as e:
-        log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
+        log(f"WARNING: could not set FollowPath.PathAlignCritic ({e}) -- is it "
             f"in nav2_param2.yaml's critics list?")
-    if args.path_align != "auto":
-        try:
-            set_controller_param(pose_node, "FollowPath.PathAlignCritic.cost_weight",
-                                 float(args.path_align_weight))
-            log(f"path_align {args.path_align}: PathAlignCritic cost_weight {args.path_align_weight:g}")
-        except Exception as e:
-            log(f"WARNING: could not set PathAlignCritic cost_weight ({e})")
 
     def set_path_align(trial: int, bag_name: str):
-        """--path-align on/off/alternate: PathAlignCritic for this trial (trial 0 = initial bag),
-        recorded in path_align.csv. No-op for auto."""
+        """PathAlignCritic for this trial (trial 0 = initial bag), recorded in path_align.csv for
+        every mode. auto: as set above for the whole run; on / off / alternate: set here."""
         if args.path_align == "auto":
-            return
-        enabled = args.path_align == "on" or (args.path_align == "alternate" and trial % 2 == 1)
-        try:
-            set_controller_param(pose_node, "FollowPath.PathAlignCritic.enabled", enabled)
-            log(f"{bag_name}: PathAlignCritic {'on' if enabled else 'off'} (path_align {args.path_align})")
-        except Exception as e:
-            log(f"WARNING: {bag_name}: could not set PathAlignCritic.enabled={enabled} ({e})")
+            enabled = path_align
+        else:
+            enabled = args.path_align == "on" or (args.path_align == "alternate" and trial % 2 == 1)
+            try:
+                set_controller_param(pose_node, "FollowPath.PathAlignCritic.enabled", enabled)
+                log(f"{bag_name}: PathAlignCritic {'on' if enabled else 'off'} (path_align {args.path_align})")
+            except Exception as e:
+                log(f"WARNING: {bag_name}: could not set PathAlignCritic.enabled={enabled} ({e})")
         path = bag_dir / "path_align.csv"
         new = not path.exists()
         with open(path, "a") as f:
             if new:
                 f.write("bag,path_align,cost_weight,mode\n")
-            f.write(f"{bag_name},{int(enabled)},{args.path_align_weight:g},{args.path_align}\n")
+            f.write(f"{bag_name},{int(enabled)},{align_weight:g},{args.path_align}\n")
     # lawnmower zigzag_heading: GridBasedCustom only accepts final headings within the
     # tolerance of the goal yaw (either way); --lawnmower-cusp-tolerance: gear changes only
     # near E-W. Put back to -1 when the run ends.
