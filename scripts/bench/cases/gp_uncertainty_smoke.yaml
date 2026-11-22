@@ -1,0 +1,6 @@
+# 11/22: gp_uncertainty.csv is written after the initial bag and every trial (lawnmower V6 defaults).
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower}
+cases:
+  - {name: unc_lawn, n: 2}

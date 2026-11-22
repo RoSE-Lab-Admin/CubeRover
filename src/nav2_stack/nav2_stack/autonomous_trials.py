@@ -61,6 +61,7 @@ XY_GOAL_TOLERANCE = 0.5     # matches nav2_param2.yaml's goal_checker xy_goal_to
 STALL_WINDOW_S = 60.0       # no-progress-for-this-long => treat the trial as stuck
 MIN_IMPROVEMENT_M = 0.05    # smaller than this doesn't count as "progress" (noise floor)
 GP_EXPLORER_MAX_ATTEMPTS = 3
+GP_UNCERTAINTY_TIMEOUT = 300      # s, gp_uncertainty.py (normally ~5 s on the GPU)
 NO_MOVEMENT_MAX_ATTEMPTS = 3  # retries for a trial that recorded a "no_movement" bag (see wait_for_goal)
 BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before commands flow
 
@@ -806,6 +807,26 @@ def run_gp_explorer(gp_explorer_path: Path, bag_dir: Path, name: str) -> bool:
     return False
 
 
+def run_gp_uncertainty(script: Path, bag_dir: Path, bag_name: str):
+    """Terrain GP's global uncertainty after this trial (gp_uncertainty.py: trains the GP on
+    every bag so far and appends a row to bag_dir/gp_uncertainty.csv). A subprocess, so it
+    frees the GPU when done. Never fatal: a failure only logs a warning."""
+    map_path = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.pgm"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script), "--bag-dir", str(bag_dir), "--bag", bag_name,
+             "--map", str(map_path)], timeout=GP_UNCERTAINTY_TIMEOUT,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        line = next((l for l in result.stdout.splitlines() if l.startswith("[gp_uncertainty]")), None)
+        if result.returncode == 0 and line:
+            log(line)
+        else:
+            log(f"WARNING: gp_uncertainty.py failed for {bag_name} (exit {result.returncode}): "
+                f"{result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ''}")
+    except Exception as e:
+        log(f"WARNING: gp_uncertainty.py failed for {bag_name}: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bag-dir", required=True, type=Path,
@@ -1096,6 +1117,7 @@ def main():
     # the installed share directory and may not match where gp_explorer_gpu.py
     # actually wrote it, depending on whether it's run from source or installed).
     pose_csv = gp_explorer_path.resolve().parent.parent / "pose.csv"
+    gp_uncertainty_path = gp_explorer_path.parent / "gp_uncertainty.py"
 
     rclpy.init()
     pose_node = PoseWatcher(args.opti_topic)
@@ -1242,6 +1264,7 @@ def main():
                     outcome = "stalled"
 
             record_outcome(bag_dir, "initial_bag", outcome, initial_xy)
+            run_gp_uncertainty(gp_uncertainty_path, bag_dir, "initial_bag")
             if fs_cfg is not None:
                 record_deployed_model(bag_dir, "initial_bag", fs_cfg)
             if outcome == "reached":
@@ -1313,6 +1336,7 @@ def main():
                 outcome = "stalled"
 
             record_outcome(bag_dir, bag_name, outcome, goal_xy)
+            run_gp_uncertainty(gp_uncertainty_path, bag_dir, bag_name)
             if fs_cfg is not None:
                 record_deployed_model(bag_dir, bag_name, fs_cfg)
             if outcome == "reached":

@@ -186,6 +186,16 @@ Other behavior:
   `/optimal_trajectory_model`, `/imu/data` and `/imu/rpy`. Outcomes go to
   `bag_dir/trial_outcomes.csv`; with `train_from_scratch`, `bag_dir/deployed_models.csv`
   records which model drove each bag.
+- After the initial bag and every trial (all waypoint modes), `gp_uncertainty.py` trains the terrain
+  GP (x, y -> z, the same GP as `gp_explorer_gpu.py`) on every bag so far and appends one row to
+  `bag_dir/gp_uncertainty.csv` (only ever appended, also on resume; ~5-7 s on the GPU, a
+  subprocess, never fatal). `integrated_var` is the GP's latent variance var[f] (height
+  uncertainty without the measurement noise) summed over a fixed 0.1 m grid of the reachable
+  arena (>= 0.75 m from walls and craters, `n_grid` points), with the hyperparameters re-fitted on
+  the run's data (`lengthscale`, `outputscale`, `noise` in the row) -- it also moves when they move.
+  `integrated_var_fixed` uses one fixed set of hyperparameters (fit on the pooled 11/21 lawnmower
+  runs), so it depends only on where the rover has driven, falls monotonically, and is the column
+  to compare runs and waypoint modes with.
 - With retraining on (and `async_training` off), each trial takes noticeably longer (training
   time is added on top of gp_explorer + drive time), and redeploying briefly cycles
   `controller_server`'s lifecycle between trials — verify this doesn't upset anything on your
