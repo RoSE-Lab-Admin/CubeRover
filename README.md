@@ -69,9 +69,16 @@ deactivate
 | `spiral_drive` | `path` | `waypoint_mode:=spiral` only. `path`: drive to the leg's start, then the leg itself goes straight to the controller (`FollowPath`, no global planner, no replanning), in whichever gear the rover faces: if it faces more than 90° away from the spiral's direction there, the whole leg is driven in reverse (one gear per leg, no turning around). Needs `PathAlignCritic` on, see below. `waypoints`: waypoints every 1 m along the leg, and the goal is kept ~1.5 m ahead of the rover's progress along it, so it is planned by the global planner but the rover never stops in between. |
 | `spiral_radius` | `1.8` | `waypoint_mode:=spiral` only: radius of the inner circle = the tightest turn (m). Larger than ~2.3 m does not fit the current arena with 0.75 m wall clearance. |
 | `lawnmower_spacing` | `0.8` | `waypoint_mode:=lawnmower` only: distance between lanes (m). |
-| `lawnmower_drive` | `path` | `waypoint_mode:=lawnmower` only. `path`: the S-curve lanes above, straight to the controller (path mode). `zigzag`: one goal per trial, planned and driven like a GP goal -- the next lane's end on the other side (east, west, east, ... one lane further north each time, back south on the shifted lanes), any arrival heading. `zigzag_heading`: the same, but `GridBasedCustom` only accepts plans that arrive heading E-W (either way) within `lawnmower_heading_tolerance` (fork param `goal_heading_tolerance_deg`, set at startup and reset to -1 = off when the run ends). In both zigzag modes `PathAlignCritic` stays off. |
+| `lawnmower_drive` | `zigzag_heading` | `waypoint_mode:=lawnmower` only. Default `zigzag_heading` since 11/21 (with the defaults below = the V6 setup, the best of the 11/21 live runs V2-V8). `path`: the S-curve lanes above, straight to the controller (path mode). `zigzag`: one goal per trial, planned and driven like a GP goal -- the next lane's end on the other side (east, west, east, ... one lane further north each time, back south on the shifted lanes), any arrival heading. `zigzag_heading`: the same, but `GridBasedCustom` only accepts plans that arrive heading E-W (either way) within `lawnmower_heading_tolerance` (fork param `goal_heading_tolerance_deg`, set at startup and reset to -1 = off when the run ends). In both zigzag modes `PathAlignCritic` stays off unless `lawnmower_path_align:=true`. |
 | `lawnmower_heading_tolerance` | `20.0` | `lawnmower_drive:=zigzag_heading` only: allowed arrival heading off E-W (deg). The planner's "close enough" shortcut (a plan ending within its 0.25 m `tolerance` of the goal) has to meet it too. |
-| `lawnmower_cusp_tolerance` | `-1.0` | `lawnmower_drive:=zigzag` / `zigzag_heading`: `GridBasedCustom` only plans a gear change (three-point turn) while the rover points within this many deg of E-W, so turns shuffle along the lanes instead of N-S across them (fork param `cusp_heading_tolerance_deg`, set at startup, reset to -1 when the run ends). If no path exists under the rule, that one plan is made without it (logged as `cusp fallback`); the next 1 Hz replan tries the rule again. `< 0` = off. |
+| `lawnmower_cusp_tolerance` | `30.0` | `lawnmower_drive:=zigzag` / `zigzag_heading`: `GridBasedCustom` only plans a gear change (three-point turn) while the rover points within this many deg of E-W, so turns shuffle along the lanes instead of N-S across them (fork param `cusp_heading_tolerance_deg`, set at startup, reset to -1 when the run ends). If no path exists under the rule, that one plan is made without it (logged as `cusp fallback`); the next 1 Hz replan tries the rule again. Default 30 (V6; 50 in V8 brought N-S 3-point turns back); `< 0` = off. |
+| `lawnmower_path_align` | `true` | `lawnmower_drive:=zigzag` / `zigzag_heading`: switch `PathAlignCritic` on for the run (pulls MPPI back onto the plan's line instead of only heading along it), with `cost_weight` `lawnmower_path_align_weight` (default `14.0`, the stock value; the yaml's 30 is tuned for path mode). Set at startup; the controller starts fresh from the yaml every launch. Added 11/21 for the V5 live test: in V2-V4 the rover drifted 12-31 cm off its plan before most bad lanes. |
+| `lawnmower_cusp_start_tolerance` | `60.0` | With `lawnmower_cusp_tolerance`: reversing the rover right where it is (while it moves) may be up to this many deg off E-W -- the rover reaches planned gear changes a bit further turned than planned (fork param `cusp_start_heading_tolerance_deg`). |
+| `lawnmower_approach_length` | `0.5` | `lawnmower_drive:=zigzag_heading`: the last this many m of every plan stay within `lawnmower_heading_tolerance` of E-W, not just the last pose (fork param `goal_approach_length`); `<= 0` = off. |
+| `lawnmower_cusp_tail` | `0.25` | Zigzag drives: `GridBasedCustom` `cusp_tail_length` for the run (yaml: 0.6) -- no turn tighter than ~2 m radius this far after a gear change. `< 0` = keep the yaml value. |
+| `lawnmower_cusp_tail_before` | `false` | With `lawnmower_cusp_tail`: the tail also BEFORE a gear change (fork param `cusp_tail_before`; yaml: true). Off: before a gear change the rover still has momentum, so turning into it is fine. |
+| `lawnmower_momentum_zone` | `0.4` | Zigzag drives: `GridBasedCustom` `momentum_zone_length` for the run (yaml: 0.5) -- gentle turns only, this far after a stop or gear change. `< 0` = keep the yaml value. |
+| `lawnmower_free_start_reversal` | `false` | Zigzag drives: stopping and reversing the MOVING rover at a replan's start does not count toward the 2-gear-change ban (fork param `free_start_reversal`; still pays `motion_reversal_penalty`). Experimental, off: offline it changed almost nothing on its own. |
 | `spiral_centre_x`, `spiral_centre_y` | `0.0` | `waypoint_mode:=spiral` only: the spiral's centre. (-1.0, 0.2) leaves the most room in the current arena. |
 | `start_rviz` | `true` | Launches `rviz2` alongside everything else. Set to `false` to skip it. |
 
@@ -126,21 +133,26 @@ ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir
   spiral in reverse while turning (the start heading is arbitrary and the planner keeps the gear
   it is moving in).
 
-Example with the lawnmower (lanes 0.8 m apart, path mode, `PathAlignCritic` on automatically):
+Example with the lawnmower path mode (lanes 0.8 m apart, S-curves, `PathAlignCritic` on automatically):
 ```bash
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/new_bag_dir \
-    waypoint_mode:=lawnmower lawnmower_spacing:=0.8
+    waypoint_mode:=lawnmower lawnmower_drive:=path lawnmower_spacing:=0.8
 ```
 
-Zigzag versions (one planned goal per lane end, like GP goals; with or without the E-W heading):
+Zigzag (one planned goal per lane end, like GP goals). The default lawnmower setup since 11/21
+(V6: `zigzag_heading`, arrival within 20 deg of E-W, gear changes within 30 deg of E-W, cusp tail
+0.25 m after gear changes only, momentum zone 0.4 m, `PathAlignCritic` weight 14) is just:
 ```bash
+ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir waypoint_mode:=lawnmower
+```
+Variants:
+```bash
+# any arrival heading, no gear-change rule
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
-    waypoint_mode:=lawnmower lawnmower_drive:=zigzag
+    waypoint_mode:=lawnmower lawnmower_drive:=zigzag lawnmower_cusp_tolerance:=-1
+# the old S-curve path mode
 ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
-    waypoint_mode:=lawnmower lawnmower_drive:=zigzag_heading lawnmower_heading_tolerance:=20
-ros2 launch nav2_stack autonomous_trials.launch.py bag_dir:=/path/to/bag_dir \
-    waypoint_mode:=lawnmower lawnmower_drive:=zigzag_heading lawnmower_heading_tolerance:=20 \
-    lawnmower_cusp_tolerance:=30
+    waypoint_mode:=lawnmower lawnmower_drive:=path
 ```
 
 Example with train-from-scratch and the slope-slip GP model (same notes as above; each fit prints

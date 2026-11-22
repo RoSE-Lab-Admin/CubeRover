@@ -100,6 +100,14 @@ def launch_setup(context):
             '--lawnmower-drive', LaunchConfiguration('lawnmower_drive'),
             '--lawnmower-heading-tolerance', LaunchConfiguration('lawnmower_heading_tolerance'),
             '--lawnmower-cusp-tolerance', LaunchConfiguration('lawnmower_cusp_tolerance'),
+            '--lawnmower-cusp-start-tolerance', LaunchConfiguration('lawnmower_cusp_start_tolerance'),
+            '--lawnmower-approach-length', LaunchConfiguration('lawnmower_approach_length'),
+            '--lawnmower-cusp-tail', LaunchConfiguration('lawnmower_cusp_tail'),
+            '--lawnmower-cusp-tail-before', LaunchConfiguration('lawnmower_cusp_tail_before'),
+            '--lawnmower-momentum-zone', LaunchConfiguration('lawnmower_momentum_zone'),
+            '--lawnmower-free-start-reversal', LaunchConfiguration('lawnmower_free_start_reversal'),
+            '--lawnmower-path-align', LaunchConfiguration('lawnmower_path_align'),
+            '--lawnmower-path-align-weight', LaunchConfiguration('lawnmower_path_align_weight'),
         ],
     )
 
@@ -181,8 +189,9 @@ def generate_launch_description():
                                           'turn (m)'),
         DeclareLaunchArgument('lawnmower_spacing', default_value='0.8',
                               description='waypoint_mode lawnmower: distance between lanes (m)'),
-        DeclareLaunchArgument('lawnmower_drive', default_value='path',
-                              description='waypoint_mode lawnmower: path (S-curve lanes, path '
+        DeclareLaunchArgument('lawnmower_drive', default_value='zigzag_heading',
+                              description='waypoint_mode lawnmower (default zigzag_heading since '
+                                          '11/21, the V6 setup): path (S-curve lanes, path '
                                           'mode), zigzag (one planned goal per trial: the next '
                                           'lane end on the other side, any heading) or '
                                           'zigzag_heading (the same, arriving E-W within '
@@ -190,10 +199,36 @@ def generate_launch_description():
         DeclareLaunchArgument('lawnmower_heading_tolerance', default_value='20.0',
                               description='lawnmower_drive zigzag_heading: allowed arrival '
                                           'heading off E-W (deg)'),
-        DeclareLaunchArgument('lawnmower_cusp_tolerance', default_value='-1.0',
+        DeclareLaunchArgument('lawnmower_cusp_start_tolerance', default_value='60.0',
+                              description='with lawnmower_cusp_tolerance: reversing the rover right '
+                                          'where it is may be up to this many deg off E-W'),
+        DeclareLaunchArgument('lawnmower_approach_length', default_value='0.5',
+                              description='lawnmower_drive zigzag_heading: the last this many m '
+                                          'of every plan stay within lawnmower_heading_tolerance; '
+                                          '<= 0 = off'),
+        DeclareLaunchArgument('lawnmower_cusp_tail', default_value='0.25',
+                              description='lawnmower_drive zigzag / zigzag_heading: GridBasedCustom '
+                                          'cusp_tail_length (m) for the run; < 0 = keep the yaml value'),
+        DeclareLaunchArgument('lawnmower_cusp_tail_before', default_value='false',
+                              description='with lawnmower_cusp_tail: tail also before a gear change '
+                                          '(false = only after it)'),
+        DeclareLaunchArgument('lawnmower_momentum_zone', default_value='0.4',
+                              description='lawnmower_drive zigzag / zigzag_heading: GridBasedCustom '
+                                          'momentum_zone_length (m) for the run; < 0 = keep the yaml value'),
+        DeclareLaunchArgument('lawnmower_free_start_reversal', default_value='false',
+                              description='lawnmower_drive zigzag / zigzag_heading: stopping and '
+                                          'reversing the moving rover does not count toward the '
+                                          '2-gear-change ban (GridBasedCustom free_start_reversal)'),
+        DeclareLaunchArgument('lawnmower_path_align', default_value='true',
+                              description='lawnmower_drive zigzag / zigzag_heading: PathAlignCritic '
+                                          'on (pulls MPPI back onto the plan); default true (V6)'),
+        DeclareLaunchArgument('lawnmower_path_align_weight', default_value='14.0',
+                              description='with lawnmower_path_align: PathAlignCritic cost_weight '
+                                          '(stock 14; the yaml 30 is for path mode)'),
+        DeclareLaunchArgument('lawnmower_cusp_tolerance', default_value='30.0',
                               description='lawnmower_drive zigzag / zigzag_heading: gear changes '
                                           '(three-point turns) only while the rover points '
-                                          'within this many deg of E-W; < 0 = off'),
+                                          'within this many deg of E-W; default 30 (V6); < 0 = off'),
         DeclareLaunchArgument('spiral_centre_x', default_value='0.0'),
         DeclareLaunchArgument('spiral_centre_y', default_value='0.0'),
         DeclareLaunchArgument('start_rviz', default_value='true',

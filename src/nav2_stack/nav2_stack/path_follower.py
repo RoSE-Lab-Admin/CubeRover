@@ -25,6 +25,7 @@ from nav2_stack.escape import Escaper, default_planner_id
 
 STUCK_DWELL_S = 2.0          # stuck this long while navigating -> escape
 MAX_ESCAPES_PER_WAYPOINT = 2
+MAX_STALL_RESENDS = 3        # barely-moving re-sends per waypoint (then autonomous_trials' stall check decides)
 
 class PathFollower(Node):
     def __init__(self):
@@ -73,6 +74,14 @@ class PathFollower(Node):
         # (GridBasedCustom goal_heading_tolerance_deg) has to arrive within a
         # tolerance of it. NaN (default): the arc heading, as before.
         self.declare_parameter('goal_yaw', float('nan'))
+        # follow_mode "goals": barely moving -- the rover moved less than
+        # stall_distance (m) within stall_window (s) while a goal is active (seen
+        # 11/20: MPPI commanding -0.03 m/s for 30 s, below what moves the rover).
+        # The goal is cancelled and re-sent so the planner starts fresh from rest, up to
+        # MAX_STALL_RESENDS times per waypoint. Nav2's own progress checker (0.1 m in
+        # 30 s) is unchanged. stall_window <= 0: off.
+        self.declare_parameter('stall_window', 15.0)
+        self.declare_parameter('stall_distance', 0.05)
         self.use_opti    = self.get_parameter('use_opti').value
         self.opti_topic  = self.get_parameter('opti_topic').value
         self.robot_frame = self.get_parameter('robot_frame').value
@@ -82,6 +91,10 @@ class PathFollower(Node):
         self.advance_distance = float(self.get_parameter('advance_distance').value)
         self.trial_id = self.get_parameter('trial_id').value
         self.goal_yaw = float(self.get_parameter('goal_yaw').value)
+        self.stall_window = float(self.get_parameter('stall_window').value)
+        self.stall_distance = float(self.get_parameter('stall_distance').value)
+        self.stall_samples = deque() # (t, x, y) while a goal is active
+        self.stall_resends = 0
         if self.follow_mode not in ('goals', 'path', 'pose'):
             raise ValueError(f"follow_mode must be 'goals', 'path' or 'pose', got {self.follow_mode!r}")
         self.path_phase = None   # follow_mode "path": "approach" (goToPose) then "follow"; "pose": "pose"
@@ -443,7 +456,35 @@ class PathFollower(Node):
         self.get_logger().info(
             f"issuing goal {self.current_wp_idx + 1}/{len(self.point_path)}: "
             f"({wp.pose.position.x:.3f}, {wp.pose.position.y:.3f})  heading={heading}")
+        self.stall_samples.clear()
         self.nav.goToPose(wp)
+
+    def _check_stall(self):
+        """Barely moving while a goal is active (see stall_window): cancel and re-send
+        the goal so the planner starts fresh. True if it re-sent the goal."""
+        if self.stall_window <= 0.0 or self.stall_resends >= MAX_STALL_RESENDS:
+            return False
+        pose = self._current_pose()
+        if pose is None:
+            return False
+        now_s = time.monotonic()
+        self.stall_samples.append((now_s, pose[0], pose[1]))
+        while self.stall_samples and now_s - self.stall_samples[0][0] > self.stall_window:
+            self.stall_samples.popleft()
+        t0, x0, y0 = self.stall_samples[0]
+        if now_s - t0 < self.stall_window - 0.5:
+            return False  # not a full window yet (goal just sent)
+        moved = max(np.hypot(x - x0, y - y0) for _, x, y in self.stall_samples)
+        if moved >= self.stall_distance:
+            return False
+        self.stall_resends += 1
+        self.get_logger().warn(
+            f"barely moving: {moved * 100:.1f} cm in {self.stall_window:.0f} s -- re-sending goal "
+            f"{self.current_wp_idx + 1} so the planner starts fresh "
+            f"({self.stall_resends}/{MAX_STALL_RESENDS})")
+        self._cancel_nav()
+        self._issue_goal()
+        return True
 
     def follow_waypoints(self):
 
@@ -493,6 +534,8 @@ class PathFollower(Node):
                         return
                 else:
                     self.stuck_since = None
+            if self._check_stall():
+                return
             if not self.reissue_on_heading_change:
                 return
             now = self.get_clock().now()
@@ -539,6 +582,7 @@ class PathFollower(Node):
         # advance to next waypoint
         self.current_wp_idx += 1
         self.escapes_this_wp = 0
+        self.stall_resends = 0
         self.stuck_since = None
         if self.current_wp_idx >= len(self.point_path):
             self.get_logger().info("trajectory completed")

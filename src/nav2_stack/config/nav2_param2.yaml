@@ -79,6 +79,13 @@ controller_server:
       temperature: 0.3 # 10/14 experiment: back to the old value (0.1 since 10/09); selectiveness of trajectories by their costs (lower = favour the best samples more, less averaging toward straight)
       gamma: 0.015 # guide says you prob wont need to change
       motion_model: "DiffDrive"
+      # 11/21: drive a plan's first leg up to its gear change (cusp) before MPPI sees the rest of
+      # the path. Off, MPPI skipped short first legs (0.4-1.2 m before a 3-point turn's cusp) and
+      # drove straight into the second gear in 7/21 such lanes (V2-V5), 5 of them problem lanes
+      # (V5 bag_05: 101 s shuttle). The cusp counts as reached within these tolerances.
+      enforce_path_inversion: true
+      inversion_xy_tolerance: 0.5 # m (stock 0.2). 0.2: replans every 1 s put a moving rover's cusp 0.4 m ahead again and again -> MPPI chased it (bench: 3 chases in 9 lanes, up to 3.5 m the wrong way); 0.5: none
+      inversion_yaw_tolerance: 0.4 # rad, ~23 deg (stock)
 
       # ── Dynamics correction ──────────────────────────────────────────────────
       # dynamics_mode: "kinematics" (default, no correction) | "linear" | "neural_network"
@@ -275,6 +282,7 @@ planner_server:
       momentum_zone_min_radius: 2.0 # fork-only: progressive zone -- right after a stop/cusp only turns with radius >= 2.0 m avoid the penalty; the allowed radius shrinks linearly to minimum_turning_radius over momentum_zone_length (needs allow_primitive_interpolation)
       curvature_penalty: 4.0 # fork-only: turning primitive cost x (1 + 4 * (minimum_turning_radius / R)^2) -- tightest turns pay the most, gentle ones almost nothing
       cusp_tail_length: 0.6 # fork-only: at every gear change (cusp) the rover drives >= 0.6 m without a tight turn (radius < momentum_zone_min_radius) right before and right after it, so three-point turns turn away from the cusp with more room (bag 19, 10/04). Counts what the rover already drove in its current gear (from motion_pose_topic). 0 = off
+      cusp_tail_before: true # fork-only: false = the cusp tail applies only AFTER a gear change (before it the rover has momentum). autonomous_trials sets false (+ cusp_tail_length 0.25, momentum_zone_length 0.4) for the lawnmower zigzag drives (lawnmower_cusp_tail*, lawnmower_momentum_zone)
       allow_primitive_interpolation: true # adds gentle turning primitives (~R 3.3 / 1.7 / 1.1 m) next to the minimum-radius one
       extra_direction_change_penalty: 1000.0 # was 10.0 -- raised substantially: near-prohibitive for the 2nd+ direction change, to test whether "not steep enough" is really the explanation for still-observed multi-reversal /plan paths
       motion_reversal_penalty: 3.0 # was 1.0 -- fork-only: extra cost (meters of equivalent driving) for a replan whose first move reverses the rover's current motion (see motion_pose_topic); 1.0 let near-tie replans next to walls flip the rover's gear
@@ -284,6 +292,8 @@ planner_server:
       motion_stale_timeout: 0.5 # fork-only: seconds without a pose before the gear is treated as unknown
       ignore_goal_heading: true # fork-only: goal is position-only -- any final heading in the goal cell is accepted, so the planner picks the end yaw (e.g. lets a 3-point turn end however it naturally ends instead of forcing the caller's arc-derived yaw)
       goal_heading_tolerance_deg: -1.0 # fork-only: with ignore_goal_heading, only final headings within this many deg of the goal yaw, either way round, count; -1 = any heading. autonomous_trials sets it for lawnmower_drive zigzag_heading
+      goal_approach_length: 0.0 # fork-only: with ignore_goal_heading + goal_heading_tolerance_deg, the last this many m of a plan stay within the arrival tolerance, not just its last pose (the goal checker stops the rover ~0.5 m short; 11/20 V3 bags: plans still 30-35 deg off there). 0 = off. autonomous_trials sets it with lawnmower_approach_length
+      cusp_start_heading_tolerance_deg: -1.0 # fork-only: with cusp_heading_tolerance_deg, reversing the rover right where it is (it is moving) may be up to this many deg off the axis -- the rover reaches planned cusps a bit further turned than planned, and the stricter rule then flipped the plan (11/20 V2 bags 15, 19); -1 = same as cusp_heading_tolerance_deg. autonomous_trials sets it with lawnmower_cusp_start_tolerance
       cusp_heading_tolerance_deg: -1.0 # fork-only: gear changes (cusps) only while the rover points within this many deg of the goal yaw's axis, either way round (lawnmower: three-point turns along E-W, not N-S); the start is exempt; -1 = off. autonomous_trials sets it with lawnmower_cusp_tolerance
       # fork-only: constant-curvature arc mode -- if the single arc tangent to the start heading
       # through the goal (forward if the goal is ahead, reverse if behind) has radius >= arc_min_radius,
@@ -306,6 +316,7 @@ planner_server:
       arc_hold_max_heading_error: 25.0 # deg off the committed arc
       arc_hold_timeout: 3.0 # s; committed arc must be this recent (replans are 1 Hz)
       escalate_only_on_reset: true # was false -- fork-only: the extra_direction_change_penalty escalation applies exactly on gear/curve flips, incl. a gear flip into a straight primitive (which otherwise escaped it)
+      free_start_reversal: false # fork-only: true = stopping and reversing the MOVING rover at a replan's start does not count toward the extra_direction_change_penalty ban (still pays motion_reversal_penalty), so a moving rover can plan stop + 3-point turn instead of a ~10 m loop (11/21 V5c bag_10). autonomous_trials sets it with lawnmower_free_start_reversal
       use_quadratic_cost_penalty: false
       # NOTE: goal_heading_mode / coarse_search_resolution do not exist in
       # nav2_smac_planner 1.3.x (Jazzy) -- they are read by neither this fork

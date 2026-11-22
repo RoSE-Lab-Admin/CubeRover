@@ -137,7 +137,7 @@ class PoseWatcher(Node):
 
 
 def wait_for_node_active(nav: BasicNavigator, node_name: str, timeout_sec: float = 5.0,
-                          max_attempts: int = 60) -> bool:
+                          max_attempts: int = 60, retry_sec: float = 1.0) -> bool:
     """Bounded-timeout, bounded-retry replacement for BasicNavigator's private
     _waitForNodeToActivate(), which loops forever with NO timeout at all
     (rclpy.spin_until_future_complete with no timeout_sec, inside a
@@ -147,9 +147,16 @@ def wait_for_node_active(nav: BasicNavigator, node_name: str, timeout_sec: float
     version gets stuck forever with no way to recover. Same fix as
     path_follower.py's _wait_for_node_active(), duplicated here since this
     runs in a separate process with no shared module. Returns True once
-    node_name reports 'active', False if it never does within max_attempts."""
+    node_name reports 'active', False if it never does within max_attempts.
+    Waits retry_sec between attempts: without it, a node that answers "not
+    active yet" (planner_server needs ~30 s to configure) used up all attempts
+    in under a second, and the planner parameters set right after were lost
+    (the plugin only applies them once active).
+    """
     from lifecycle_msgs.srv import GetState
-    for _ in range(max_attempts):
+    for attempt in range(max_attempts):
+        if attempt:
+            time.sleep(retry_sec)
         client = nav.create_client(GetState, f'{node_name}/get_state')
         try:
             if client.wait_for_service(timeout_sec=timeout_sec):
@@ -177,7 +184,8 @@ def wait_for_nav2_active():
     for node_name in NAV2_MANAGED_NODES:
         if not wait_for_node_active(nav, node_name):
             log(f"WARNING: {node_name} did not report active in time -- continuing anyway")
-        log(f"  {node_name}: active ({time.monotonic() - t0:.1f}s elapsed)")
+        else:
+            log(f"  {node_name}: active ({time.monotonic() - t0:.1f}s elapsed)")
     nav.destroy_node()
     log(f"Nav2 fully active after {time.monotonic() - t0:.1f}s")
 
@@ -876,21 +884,53 @@ def main():
                              "(m). Default: 1.8")
     parser.add_argument("--lawnmower-spacing", default=0.8, type=float,
                         help="waypoint-mode lawnmower: distance between lanes (m). Default: 0.8")
-    parser.add_argument("--lawnmower-drive", default="path",
+    parser.add_argument("--lawnmower-drive", default="zigzag_heading",
                         choices=["path", "zigzag", "zigzag_heading"],
                         help="waypoint-mode lawnmower: path = S-curve lanes straight to the "
-                             "controller (default); zigzag = one planned goal per trial, the next "
+                             "controller; zigzag = one planned goal per trial, the next "
                              "lane's end on the other side (any arrival heading); zigzag_heading = "
                              "the same, but the planner has to arrive heading E-W (either way) "
-                             "within --lawnmower-heading-tolerance")
+                             "within --lawnmower-heading-tolerance (default since 11/21, V6)")
     parser.add_argument("--lawnmower-heading-tolerance", default=20.0, type=float,
                         help="lawnmower-drive zigzag_heading: allowed arrival heading off E-W "
                              "(deg). Default: 20")
-    parser.add_argument("--lawnmower-cusp-tolerance", default=-1.0, type=float,
+    parser.add_argument("--lawnmower-cusp-tolerance", default=30.0, type=float,
                         help="lawnmower-drive zigzag / zigzag_heading: the planner only plans a "
                              "gear change (three-point turn) while the rover points within this "
                              "many deg of E-W, so turns shuffle along the lanes, not N-S across "
-                             "them. < 0: off (default)")
+                             "them. Default: 30 (V6); < 0: off")
+    parser.add_argument("--lawnmower-cusp-start-tolerance", default=60.0, type=float,
+                        help="with --lawnmower-cusp-tolerance: reversing the rover right where it "
+                             "is (while it moves) may be up to this many deg off E-W (the rover "
+                             "reaches planned cusps further turned than planned). Default: 60")
+    parser.add_argument("--lawnmower-approach-length", default=0.5, type=float,
+                        help="lawnmower-drive zigzag_heading: the last this many m of every plan "
+                             "stay within --lawnmower-heading-tolerance (the goal checker stops "
+                             "the rover ~0.5 m short of the lane end). Default: 0.5; <= 0: off")
+    parser.add_argument("--lawnmower-cusp-tail", default=0.25, type=float,
+                        help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom cusp_tail_length "
+                             "(m) for the run; < 0: keep nav2_param2.yaml's. Default: 0.25 (11/21)")
+    parser.add_argument("--lawnmower-cusp-tail-before", default="false", type=parse_bool,
+                        help="with --lawnmower-cusp-tail >= 0: cusp tail also BEFORE a gear change "
+                             "(false: only after it -- before it the rover still has momentum). "
+                             "Default: false")
+    parser.add_argument("--lawnmower-momentum-zone", default=0.4, type=float,
+                        help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom "
+                             "momentum_zone_length (m) for the run; < 0: keep nav2_param2.yaml's. "
+                             "Default: 0.4 (11/21)")
+    parser.add_argument("--lawnmower-free-start-reversal", default="false", type=parse_bool,
+                        help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom "
+                             "free_start_reversal -- stopping and reversing the moving rover at "
+                             "the start of a replan does not count toward the 2nd-gear-change "
+                             "ban (still costs motion_reversal_penalty), so a moving rover can "
+                             "plan a 3-point turn instead of a long loop. Default: false")
+    parser.add_argument("--lawnmower-path-align", default="true", type=parse_bool,
+                        help="lawnmower-drive zigzag / zigzag_heading: switch PathAlignCritic on "
+                             "(pulls MPPI back onto the plan's line) with cost_weight "
+                             "--lawnmower-path-align-weight. Default: true (V6)")
+    parser.add_argument("--lawnmower-path-align-weight", default=14.0, type=float,
+                        help="with --lawnmower-path-align: PathAlignCritic cost_weight for this run "
+                             "(nav2_param2.yaml's 30 is tuned for path mode). Default: 14 (stock)")
     parser.add_argument("--spiral-centre-x", default=0.0, type=float)
     parser.add_argument("--spiral-centre-y", default=0.0, type=float)
     parser.add_argument("--from-scratch-n-bootstrap", default=5, type=int,
@@ -1067,11 +1107,20 @@ def main():
     # PathAlignCritic keeps MPPI on the line of a path that is not replanned (spiral /
     # lawnmower in path mode); with GP goals (replanned every second) it is off -- 11/06
     # weight-30 trials did worse with it. Live-reconfigurable, persists across reloads.
-    path_align = pattern is not None and pattern["drive"] == "path"
+    # --lawnmower-path-align: also on for the zigzag drives (11/21 V5 test), at its own weight
+    # (the controller_server starts fresh from nav2_param2.yaml with every launch).
+    zigzag_align = (pattern is not None and pattern["drive"] in ZIGZAG_DRIVES
+                    and args.lawnmower_path_align)
+    path_align = pattern is not None and (pattern["drive"] == "path" or zigzag_align)
     try:
+        if zigzag_align:
+            set_controller_param(pose_node, "FollowPath.PathAlignCritic.cost_weight",
+                                 float(args.lawnmower_path_align_weight))
         set_controller_param(pose_node, "FollowPath.PathAlignCritic.enabled", path_align)
         log(f"PathAlignCritic {'enabled' if path_align else 'disabled'} for waypoint_mode "
-            f"{args.waypoint_mode}")
+            f"{args.waypoint_mode}"
+            + (f" (lawnmower_path_align, cost_weight {args.lawnmower_path_align_weight:g})"
+               if zigzag_align else ""))
     except Exception as e:
         log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
             f"in nav2_param2.yaml's critics list?")
@@ -1083,16 +1132,50 @@ def main():
         if pattern["drive"] == "zigzag_heading":
             planner_tols["goal_heading_tolerance_deg"] = (args.lawnmower_heading_tolerance,
                                                           "arrive within it of E-W")
+        if pattern["drive"] == "zigzag_heading" and args.lawnmower_approach_length > 0:
+            planner_tols["goal_approach_length"] = (args.lawnmower_approach_length,
+                                                    "m before the lane end already within the "
+                                                    "arrival tolerance")
         if args.lawnmower_cusp_tolerance >= 0:
             planner_tols["cusp_heading_tolerance_deg"] = (args.lawnmower_cusp_tolerance,
                                                           "gear changes only within it of E-W")
+            if args.lawnmower_cusp_start_tolerance >= 0:
+                planner_tols["cusp_start_heading_tolerance_deg"] = (
+                    args.lawnmower_cusp_start_tolerance,
+                    "reversing where the rover is: within it of E-W")
+        if args.lawnmower_free_start_reversal:
+            planner_tols["free_start_reversal"] = (True, "stopping and reversing the moving rover "
+                                                         "does not count toward the 2-gear-change ban")
+        # 11/21: shorter turning limits around gear changes for the lawnmower, tail after only
+        if args.lawnmower_cusp_tail >= 0:
+            planner_tols["cusp_tail_length"] = (args.lawnmower_cusp_tail,
+                                                "m without a tight turn at a gear change")
+            planner_tols["cusp_tail_before"] = (bool(args.lawnmower_cusp_tail_before),
+                                                "cusp tail also before the gear change")
+        if args.lawnmower_momentum_zone >= 0:
+            planner_tols["momentum_zone_length"] = (args.lawnmower_momentum_zone,
+                                                    "m of gentle turning after a stop / gear change")
+    # values these go back to when the run ends: nav2_param2.yaml's for params it sets, else off
+    planner_restore = {}
+    if planner_tols:
+        import yaml
+        _cfg = yaml.safe_load(open(Path(get_package_share_directory("nav2_stack")) / "config"
+                                   / "nav2_param2.yaml"))["planner_server"]["ros__parameters"].get(
+                                       default_planner_id(), {})
+        for _p, (_v, _w) in planner_tols.items():
+            _off = False if isinstance(_v, bool) else -1.0
+            _y = _cfg.get(_p, _off)
+            planner_restore[_p] = bool(_y) if isinstance(_v, bool) else float(_y)
     heading_tol_set = None
     for pname, (val, what) in planner_tols.items():
         planner = default_planner_id()
         try:
-            set_controller_param(pose_node, f"{planner}.{pname}", float(val), server="planner_server")
+            set_controller_param(pose_node, f"{planner}.{pname}",
+                                 val if isinstance(val, bool) else float(val),
+                                 server="planner_server")
             heading_tol_set = planner
-            log(f"{planner}: {pname}={val:.0f} ({what})")
+            log(f"{planner}: {pname}={val:g} ({what})" if not isinstance(val, bool) else
+                f"{planner}: {pname}={str(val).lower()} ({what})")
         except Exception as e:
             log(f"WARNING: could not set {planner}.{pname} ({e}) -- the planner needs the "
                 f"GridBasedCustom build with it; the zigzag runs without it")
@@ -1267,10 +1350,11 @@ def main():
     finally:
         abort_background_from_scratch(pending)
         for pname in (planner_tols if heading_tol_set is not None else ()):
+            off = planner_restore[pname]
             try:
-                set_controller_param(pose_node, f"{heading_tol_set}.{pname}", -1.0,
+                set_controller_param(pose_node, f"{heading_tol_set}.{pname}", off,
                                      server="planner_server")
-                log(f"{heading_tol_set}: {pname} back to -1 (off)")
+                log(f"{heading_tol_set}: {pname} back to {str(off).lower() if isinstance(off, bool) else f'{off:g}'}")
             except Exception as e:
                 log(f"WARNING: could not reset {heading_tol_set}.{pname} ({e}) -- "
                     f"restart the launch before other runs")
