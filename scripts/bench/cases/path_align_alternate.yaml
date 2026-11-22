@@ -1,0 +1,3 @@
+# 11/22: path_align:=alternate (initial bag off, odd trials on, even off) in GP mode -- short check.
+cases:
+  - {name: pa_alt, n: 2, yaw_scale: 0.25, args: {waypoint_mode: gp, path_align: alternate}}

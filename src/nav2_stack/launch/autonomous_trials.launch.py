@@ -108,6 +108,8 @@ def launch_setup(context):
             '--lawnmower-cusp-tail-before', LaunchConfiguration('lawnmower_cusp_tail_before'),
             '--lawnmower-momentum-zone', LaunchConfiguration('lawnmower_momentum_zone'),
             '--lawnmower-free-start-reversal', LaunchConfiguration('lawnmower_free_start_reversal'),
+            '--path-align', LaunchConfiguration('path_align'),
+            '--path-align-weight', LaunchConfiguration('path_align_weight'),
             '--lawnmower-path-align', LaunchConfiguration('lawnmower_path_align'),
             '--lawnmower-path-align-weight', LaunchConfiguration('lawnmower_path_align_weight'),
         ],
@@ -230,6 +232,11 @@ def generate_launch_description():
                               description='lawnmower_drive zigzag / zigzag_heading: stopping and '
                                           'reversing the moving rover does not count toward the '
                                           '2-gear-change ban (GridBasedCustom free_start_reversal)'),
+        DeclareLaunchArgument('path_align', default_value='auto',
+                              description='PathAlignCritic: auto (as before) | on | off | alternate '
+                                          '(odd trials on, even off; per trial in path_align.csv)'),
+        DeclareLaunchArgument('path_align_weight', default_value='14.0',
+                              description='with path_align on/off/alternate: PathAlignCritic cost_weight'),
         DeclareLaunchArgument('lawnmower_path_align', default_value='true',
                               description='lawnmower_drive zigzag / zigzag_heading: PathAlignCritic '
                                           'on (pulls MPPI back onto the plan); default true (V6)'),

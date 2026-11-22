@@ -962,6 +962,15 @@ def main():
                              "the start of a replan does not count toward the 2nd-gear-change "
                              "ban (still costs motion_reversal_penalty), so a moving rover can "
                              "plan a 3-point turn instead of a long loop. Default: false")
+    parser.add_argument("--path-align", default="auto", choices=["auto", "on", "off", "alternate"],
+                        help="PathAlignCritic for every waypoint mode: auto = as before (on for the "
+                             "spiral / lawnmower path drives, --lawnmower-path-align for the zigzag "
+                             "drives, off for gp); on / off = every trial; alternate = odd trials on, "
+                             "even trials (and the initial bag) off, for an A/B comparison within one "
+                             "run. on/off/alternate use --path-align-weight and are written per trial "
+                             "to <bag-dir>/path_align.csv. Default: auto")
+    parser.add_argument("--path-align-weight", default=14.0, type=float,
+                        help="with --path-align on/off/alternate: PathAlignCritic cost_weight. Default: 14")
     parser.add_argument("--lawnmower-path-align", default="true", type=parse_bool,
                         help="lawnmower-drive zigzag / zigzag_heading: switch PathAlignCritic on "
                              "(pulls MPPI back onto the plan's line) with cost_weight "
@@ -1167,6 +1176,31 @@ def main():
     except Exception as e:
         log(f"WARNING: could not set FollowPath.PathAlignCritic.enabled={path_align} ({e}) -- is it "
             f"in nav2_param2.yaml's critics list?")
+    if args.path_align != "auto":
+        try:
+            set_controller_param(pose_node, "FollowPath.PathAlignCritic.cost_weight",
+                                 float(args.path_align_weight))
+            log(f"path_align {args.path_align}: PathAlignCritic cost_weight {args.path_align_weight:g}")
+        except Exception as e:
+            log(f"WARNING: could not set PathAlignCritic cost_weight ({e})")
+
+    def set_path_align(trial: int, bag_name: str):
+        """--path-align on/off/alternate: PathAlignCritic for this trial (trial 0 = initial bag),
+        recorded in path_align.csv. No-op for auto."""
+        if args.path_align == "auto":
+            return
+        enabled = args.path_align == "on" or (args.path_align == "alternate" and trial % 2 == 1)
+        try:
+            set_controller_param(pose_node, "FollowPath.PathAlignCritic.enabled", enabled)
+            log(f"{bag_name}: PathAlignCritic {'on' if enabled else 'off'} (path_align {args.path_align})")
+        except Exception as e:
+            log(f"WARNING: {bag_name}: could not set PathAlignCritic.enabled={enabled} ({e})")
+        path = bag_dir / "path_align.csv"
+        new = not path.exists()
+        with open(path, "a") as f:
+            if new:
+                f.write("bag,path_align,cost_weight,mode\n")
+            f.write(f"{bag_name},{int(enabled)},{args.path_align_weight:g},{args.path_align}\n")
     # lawnmower zigzag_heading: GridBasedCustom only accepts final headings within the
     # tolerance of the goal yaw (either way); --lawnmower-cusp-tolerance: gear changes only
     # near E-W. Put back to -1 when the run ends.
@@ -1269,6 +1303,7 @@ def main():
                 with open(origin_csv, "w") as f:
                     f.write(f"x,y,z\n{x0:.4f},{y0:.4f},0.0\n"
                             f"{x0 + (x1 - x0) / d:.4f},{y0 + (y1 - y0) / d:.4f},0.0\n")
+            set_path_align(0, "initial_bag")
             with initial_bag_setup(pose_node, pattern is not None, live_mode):
                 for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
                     outcome = run_one_trial(bag_dir, "initial_bag", origin_csv, initial_xy, pose_node,
@@ -1316,6 +1351,7 @@ def main():
             traj_name = f"traj_{i:02d}"
             bag_name = f"bag_{i:02d}"
             log(f"=== trial {i}/{args.n_trajectories} ({traj_name}) ===")
+            set_path_align(i, bag_name)
 
             bag_path = bag_dir / bag_name
             for attempt in range(1, NO_MOVEMENT_MAX_ATTEMPTS + 1):
