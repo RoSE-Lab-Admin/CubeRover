@@ -79,6 +79,7 @@ deactivate
 | `lawnmower_cusp_tail_before` | `false` | With `lawnmower_cusp_tail`: the tail also BEFORE a gear change (fork param `cusp_tail_before`; yaml: true). Off: before a gear change the rover still has momentum, so turning into it is fine. |
 | `lawnmower_momentum_zone` | `0.4` | Zigzag drives: `GridBasedCustom` `momentum_zone_length` for the run (yaml: 0.5) -- gentle turns only, this far after a stop or gear change. `< 0` = keep the yaml value. |
 | `lawnmower_free_start_reversal` | `false` | Zigzag drives: stopping and reversing the MOVING rover at a replan's start does not count toward the 2-gear-change ban (fork param `free_start_reversal`; still pays `motion_reversal_penalty`). Experimental, off: offline it changed almost nothing on its own. |
+| `record_markers` | `false` | Also record every OptiTrack marker of the rigid body (`/FitRosey_passive/marker<N>/pose`, ~1000 msg/s) in the trial bags, to check or redo the rigid body -> `base_link` calibration (`scripts/rover_calibration/marker_calibration.py`, `config/rover_geometry.yaml`). |
 | `spiral_centre_x`, `spiral_centre_y` | `0.0` | `waypoint_mode:=spiral` only: the spiral's centre. (-1.0, 0.2) leaves the most room in the current arena. |
 | `start_rviz` | `true` | Launches `rviz2` alongside everything else. Set to `false` to skip it. |
 

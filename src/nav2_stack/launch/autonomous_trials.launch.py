@@ -102,6 +102,7 @@ def launch_setup(context):
             '--lawnmower-cusp-tolerance', LaunchConfiguration('lawnmower_cusp_tolerance'),
             '--lawnmower-cusp-start-tolerance', LaunchConfiguration('lawnmower_cusp_start_tolerance'),
             '--lawnmower-approach-length', LaunchConfiguration('lawnmower_approach_length'),
+            '--record-markers', LaunchConfiguration('record_markers'),
             '--lawnmower-cusp-tail', LaunchConfiguration('lawnmower_cusp_tail'),
             '--lawnmower-cusp-tail-before', LaunchConfiguration('lawnmower_cusp_tail_before'),
             '--lawnmower-momentum-zone', LaunchConfiguration('lawnmower_momentum_zone'),
@@ -206,6 +207,9 @@ def generate_launch_description():
                               description='lawnmower_drive zigzag_heading: the last this many m '
                                           'of every plan stay within lawnmower_heading_tolerance; '
                                           '<= 0 = off'),
+        DeclareLaunchArgument('record_markers', default_value='false',
+                              description='also record every OptiTrack marker of the rigid body in '
+                                          'the trial bags (rigid body -> base_link calibration check)'),
         DeclareLaunchArgument('lawnmower_cusp_tail', default_value='0.25',
                               description='lawnmower_drive zigzag / zigzag_heading: GridBasedCustom '
                                           'cusp_tail_length (m) for the run; < 0 = keep the yaml value'),

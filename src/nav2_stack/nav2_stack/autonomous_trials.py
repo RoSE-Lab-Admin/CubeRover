@@ -70,6 +70,11 @@ BAG_TOPICS = [
     "/roseybot_base_controller/cmd_vel_out", "/plan", "/optimal_trajectory",
     "/optimal_trajectory_model", "/imu/data", "/imu/rpy",
 ]
+# --record-markers: also every OptiTrack marker of the rigid body (natnet pub_rigid_body_marker,
+# ~120 Hz x 8 points = ~1000 msg/s, so off by default): lets the rigid body -> base_link calibration
+# (scripts/rover_calibration) be checked / redone from a trial, and shows mislabelled or moved markers
+MARKER_TOPIC_REGEX = r"/FitRosey_passive/marker[0-9]+/pose"
+RECORD_MARKERS = False   # set from --record-markers in main()
 
 
 def log(msg: str):
@@ -325,7 +330,9 @@ def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_no
     route: see wait_for_goal."""
     bag_path = bag_dir / bag_name
     trial_id = f"{label}@{int(time.time())}"  # unique per attempt (see PoseWatcher._goal_result_cb)
-    bag_proc = start_process(["ros2", "bag", "record", *BAG_TOPICS, "-o", str(bag_path)])
+    bag_proc = start_process(["ros2", "bag", "record", *BAG_TOPICS,
+                              *(["-e", MARKER_TOPIC_REGEX] if RECORD_MARKERS else []),
+                              "-o", str(bag_path)])
     time.sleep(BAG_START_DELAY_S)
 
     wp_proc = start_process([
@@ -928,6 +935,9 @@ def main():
                         help="lawnmower-drive zigzag_heading: the last this many m of every plan "
                              "stay within --lawnmower-heading-tolerance (the goal checker stops "
                              "the rover ~0.5 m short of the lane end). Default: 0.5; <= 0: off")
+    parser.add_argument("--record-markers", default="false", type=parse_bool,
+                        help="also record every OptiTrack marker of the rigid body in the trial bags "
+                             "(calibration check, ~1000 msg/s). Default: false")
     parser.add_argument("--lawnmower-cusp-tail", default=0.25, type=float,
                         help="lawnmower-drive zigzag / zigzag_heading: GridBasedCustom cusp_tail_length "
                              "(m) for the run; < 0: keep nav2_param2.yaml's. Default: 0.25 (11/21)")
@@ -963,6 +973,8 @@ def main():
     # plain argparse sees argv, or it chokes on --ros-args as unrecognized.
     import rclpy.utilities
     args = parser.parse_args(rclpy.utilities.remove_ros_args(sys.argv)[1:])
+    global RECORD_MARKERS
+    RECORD_MARKERS = args.record_markers
 
     bag_dir = args.bag_dir
     bag_dir.mkdir(parents=True, exist_ok=True)
