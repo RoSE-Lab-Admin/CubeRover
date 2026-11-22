@@ -159,10 +159,10 @@ controller_server:
         cost_power: 1
         threshold_to_consider: 0.3 # distance between robot and goal to stop considering path following and let goal critic take over
         offset_from_furthest: 20 # number of path points after furthest one any trajectory achieves to drive path tracking relative to
-      PathAlignCritic: # keeps trajectories on the path laterally: mean distance of each trajectory to the path point the same distance along the path (stock Nav2 example values). Off here; autonomous_trials (path_align auto) turns it on for gp (weight 14, since 11/22), lawnmower zigzag (14) and spiral/lawnmower path drives (this weight)
-        enabled: false # on at runtime: ros2 param set /controller_server FollowPath.PathAlignCritic.enabled true
+      PathAlignCritic: # keeps trajectories on the path laterally: mean distance of each trajectory to the path point the same distance along the path (stock Nav2 example values). On at the stock 14 since 11/22 (11/22 A/B with GP goals: no clear tracking difference, ~5% slower; on everywhere keeps GP and lawnmower runs comparable). autonomous_trials (path_align auto) sets it per mode: gp / lawnmower zigzag 14, spiral / lawnmower path drives 30 (--path-drive-align-weight), spiral waypoints off
+        enabled: true # live: ros2 param set /controller_server FollowPath.PathAlignCritic.enabled false
         cost_power: 1
-        cost_weight: 30.0 # stock 14; 10/30 offline sim, spiral leg (r 1.8 m) driven forward: 14 -> 35 cm inside the spiral on average, 30 -> 12 cm (reverse: 6 cm already at 14)
+        cost_weight: 14.0 # stock; path drives use 30 (autonomous_trials): 10/30 offline sim, spiral leg (r 1.8 m) driven forward: 14 -> 35 cm inside the spiral on average, 30 -> 12 cm (reverse: 6 cm already at 14)
         max_path_occupancy_ratio: 0.05 # skip when obstacles cover more than this share of the path within reach
         trajectory_point_step: 4
         threshold_to_consider: 0.5 # off within this distance of the goal

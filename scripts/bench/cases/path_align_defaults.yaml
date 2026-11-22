@@ -1,0 +1,7 @@
+# 11/22: nav2_param2.yaml has PathAlignCritic on at 14; autonomous_trials (path_align auto) keeps gp /
+# lawnmower zigzag at 14 and sets the spiral / lawnmower path drives to 30 (--path-drive-align-weight).
+defaults:
+  yaw_scale: 0.7
+cases:
+  - {name: pa_gp, n: 1, args: {waypoint_mode: gp}}
+  - {name: pa_spiral_path, n: 1, args: {waypoint_mode: spiral}}

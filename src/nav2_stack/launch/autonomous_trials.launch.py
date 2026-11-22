@@ -110,6 +110,7 @@ def launch_setup(context):
             '--lawnmower-free-start-reversal', LaunchConfiguration('lawnmower_free_start_reversal'),
             '--path-align', LaunchConfiguration('path_align'),
             '--path-align-weight', LaunchConfiguration('path_align_weight'),
+            '--path-drive-align-weight', LaunchConfiguration('path_drive_align_weight'),
             '--lawnmower-path-align', LaunchConfiguration('lawnmower_path_align'),
             '--lawnmower-path-align-weight', LaunchConfiguration('lawnmower_path_align_weight'),
         ],
@@ -238,6 +239,8 @@ def generate_launch_description():
                                           'per trial in path_align.csv'),
         DeclareLaunchArgument('path_align_weight', default_value='14.0',
                               description='PathAlignCritic cost_weight for gp trials (auto) and path_align on/off/alternate'),
+        DeclareLaunchArgument('path_drive_align_weight', default_value='30.0',
+                              description='PathAlignCritic cost_weight for the spiral / lawnmower path drives (auto)'),
         DeclareLaunchArgument('lawnmower_path_align', default_value='true',
                               description='lawnmower_drive zigzag / zigzag_heading: PathAlignCritic '
                                           'on (pulls MPPI back onto the plan); default true (V6)'),
