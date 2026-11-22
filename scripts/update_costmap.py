@@ -129,6 +129,14 @@ DEFAULT_OBSTACLES = [
     _fit_circle(CRATER_W_RIM),    # CraterW rim: (-3.677, 0.897) r 1.037
     (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across
 ]
+# Quadrants closed as obstacles: (x0, y0) = everything with x >= x0 and y >= y0 is occupied.
+# 11/22: the NE pocket between CraterNE and the north wall, closed from the crater's westernmost
+# point (cx - r, cy) so the north wall meets one straight wall down to the crater at 90 deg
+# (kinematics run 11/22, bag_40: stalled 78 s at the pocket mouth, plans reversing into it).
+_cne = DEFAULT_OBSTACLES[0]
+DEFAULT_CLOSED_QUADRANTS = [
+    (round(_cne[0] - _cne[2], 4), _cne[1]),   # NE pocket: x >= 1.422, y >= 1.444
+]
 # Every arena edge is moved this far towards the inside before rasterizing (10/28/26:
 # 7 in tighter than the surveyed edges). --inset overrides it, 0 = the surveyed polygon.
 DEFAULT_INSET = 7 * 0.0254
@@ -186,11 +194,12 @@ def inset_polygon(corners, d):
     return out
 
 
-def build_pgm(corners, obstacles):
+def build_pgm(corners, obstacles, closed_quadrants=()):
     """
     Returns a (HEIGHT_PX, WIDTH_PX) uint8 array.
       254 = free space
-        0 = occupied (outside arena or inside an obstacle circle)
+        0 = occupied (outside arena, inside an obstacle circle, or in a closed quadrant
+            x >= x0 and y >= y0)
     A pixel is classified by its centre (until 10/27/26 by its lower-left corner,
     which shifted the free area half a pixel towards +x/+y).
     """
@@ -200,7 +209,8 @@ def build_pgm(corners, obstacles):
         for col in range(WIDTH_PX):
             wx, wy = px_to_world(col, row)
             if point_in_polygon(wx, wy, corners) and \
-                    not any(math.hypot(wx - ox, wy - oy) <= r for ox, oy, r in obstacles):
+                    not any(math.hypot(wx - ox, wy - oy) <= r for ox, oy, r in obstacles) and \
+                    not any(wx >= qx and wy >= qy for qx, qy in closed_quadrants):
                 pixels[row, col] = 254
 
     return pixels
@@ -381,7 +391,7 @@ def main():
     )
     ap.add_argument(
         "--no-default-obstacles", action="store_true",
-        help="Leave out the default obstacles (the craters)"
+        help="Leave out the default obstacles (the craters and the closed NE pocket)"
     )
     ap.add_argument(
         "--out-map", default=str(MAP_PGM),
@@ -406,6 +416,7 @@ def main():
         else [str(i + 1) for i in range(len(corners))]
     obstacles = ([] if args.no_default_obstacles else list(DEFAULT_OBSTACLES)) + \
         [tuple(o) for o in args.obstacle]
+    closed = [] if args.no_default_obstacles else list(DEFAULT_CLOSED_QUADRANTS)
 
     print(f"\n[arena] Corners:")
     for label, (x, y) in zip(labels, corners):
@@ -416,8 +427,11 @@ def main():
         for ox, oy, r in obstacles:
             print(f"  ({ox:+.3f}, {oy:+.3f})  r={r} m")
 
+    for qx, qy in closed:
+        print(f"[obs]  Closed quadrant: x >= {qx:+.3f}, y >= {qy:+.3f}")
+
     print()
-    pixels = build_pgm(corners, obstacles)
+    pixels = build_pgm(corners, obstacles, closed)
     save_pgm(pixels, args.out_map)
 
     if not args.no_preview:
