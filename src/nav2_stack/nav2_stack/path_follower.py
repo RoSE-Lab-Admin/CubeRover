@@ -34,8 +34,8 @@ class PathFollower(Node):
 
         # parameters
         self.declare_parameter('use_opti', True)
-        self.declare_parameter('opti_topic', '/FitRosey_passive/pose')
-        self.declare_parameter('robot_frame', 'FitRosey_passive')
+        self.declare_parameter('opti_topic', '/rover/pose')     # rover centre (rover_pose node)
+        self.declare_parameter('robot_frame', 'base_link')
         # Re-send the current goal mid-drive when the arc heading drifts. Off by
         # default: every re-send forces a fresh replan from the current pose,
         # which made the rover flip between path shapes instead of committing

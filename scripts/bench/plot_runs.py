@@ -26,6 +26,9 @@ from rclpy.serialization import deserialize_message
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src" / "nav2_stack"))
 from nav2_stack.spiral import Clearance  # noqa: E402
+from nav2_stack import rover_geometry  # noqa: E402
+
+GEO = rover_geometry.load(REPO / "src" / "nav2_stack" / "config" / "rover_geometry.yaml")
 
 MAP = Clearance(REPO / "src" / "nav2_stack" / "maps" / "map.yaml")
 FWD, REV = "#2a78d6", "#eb6834"
@@ -55,7 +58,7 @@ def read(bag):
         t, d, ts = r.read_next(); ts *= 1e-9
         if t == "/FitRosey_passive/pose":
             m = deserialize_message(d, PoseStamped); q = m.pose.orientation
-            P.append((ts, m.pose.position.x, m.pose.position.y, 2 * math.atan2(q.z, q.w)))
+            P.append((ts, m.pose.position.x, m.pose.position.y, q.x, q.y, q.z, q.w))
         elif t == "/roseybot_base_controller/cmd_vel_out":
             m = deserialize_message(d, TwistStamped); C.append((ts, m.twist.linear.x))
         else:
@@ -63,7 +66,12 @@ def read(bag):
             if m.poses:
                 PL.append(np.array([[p.pose.position.x, p.pose.position.y,
                                      2 * math.atan2(p.pose.orientation.z, p.pose.orientation.w)] for p in m.poses]))
-    return np.array(P), np.array(C), PL
+    P = np.array(P)
+    if len(P):
+        # rigid body (rear-right marker) -> rover base_link: true position and heading
+        pos, rot = rover_geometry.base_link_poses(GEO, np.column_stack([P[:, 1:3], np.zeros(len(P))]), P[:, 3:7])
+        P = np.column_stack([P[:, 0], pos[:, :2], rover_geometry.yaw_pitch_roll(rot)[0]])
+    return P, np.array(C), PL
 
 
 def goal_of(bag_dir, bag):

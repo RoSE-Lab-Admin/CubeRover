@@ -103,26 +103,30 @@ def _radius_to(cx, cy, px, py):
     return math.hypot(px - cx, py - cy) - ROVER_REACH
 
 
-def _fit_rim(points):
-    """(cx, cy, r) of the least-squares circle through rover-centre poses taken with the rover
-    at the crater rim, shrunk by ROVER_REACH."""
+def _fit_circle(points):
+    """(cx, cy, r) of the least-squares circle through the points."""
     p = np.asarray(points, dtype=float)
     a = np.c_[2.0 * p, np.ones(len(p))]
     cx, cy, c = np.linalg.lstsq(a, (p ** 2).sum(axis=1), rcond=None)[0]
-    return round(float(cx), 4), round(float(cy), 4), round(math.sqrt(c + cx * cx + cy * cy) - ROVER_REACH, 3)
+    return round(float(cx), 4), round(float(cy), 4), round(math.sqrt(c + cx * cx + cy * cy), 3)
 
 
-# 11/21: CraterW and CraterNE from 4 rover (OptiTrack) poses each, rover centre at the crater
-# rim: circle fitted through them, minus ROVER_REACH. All poses are on the arena side, so the
-# fitted centres sit 0.6 m (W) / 0.3 m (NE) off the 11/17 markers; the strip this frees between
-# CraterW and the W wall is too narrow for the rover (<= 0.2 m clearance).
-# Before: CraterNE (2.6848, 1.4989) r 0.82, CraterW (-3.7534, 0.9315) r 1.10 (11/18).
-CRATER_W_RIM = [(-2.2967, 1.5427), (-2.1914, 1.1020), (-2.9446, 0.1225), (-2.9501, 1.9998)]
-CRATER_NE_RIM = [(1.6570, 2.3528), (1.4244, 1.4123), (1.7848, 0.5472), (2.4781, 0.5143)]
+# 11/22: CraterW and CraterNE = the RIM itself: the rover driven nose-first until its front wheels
+# reached the rim (3 stops W, 4 NE; ~/AL_scripts/crater_rims_11_22), front-wheel contact points from
+# the OptiTrack pose through config/rover_geometry.yaml (rigid body -> base_link -> wheel contacts),
+# circle fitted through them (residuals <= 5 cm). Not shrunk: the planner's footprint (centred on
+# base_link since 11/22) keeps the body out, and the lawnmower plans its lanes into the inflation
+# instead (lawnmower_clearance). Earlier: 11/21 CraterNE (2.376, 1.523) r 0.655 / CraterW
+# (-3.140, 1.063) r 0.559 from rigid-body (rear-right marker) poses minus ROVER_REACH; 11/18
+# (2.6848, 1.4989) r 0.82 / (-3.7534, 0.9315) r 1.10.
+CRATER_W_RIM = [(-2.7501, 0.4731), (-2.6787, 0.8012), (-3.2678, -0.0534), (-2.9688, 0.0996),
+                (-2.8341, 1.5893), (-3.1293, 1.7371)]
+CRATER_NE_RIM = [(1.4336, 1.7144), (1.4407, 1.3779), (2.145, 2.4195), (1.8302, 2.3022),
+                 (1.7852, 0.6461), (2.0654, 0.4717), (2.652, 0.4326), (2.9852, 0.4792)]
 
 DEFAULT_OBSTACLES = [
-    _fit_rim(CRATER_NE_RIM),   # CraterNE: (2.376, 1.523) r 0.65
-    _fit_rim(CRATER_W_RIM),    # CraterW: (-3.140, 1.063) r 0.56
+    _fit_circle(CRATER_NE_RIM),   # CraterNE rim: (2.480, 1.444) r 1.058
+    _fit_circle(CRATER_W_RIM),    # CraterW rim: (-3.677, 0.897) r 1.037
     (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across
 ]
 # Every arena edge is moved this far towards the inside before rasterizing (10/28/26:

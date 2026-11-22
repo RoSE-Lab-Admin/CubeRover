@@ -1,0 +1,6 @@
+# Phase 1 + true crater rims (11/22): base_link as the robot, craters at the measured rim, lawnmower
+# lanes 0.6 m from obstacles (lawnmower_clearance), realistic turn rate (yaw_scale 0.25).
+defaults:
+  args: {waypoint_mode: lawnmower}
+cases:
+  - {name: rims_six, n: 6, yaw_scale: 0.25}

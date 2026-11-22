@@ -14,14 +14,15 @@ import os
 # rover_type selects which OptiTrack asset publishes the rover pose.
 #
 #   old_rosey  — original CubeRover hardware  (/CubeRover_V1/pose)
-#   fit_rosey  — new FitRosey hardware        (/FitRosey_passive/pose)
+#   fit_rosey  — new FitRosey hardware        (/rover/pose = base_link from /FitRosey_passive/pose)
 #
 # Usage:
 #   ros2 launch nav2_stack waypoint.launch.py rover_type:=fit_rosey
 # ---------------------------------------------------------------------------
 ROVER_CONFIGS = {
     'old_rosey': {'opti_topic': '/CubeRover_V1/pose', 'robot_frame': 'CubeRover_V1'},
-    'fit_rosey': {'opti_topic': '/FitRosey_passive/pose',  'robot_frame': 'FitRosey_passive'},
+    # rover centre (rover_pose node, config/rover_geometry.yaml), not the rigid body's rear-right marker
+    'fit_rosey': {'opti_topic': '/rover/pose',  'robot_frame': 'base_link'},
 }
 
 # csv use:

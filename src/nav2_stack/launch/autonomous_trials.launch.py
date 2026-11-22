@@ -102,6 +102,7 @@ def launch_setup(context):
             '--lawnmower-cusp-tolerance', LaunchConfiguration('lawnmower_cusp_tolerance'),
             '--lawnmower-cusp-start-tolerance', LaunchConfiguration('lawnmower_cusp_start_tolerance'),
             '--lawnmower-approach-length', LaunchConfiguration('lawnmower_approach_length'),
+            '--lawnmower-clearance', LaunchConfiguration('lawnmower_clearance'),
             '--record-markers', LaunchConfiguration('record_markers'),
             '--lawnmower-cusp-tail', LaunchConfiguration('lawnmower_cusp_tail'),
             '--lawnmower-cusp-tail-before', LaunchConfiguration('lawnmower_cusp_tail_before'),
@@ -207,6 +208,10 @@ def generate_launch_description():
                               description='lawnmower_drive zigzag_heading: the last this many m '
                                           'of every plan stay within lawnmower_heading_tolerance; '
                                           '<= 0 = off'),
+        DeclareLaunchArgument('lawnmower_clearance', default_value='0.6',
+                              description='waypoint_mode lawnmower: lanes keep at least this far (m) '
+                                          'from walls and craters (lane ends may lie in the 0.75 m '
+                                          'inflation)'),
         DeclareLaunchArgument('record_markers', default_value='false',
                               description='also record every OptiTrack marker of the rigid body in '
                                           'the trial bags (rigid body -> base_link calibration check)'),

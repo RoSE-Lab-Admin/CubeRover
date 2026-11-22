@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Kinematic stand-in for the rover + mocap, for offline MPPI tests.
 
-Integrates the pose from /cmd_vel (TwistStamped, as the base controller gets
-it) and publishes what the live stack sees from mocap and path_follower:
-  - TF world -> FitRosey_passive
-  - /FitRosey_passive/pose                       (planner gear seeding)
-  - /odometry/filtered                      (body-frame twist from the last 5
-                                             poses, like path_follower.vel_interp)
+Integrates the ROVER (base_link: rover centre, true heading) from /cmd_vel (TwistStamped, as
+the base controller gets it) and publishes what the live stack sees from mocap and path_follower:
+  - TF world -> FitRosey_passive and /FitRosey_passive/pose: the OptiTrack rigid body, i.e. the
+    rover pose moved to the rear-right marker and rotated ~6 deg (config/rover_geometry.yaml,
+    geometry_offset:=true, default) -- the rover_pose node turns it back into base_link /
+    /rover/pose, as live. geometry_offset:=false: the rigid body IS the rover (the old sim).
+  - /odometry/filtered                      (base_link twist from the last 5 poses, like
+                                             path_follower.vel_interp on /rover/pose)
   - /roseybot_base_controller/cmd_vel_out   (the command actually applied)
+The start pose and /sim/reset_pose are rover (base_link) poses.
 
 Base controller rate limiter (on by default, like the real diff_drive_controller
 with the Pi's live config): every 1/limit_rate s the applied command moves
@@ -22,6 +25,7 @@ Reset the pose by publishing a PoseStamped on /sim/reset_pose.
 import collections
 import math
 
+import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseStamped, TransformStamped, TwistStamped
 from nav_msgs.msg import Odometry
@@ -45,6 +49,12 @@ class RoverSim(Node):
         self.declare_parameter('limit_rate', 10.0)       # Hz, controller_manager update_rate
         self.declare_parameter('accel_vx', 0.5)          # m/s^2, linear.x.max_acceleration (Pi)
         self.declare_parameter('accel_wz', 0.211666666667)  # rad/s^2, angular.z.max_acceleration
+        self.declare_parameter('geometry_offset', True)  # publish the rigid body offset from the rover
+        self.declare_parameter('base_height', 0.2644)    # m, base_link above the ground (URDF)
+        self.geo = None
+        if self.get_parameter('geometry_offset').value:
+            from nav2_stack import rover_geometry
+            self.geo = rover_geometry.load()
         self.applied = (0.0, 0.0)
         self.next_limit = None
         x, y, yaw = self.get_parameter('start').value
@@ -112,22 +122,35 @@ class RoverSim(Node):
         self.state = [x, y, yaw]
         self.publish(now, applied_vx, applied_wz)   # cmd_vel_out = applied command, before the rover's response
 
+    def rigid_body(self, x, y, yaw):
+        """OptiTrack rigid-body pose (position, quaternion xyzw) for the rover pose (x, y, yaw)."""
+        if self.geo is None:
+            return (x, y, 0.0), yaw_quat(yaw)
+        c, s = math.cos(yaw), math.sin(yaw)
+        rot_bl = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+        rot_rb = rot_bl @ self.geo["R"].T
+        pos_rb = np.array([x, y, self.get_parameter('base_height').value]) - rot_rb @ self.geo["t"]
+        from scipy.spatial.transform import Rotation
+        return tuple(float(v) for v in pos_rb), tuple(float(v) for v in Rotation.from_matrix(rot_rb).as_quat())
+
     def publish(self, now, vx_applied, wz_applied):
         x, y, yaw = self.state
         stamp = now.to_msg()
-        qx, qy, qz, qw = yaw_quat(yaw)
+        (px, py, pz), (qx, qy, qz, qw) = self.rigid_body(x, y, yaw)
         t = TransformStamped()
         t.header.stamp = stamp
         t.header.frame_id = 'world'
         t.child_frame_id = self.frame
-        t.transform.translation.x, t.transform.translation.y = x, y
-        t.transform.rotation.z, t.transform.rotation.w = qz, qw
+        t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = px, py, pz
+        (t.transform.rotation.x, t.transform.rotation.y,
+         t.transform.rotation.z, t.transform.rotation.w) = qx, qy, qz, qw
         self.tf.sendTransform(t)
 
         p = PoseStamped()
         p.header.stamp = stamp
         p.header.frame_id = 'world'
-        p.pose.position.x, p.pose.position.y = x, y
+        p.pose.position.x, p.pose.position.y, p.pose.position.z = px, py, pz
+        p.pose.orientation.x, p.pose.orientation.y = qx, qy
         p.pose.orientation.z, p.pose.orientation.w = qz, qw
         self.pose_pub.publish(p)
 
@@ -137,8 +160,10 @@ class RoverSim(Node):
         o = Odometry()
         o.header.stamp = stamp
         o.header.frame_id = 'odom'
-        o.child_frame_id = self.frame
-        o.pose.pose = p.pose
+        o.child_frame_id = 'base_link' if self.geo is not None else self.frame
+        o.pose.pose.position.x, o.pose.pose.position.y = x, y
+        bq = yaw_quat(yaw)
+        o.pose.pose.orientation.z, o.pose.pose.orientation.w = bq[2], bq[3]
         if len(self.hist) == self.hist.maxlen:
             t0, x0, y0, h0 = self.hist[0]
             t1, x1, y1, h1 = self.hist[-1]
@@ -152,7 +177,7 @@ class RoverSim(Node):
 
         out = TwistStamped()
         out.header.stamp = stamp
-        out.header.frame_id = self.frame
+        out.header.frame_id = 'base_link' if self.geo is not None else self.frame
         out.twist.linear.x, out.twist.angular.z = vx_applied, wz_applied
         self.out_pub.publish(out)
 

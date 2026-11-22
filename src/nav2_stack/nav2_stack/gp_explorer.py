@@ -281,14 +281,14 @@ class GPExplorer(Node):
         super().__init__('gp_explorer')
         self._ac = ActionClient(self, ComputePathToPose, 'compute_path_to_pose')
         self._pose = None
-        self.create_subscription(PoseStamped, POSE_TOPIC, self._pose_cb, 10)
+        self.create_subscription(PoseStamped, '/rover/pose', self._pose_cb, 10)   # rover centre
 
     def _pose_cb(self, msg: PoseStamped):
         self._pose = msg
 
     def get_current_pose(self) -> tuple[float, float, float]:
         """Block until one pose message arrives. Returns (x, y, yaw_rad)."""
-        print(f'  waiting for pose on {POSE_TOPIC} …', flush=True)
+        print('  waiting for pose on /rover/pose …', flush=True)
         while self._pose is None:
             rclpy.spin_once(self, timeout_sec=0.1)
         p = self._pose.pose

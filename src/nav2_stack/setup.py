@@ -35,6 +35,7 @@ setup(
             'pose_pub = nav2_stack.pose_pub:main',
             'autonomous_trials = nav2_stack.autonomous_trials:main',
             'safety_watchdog = nav2_stack.safety_watchdog:main',
+            'rover_pose = nav2_stack.rover_pose:main',
         ],
     },
 )

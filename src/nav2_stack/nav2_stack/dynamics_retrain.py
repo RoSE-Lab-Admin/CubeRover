@@ -163,6 +163,22 @@ CLOCK_OFFSET_TOL_S = 1.0
 
 
 # ── Quaternion / binning helpers (ported verbatim) ─────────────────────────────
+def to_base_link(pose: np.ndarray) -> np.ndarray:
+    """(N, 7) [t, x, y, qx, qy, qz, qw] of the OptiTrack rigid body -> the same for base_link (the
+    rover centre and its true heading / attitude; config/rover_geometry.yaml). The rigid body's
+    origin is the rear-right marker and its axes are rotated ~6 deg against the rover, so training
+    in its frame showed a constant ~10 cm/m sideways motion the plain MLP cannot represent."""
+    from scipy.spatial.transform import Rotation as Rot
+    from nav2_stack import rover_geometry
+    geo = rover_geometry.load()
+    pos = np.column_stack([pose[:, 1], pose[:, 2], np.zeros(len(pose))])   # z does not affect x, y
+    pos_bl, rot_bl = rover_geometry.base_link_poses(geo, pos, pose[:, 3:7])
+    out = pose.copy()
+    out[:, 1:3] = pos_bl[:, :2]
+    out[:, 3:7] = Rot.from_matrix(rot_bl).as_quat()
+    return out
+
+
 def _quat_to_yaw(qx, qy, qz, qw):
     return np.arctan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy**2 + qz**2))
 
@@ -319,6 +335,8 @@ def extract_trajectory(bag_path: Path, typestore, outcome: Optional[str] = None,
         return None, failed
 
     pose = np.array(sorted(pose_rows, key=lambda r: r[0]))
+    if pose_topic == POSE_TOPIC:
+        pose = to_base_link(pose)
     cmdout = np.array(sorted(cmdout_rows, key=lambda r: r[0]))
     pt = pose[:, 0]
     ct = cmdout[:, 0]

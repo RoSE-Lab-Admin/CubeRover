@@ -1,0 +1,8 @@
+# Phase 1 (11/22): the rover frame (base_link) is the robot. rover_sim moves the rover and publishes the
+# OptiTrack rigid body with the calibrated offset; rover_pose turns it back into base_link / /rover/pose.
+# Lawnmower V6 defaults. yaw_scale 0.25 = the live rover's measured turn rate (11/21 V5b-V7).
+defaults:
+  args: {waypoint_mode: lawnmower}
+cases:
+  - {name: p1_yaw070, n: 3, yaw_scale: 0.7}
+  - {name: p1_yaw025, n: 3, yaw_scale: 0.25}

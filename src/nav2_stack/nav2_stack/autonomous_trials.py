@@ -66,7 +66,7 @@ NO_MOVEMENT_MAX_ATTEMPTS = 3  # retries for a trial that recorded a "no_movement
 BAG_START_DELAY_S = 2.0     # let `ros2 bag record` actually start before commands flow
 
 BAG_TOPICS = [
-    "/FitRosey_passive/pose", "/dynamic_joint_states", "/cmd_vel",
+    "/FitRosey_passive/pose", "/rover/pose", "/dynamic_joint_states", "/cmd_vel",
     "/roseybot_base_controller/cmd_vel_out", "/plan", "/optimal_trajectory",
     "/optimal_trajectory_model", "/imu/data", "/imu/rpy",
 ]
@@ -840,8 +840,9 @@ def main():
                         help="Directory bags are stored in and loaded from")
     parser.add_argument("--n-trajectories", default=25, type=int,
                         help="Number of trials to run (default: 25)")
-    parser.add_argument("--opti-topic", default="/FitRosey_passive/pose",
-                        help="Ground-truth pose topic (default: /FitRosey_passive/pose)")
+    parser.add_argument("--opti-topic", default="/rover/pose",
+                        help="Ground-truth rover pose topic (default: /rover/pose = base_link, the rover "
+                             "centre, from the rover_pose node)")
     parser.add_argument("--retrain-dynamics", default="false", type=parse_bool,
                         help="Retrain the deployed dynamics model after every trial "
                              "(default: false)")
@@ -935,6 +936,11 @@ def main():
                         help="lawnmower-drive zigzag_heading: the last this many m of every plan "
                              "stay within --lawnmower-heading-tolerance (the goal checker stops "
                              "the rover ~0.5 m short of the lane end). Default: 0.5; <= 0: off")
+    parser.add_argument("--lawnmower-clearance", default=0.6, type=float,
+                        help="waypoint-mode lawnmower: lanes keep at least this far (m) from walls and "
+                             "craters in the map. 0.6 (11/22) plans the lane ends into the 0.75 m "
+                             "inflation, so the lanes between the craters fit with the true crater "
+                             "rims. Default: 0.6")
     parser.add_argument("--record-markers", default="false", type=parse_bool,
                         help="also record every OptiTrack marker of the rigid body in the trial bags "
                              "(calibration check, ~1000 msg/s). Default: false")
@@ -1098,11 +1104,13 @@ def main():
         map_yaml = Path(get_package_share_directory("nav2_stack")) / "maps" / "map.yaml"
         clearance = Clearance(map_yaml)
         if args.lawnmower_drive == "path":
-            legs = lawnmower_legs(clearance, args.n_trajectories, args.lawnmower_spacing)
+            legs = lawnmower_legs(clearance, args.n_trajectories, args.lawnmower_spacing,
+                                  args.lawnmower_clearance)
             start = None
         else:
-            legs = zigzag_legs(clearance, args.n_trajectories, args.lawnmower_spacing)
-            start = zigzag_start(clearance, args.lawnmower_spacing)
+            legs = zigzag_legs(clearance, args.n_trajectories, args.lawnmower_spacing,
+                               args.lawnmower_clearance)
+            start = zigzag_start(clearance, args.lawnmower_spacing, args.lawnmower_clearance)
         if not legs:
             sys.exit(f"FATAL: fewer than 2 lawnmower lanes {args.lawnmower_spacing} m apart fit the map")
         pattern = {"name": "lawnmower", "legs": legs, "drive": args.lawnmower_drive, "start": start}

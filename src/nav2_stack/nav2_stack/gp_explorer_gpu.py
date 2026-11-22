@@ -42,6 +42,10 @@ from scipy.ndimage import distance_transform_edt
 from scipy.spatial.transform import Rotation
 from rosbags.rosbag2 import Reader
 from rosbags.typesys import Stores, get_typestore
+try:                                    # run as a script next to rover_geometry.py
+    import rover_geometry
+except ImportError:                     # imported from the package
+    from nav2_stack import rover_geometry
 
 
 # ── Map config — must match map.yaml ──────────────────────────────────────────
@@ -58,6 +62,10 @@ PLANNER_ID   = 'GridBased'  # fallback only -- see GPExplorer._resolve_planner_i
 POSE_TOPIC         = '/FitRosey_passive/pose'
 # bags before 2026-10-27 recorded the rigid body under its old Motive name
 POSE_TOPICS        = (POSE_TOPIC, '/FitRosey_V1/pose')
+# the rover's current pose (base_link: rover centre, true heading) -- rover_pose node. Bags are
+# read from the rigid-body topic above and converted to base_link (rover_geometry), so old and new
+# bags give the same positions.
+LIVE_POSE_TOPIC    = '/rover/pose'
 N_REF_POINTS       = 200
 MAX_PATH_PTS       = 100
 # GP training data: one point per GP_CELL x GP_CELL m grid cell (mean x, y, z
@@ -199,6 +207,16 @@ def batch_cohn_alc(model: TerrainGP,
 
 # ── Bag loading ────────────────────────────────────────────────────────────────
 
+_GEOMETRY = None
+
+
+def _geometry():
+    global _GEOMETRY
+    if _GEOMETRY is None:
+        _GEOMETRY = rover_geometry.load()
+    return _GEOMETRY
+
+
 def trim_stationary(X: np.ndarray, z: np.ndarray):
     if len(X) < 2:
         return X, z
@@ -236,14 +254,24 @@ def load_bags(bag_dir: Path, bags=None):
                 print(f'    skipping — none of {POSE_TOPICS} present')
                 continue
             conns = [c for c in reader.connections if c.topic == pose_topic]
+            bag_q = []
             for conn, _, rawdata in reader.messages(connections=conns):
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
                 bag_X.append([msg.pose.position.x, msg.pose.position.y])
                 bag_z.append(msg.pose.position.z)
+                o = msg.pose.orientation
+                bag_q.append([o.x, o.y, o.z, o.w])
         if not bag_X:
             continue
         bag_X = np.array(bag_X, dtype=float)
         bag_z = np.array(bag_z, dtype=float)
+        if pose_topic == POSE_TOPIC:
+            # rigid body (rear-right marker) -> base_link (rover centre), config/rover_geometry.yaml
+            pos_bl, _ = rover_geometry.base_link_poses(
+                _geometry(), np.column_stack([bag_X, bag_z]), np.array(bag_q, dtype=float))
+            bag_X, bag_z = pos_bl[:, :2], pos_bl[:, 2]
+        else:
+            print(f'    {pose_topic}: old rigid body, no base_link calibration -- used as is')
         n_raw = len(bag_X)
         bag_X, bag_z = trim_stationary(bag_X, bag_z)
         print(f'    {n_raw} raw → {len(bag_X)} after trimming stationary ends')
@@ -361,7 +389,7 @@ class GPExplorer(Node):
         self._ac   = ActionClient(self, ComputePathToPose, 'compute_path_to_pose')
         self._pose = None
         self._planner_id = None
-        self.create_subscription(PoseStamped, POSE_TOPIC, self._pose_cb, 10)
+        self.create_subscription(PoseStamped, LIVE_POSE_TOPIC, self._pose_cb, 10)
 
     def _resolve_planner_id(self) -> str:
         # Single source of truth: the first entry of planner_server's
@@ -388,7 +416,7 @@ class GPExplorer(Node):
         self._pose = msg
 
     def get_current_pose(self):
-        print(f'  waiting for pose on {POSE_TOPIC} …', flush=True)
+        print(f'  waiting for pose on {LIVE_POSE_TOPIC} …', flush=True)
         while self._pose is None:
             rclpy.spin_once(self, timeout_sec=0.1)
         p   = self._pose.pose
