@@ -10,6 +10,10 @@ the base controller gets it) and publishes what the live stack sees from mocap a
   - /odometry/filtered                      (base_link twist from the last 5 poses, like
                                              path_follower.vel_interp on /rover/pose)
   - /roseybot_base_controller/cmd_vel_out   (the command actually applied)
+  - rover_tf:=true (default): the rover's own TF, like the real rover (diff_drive odom TF +
+    robot_state_publisher): odom -> base_footprint at a deliberately wrong (wheel-odometry) pose,
+    and static base_footprint -> base_link. Nav2 must not resolve its robot through it (11/22
+    trial 6: our frame was also called base_link -> two parents -> robot at the odometry pose).
 The start pose and /sim/reset_pose are rover (base_link) poses.
 
 Base controller rate limiter (on by default, like the real diff_drive_controller
@@ -30,7 +34,7 @@ import rclpy
 from geometry_msgs.msg import PoseStamped, TransformStamped, TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from tf2_ros import TransformBroadcaster
+from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 
 def yaw_quat(yaw):
@@ -51,6 +55,11 @@ class RoverSim(Node):
         self.declare_parameter('accel_wz', 0.211666666667)  # rad/s^2, angular.z.max_acceleration
         self.declare_parameter('geometry_offset', True)  # publish the rigid body offset from the rover
         self.declare_parameter('base_height', 0.2644)    # m, base_link above the ground (URDF)
+        self.declare_parameter('rover_tf', True)         # publish the rover's own odom/base_footprint/base_link TF
+        self.declare_parameter('rover_tf_offset', [6.5, 4.2])  # m, wheel-odometry error of that TF
+        # re-send the static base_footprint -> base_link every N s (live, zenoh re-delivered the rover's
+        # /tf_static mid-run, which is when Nav2 switched base_link's parent): makes the test deterministic
+        self.declare_parameter('rover_tf_static_period', 5.0)
         self.geo = None
         if self.get_parameter('geometry_offset').value:
             from nav2_stack import rover_geometry
@@ -64,6 +73,18 @@ class RoverSim(Node):
         self.frame = self.get_parameter('frame').value
         self.hist = collections.deque(maxlen=5)  # (t, x, y, yaw), like path_follower
         self.tf = TransformBroadcaster(self)
+        if self.get_parameter('rover_tf').value:
+            st = TransformStamped()
+            st.header.stamp = self.get_clock().now().to_msg()
+            st.header.frame_id, st.child_frame_id = 'base_footprint', 'base_link'
+            st.transform.rotation.w = 1.0
+            self.static_tf = StaticTransformBroadcaster(self)
+            self.static_tf.sendTransform(st)
+
+            def resend():
+                st.header.stamp = self.get_clock().now().to_msg()
+                self.static_tf.sendTransform(st)
+            self.create_timer(self.get_parameter('rover_tf_static_period').value, resend)
         self.pose_pub = self.create_publisher(PoseStamped, f'/{self.frame}/pose', 10)
         self.odom_pub = self.create_publisher(Odometry, '/odometry/filtered', 10)
         self.out_pub = self.create_publisher(TwistStamped, '/roseybot_base_controller/cmd_vel_out', 10)
@@ -144,7 +165,17 @@ class RoverSim(Node):
         t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = px, py, pz
         (t.transform.rotation.x, t.transform.rotation.y,
          t.transform.rotation.z, t.transform.rotation.w) = qx, qy, qz, qw
-        self.tf.sendTransform(t)
+        tfs = [t]
+        if self.get_parameter('rover_tf').value:
+            ox, oy = self.get_parameter('rover_tf_offset').value
+            w = TransformStamped()
+            w.header.stamp = stamp
+            w.header.frame_id, w.child_frame_id = 'odom', 'base_footprint'
+            w.transform.translation.x, w.transform.translation.y = x + ox, y + oy
+            (w.transform.rotation.x, w.transform.rotation.y,
+             w.transform.rotation.z, w.transform.rotation.w) = yaw_quat(yaw)
+            tfs.append(w)
+        self.tf.sendTransform(tfs)
 
         p = PoseStamped()
         p.header.stamp = stamp
@@ -160,7 +191,7 @@ class RoverSim(Node):
         o = Odometry()
         o.header.stamp = stamp
         o.header.frame_id = 'odom'
-        o.child_frame_id = 'base_link' if self.geo is not None else self.frame
+        o.child_frame_id = 'rover_centre' if self.geo is not None else self.frame
         o.pose.pose.position.x, o.pose.pose.position.y = x, y
         bq = yaw_quat(yaw)
         o.pose.pose.orientation.z, o.pose.pose.orientation.w = bq[2], bq[3]
@@ -177,7 +208,7 @@ class RoverSim(Node):
 
         out = TwistStamped()
         out.header.stamp = stamp
-        out.header.frame_id = 'base_link' if self.geo is not None else self.frame
+        out.header.frame_id = 'rover_centre' if self.geo is not None else self.frame
         out.twist.linear.x, out.twist.angular.z = vx_applied, wz_applied
         self.out_pub.publish(out)
 

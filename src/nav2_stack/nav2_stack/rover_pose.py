@@ -6,13 +6,16 @@ Motive rigid body: its origin is the rear-right marker and its axes are rotated 
 against the rover. This node makes the rover frame itself available, from
 config/rover_geometry.yaml (scripts/rover_calibration/marker_calibration.py):
 
-  - static TF  FitRosey_passive -> base_link   (Nav2's robot_base_frame is base_link)
+  - static TF  FitRosey_passive -> rover_centre   (Nav2's robot_base_frame). rover_centre is the
+    URDF base_link pose, but must not be NAMED base_link: the rover itself publishes
+    odom -> base_footprint (wheel odometry) -> base_link, and a second parent for base_link let
+    Nav2 resolve the robot through the wheel odometry (trial 6 of 11/22: robot at (6.5, 4.2)).
   - /rover/pose  PoseStamped in world: the base_link pose (rover centre, true heading), for every
     node that reads the robot pose from a topic (path_follower, safety_watchdog, autonomous_trials,
     the planner's motion seeding, gp_explorer)
 
-Parameters: input_topic (/FitRosey_passive/pose), output_topic (/rover/pose), geometry_file
-(default: the package's config/rover_geometry.yaml).
+Parameters: input_topic (/FitRosey_passive/pose), output_topic (/rover/pose), frame_id
+(rover_centre), geometry_file (default: the package's config/rover_geometry.yaml).
 """
 import numpy as np
 import rclpy
@@ -30,6 +33,7 @@ class RoverPose(Node):
         super().__init__("rover_pose")
         self.declare_parameter("input_topic", "/FitRosey_passive/pose")
         self.declare_parameter("output_topic", "/rover/pose")
+        self.declare_parameter("frame_id", "rover_centre")
         self.declare_parameter("geometry_file", "")
         path = self.get_parameter("geometry_file").value or None
         self.geo = rg.load(path)
@@ -39,7 +43,7 @@ class RoverPose(Node):
         tf = TransformStamped()
         tf.header.stamp = self.get_clock().now().to_msg()
         tf.header.frame_id = body
-        tf.child_frame_id = "base_link"
+        tf.child_frame_id = self.get_parameter("frame_id").value
         tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z = \
             (float(v) for v in self.geo["t"])
         (tf.transform.rotation.x, tf.transform.rotation.y,
@@ -52,7 +56,7 @@ class RoverPose(Node):
         self.create_subscription(PoseStamped, self.get_parameter("input_topic").value, self.on_pose, qos)
         ypr = np.degrees(Rot.from_matrix(self.geo["R"]).as_euler("ZYX"))
         self.get_logger().info(
-            f"{body} -> base_link: t {np.round(self.geo['t'], 4).tolist()} m, yaw/pitch/roll "
+            f"{body} -> {tf.child_frame_id}: t {np.round(self.geo['t'], 4).tolist()} m, yaw/pitch/roll "
             f"{np.round(ypr, 2).tolist()} deg; {self.get_parameter('input_topic').value} -> "
             f"{self.get_parameter('output_topic').value}")
 

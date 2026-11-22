@@ -22,7 +22,7 @@ import os
 ROVER_CONFIGS = {
     'old_rosey': {'opti_topic': '/CubeRover_V1/pose', 'robot_frame': 'CubeRover_V1'},
     # rover centre (rover_pose node, config/rover_geometry.yaml), not the rigid body's rear-right marker
-    'fit_rosey': {'opti_topic': '/rover/pose',  'robot_frame': 'base_link'},
+    'fit_rosey': {'opti_topic': '/rover/pose',  'robot_frame': 'rover_centre'},
 }
 
 # csv use:

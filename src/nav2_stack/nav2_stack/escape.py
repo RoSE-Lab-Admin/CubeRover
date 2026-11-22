@@ -64,7 +64,7 @@ def default_planner_id():
 
 
 class Escaper:
-    def __init__(self, node, get_pose, planner_id, frame='world', robot_frame='base_link',
+    def __init__(self, node, get_pose, planner_id, frame='world', robot_frame='rover_centre',
                  cmd_pub=None):
         self.node = node
         self.get_pose = get_pose

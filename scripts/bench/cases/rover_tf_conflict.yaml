@@ -1,0 +1,9 @@
+# 11/22 trial 6: the rover publishes odom -> base_footprint (wheel odometry) -> base_link itself, so our
+# rigid-body -> base_link made base_link a frame with two parents and Nav2 put the robot at the wheel-odometry
+# pose (off the map: empty costmap, "Pose Goes Off Grid", 0-pose plans). rover_sim now publishes that
+# rover TF (rover_tf, offset 6.5/4.2 m); the robot frame is rover_centre. Must reach every goal.
+defaults:
+  args: {waypoint_mode: gp}
+cases:
+  - {name: tf_gp, n: 2, yaw_scale: 0.7}
+  - {name: tf_lawnmower, n: 1, yaw_scale: 0.7, args: {waypoint_mode: lawnmower}}

@@ -168,8 +168,10 @@ def launch_setup(context):
     )
 
     # Rover frame from the OptiTrack rigid body (config/rover_geometry.yaml): static TF
-    # FitRosey_passive -> base_link and /rover/pose (base_link pose in world). Nav2's
-    # robot_base_frame is base_link (the rover centre, true heading); the rigid body's origin is
+    # FitRosey_passive -> rover_centre and /rover/pose (rover-centre pose in world). Nav2's
+    # robot_base_frame is rover_centre (= the URDF base_link pose; not named base_link because the
+    # rover's own TF already has odom -> base_footprint -> base_link from wheel odometry, and a
+    # second parent for base_link made Nav2 use the wheel odometry). The rigid body's origin is
     # the rear-right marker, rotated ~6 deg against the rover.
     rover_pose = Node(
         package='nav2_stack',
@@ -195,6 +197,6 @@ def launch_setup(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('robot_frame', default_value='base_link'),
+        DeclareLaunchArgument('robot_frame', default_value='rover_centre'),
         OpaqueFunction(function=launch_setup),
     ])
