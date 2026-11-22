@@ -413,6 +413,37 @@ bool AStarAlgorithm<NodeT>::bestNodeNearGoal()
          getToleranceHeuristic();
 }
 
+namespace
+{
+// SearchInfo::goal_approach_length: every pose within goal_approach_length (cells)
+// before `node`, back along its parents, within goal_heading_tolerance_deg of goal_theta.
+// The start pose (no parent) is exempt. `node` itself is checked by the caller.
+bool approachHeadingOk(
+  NodeHybrid * node, const SearchInfo & si, float goal_theta, unsigned int bins)
+{
+  if (si.goal_approach_length <= 0.0f || si.goal_heading_tolerance_deg < 0.0f) {
+    return true;
+  }
+  float d = 0.0f;
+  NodeHybrid * n = node;
+  while (n->parent != nullptr) {
+    NodeHybrid * p = n->parent;
+    d += std::hypot(n->pose.x - p->pose.x, n->pose.y - p->pose.y);
+    if (d > si.goal_approach_length || p->parent == nullptr) {
+      break;
+    }
+    if (!goalHeadingBinOk(
+        static_cast<unsigned int>(std::lround(p->pose.theta)) % bins, goal_theta, bins,
+        si.goal_heading_tolerance_deg))
+    {
+      return false;
+    }
+    n = p;
+  }
+  return true;
+}
+}  // namespace
+
 template<typename NodeT>
 bool AStarAlgorithm<NodeT>::isGoal(NodePtr & node)
 {
@@ -421,11 +452,13 @@ bool AStarAlgorithm<NodeT>::isGoal(NodePtr & node)
   // compares just the (x, y) cell.
   if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
     if (_search_info.ignore_goal_heading) {
-      return node == getGoal() ||
-             (node->getIndex() / getSizeDim3() == getGoal()->getIndex() / getSizeDim3() &&
-              goalHeadingBinOk(
-                node->getIndex() % getSizeDim3(), _goal_coordinates.theta, getSizeDim3(),
-                _search_info.goal_heading_tolerance_deg));
+      const bool at_goal = node == getGoal() ||
+        (node->getIndex() / getSizeDim3() == getGoal()->getIndex() / getSizeDim3() &&
+        goalHeadingBinOk(
+          node->getIndex() % getSizeDim3(), _goal_coordinates.theta, getSizeDim3(),
+          _search_info.goal_heading_tolerance_deg));
+      return at_goal &&
+             approachHeadingOk(node, _search_info, _goal_coordinates.theta, getSizeDim3());
     }
   }
   return node == getGoal();
@@ -474,9 +507,10 @@ float AStarAlgorithm<NodeT>::getHeuristicCost(const NodePtr & node)
     // it returns paths ending near the goal at any heading (seen live 11/20:
     // lawnmower zigzag_heading plans whose last leg ended pointing N-S).
     if (_search_info.ignore_goal_heading &&
-      !goalHeadingBinOk(
+      (!goalHeadingBinOk(
         node->getIndex() % getSizeDim3(), _goal_coordinates.theta, getSizeDim3(),
-        _search_info.goal_heading_tolerance_deg))
+        _search_info.goal_heading_tolerance_deg) ||
+      !approachHeadingOk(node, _search_info, _goal_coordinates.theta, getSizeDim3())))
     {
       return heuristic;
     }

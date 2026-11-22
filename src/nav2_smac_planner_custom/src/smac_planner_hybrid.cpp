@@ -131,6 +131,9 @@ void SmacPlannerHybrid::configure(
     node, name + ".cusp_tail_length", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".cusp_tail_length", _cusp_tail_length_m);
   nav2_util::declare_parameter_if_not_declared(
+    node, name + ".cusp_tail_before", rclcpp::ParameterValue(true));
+  node->get_parameter(name + ".cusp_tail_before", _search_info.cusp_tail_before);
+  nav2_util::declare_parameter_if_not_declared(
     node, name + ".curvature_penalty", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".curvature_penalty", _search_info.curvature_penalty);
   nav2_util::declare_parameter_if_not_declared(
@@ -140,6 +143,9 @@ void SmacPlannerHybrid::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, name + ".escalate_only_on_reset", rclcpp::ParameterValue(false));
   node->get_parameter(name + ".escalate_only_on_reset", _search_info.escalate_only_on_reset);
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".free_start_reversal", rclcpp::ParameterValue(false));
+  node->get_parameter(name + ".free_start_reversal", _search_info.free_start_reversal);
 
   // Constant-curvature arc mode (fork-only, off by default): plan the single
   // arc tangent to the start heading through the goal when it is feasible,
@@ -202,6 +208,16 @@ void SmacPlannerHybrid::configure(
     node->get_parameter(name + ".cusp_heading_tolerance_deg", tol);
     _search_info.cusp_heading_tolerance_deg = static_cast<float>(tol);
   }
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".cusp_start_heading_tolerance_deg", rclcpp::ParameterValue(-1.0));
+  {
+    double tol;
+    node->get_parameter(name + ".cusp_start_heading_tolerance_deg", tol);
+    _search_info.cusp_start_heading_tolerance_deg = static_cast<float>(tol);
+  }
+  nav2_util::declare_parameter_if_not_declared(
+    node, name + ".goal_approach_length", rclcpp::ParameterValue(0.0));
+  node->get_parameter(name + ".goal_approach_length", _goal_approach_length_m);
   nav2_util::declare_parameter_if_not_declared(
     node, name + ".motion_reversal_penalty", rclcpp::ParameterValue(0.0));
   node->get_parameter(name + ".motion_reversal_penalty", _motion_reversal_penalty_m);
@@ -338,6 +354,8 @@ void SmacPlannerHybrid::configure(
     _cusp_tail_length_m / (_costmap->getResolution() * _downsampling_factor));
   _search_info.motion_reversal_penalty =
     _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor);
+  _search_info.goal_approach_length = static_cast<float>(
+    _goal_approach_length_m / (_costmap->getResolution() * _downsampling_factor));
   _search_resolution = _costmap->getResolution();
   RCLCPP_INFO(
     _logger, "%s: costmap resolution %.3f m, minimum_turning_radius %.2f cells, "
@@ -852,6 +870,12 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       } else if (name == _name + ".cusp_heading_tolerance_deg") {
         _search_info.cusp_heading_tolerance_deg = static_cast<float>(parameter.as_double());
         reinit_a_star = true;
+      } else if (name == _name + ".cusp_start_heading_tolerance_deg") {
+        _search_info.cusp_start_heading_tolerance_deg = static_cast<float>(parameter.as_double());
+        reinit_a_star = true;
+      } else if (name == _name + ".goal_approach_length") {
+        _goal_approach_length_m = parameter.as_double();  // -> cells in reinitialize()
+        reinit_a_star = true;
       } else if (name == _name + ".lookup_table_size") {
         reinit_a_star = true;
         _lookup_table_size = parameter.as_double();
@@ -970,6 +994,12 @@ SmacPlannerHybrid::dynamicParametersCallback(std::vector<rclcpp::Parameter> para
       } else if (name == _name + ".escalate_only_on_reset") {
         _search_info.escalate_only_on_reset = parameter.as_bool();
         reinit_a_star = true;
+      } else if (name == _name + ".free_start_reversal") {
+        _search_info.free_start_reversal = parameter.as_bool();
+        reinit_a_star = true;
+      } else if (name == _name + ".cusp_tail_before") {
+        reinit_a_star = true;
+        _search_info.cusp_tail_before = parameter.as_bool();
       } else if (name == _name + ".ignore_goal_heading") {
         _search_info.ignore_goal_heading = parameter.as_bool();
         reinit_a_star = true;
@@ -1115,6 +1145,24 @@ bool SmacPlannerHybrid::tryArcPlan(
     if (off * 180.0 / M_PI > _search_info.goal_heading_tolerance_deg) {
       reason = "end heading " + std::to_string(off * 180.0 / M_PI) + " deg off > " +
         std::to_string(_search_info.goal_heading_tolerance_deg) + " deg tolerance";
+      return false;
+    }
+  }
+  // the axis the arrival rule refers to (goal yaw, either way round)
+  const double axis = tf2::getYaw(goal.pose.orientation);
+  auto off_axis_deg = [axis](double th) {
+      double off = std::fabs(angles::normalize_angle(th - axis));
+      return std::min(off, M_PI - off) * 180.0 / M_PI;
+    };
+  // goal_approach_length: the last part of the arc within the arrival tolerance too
+  if (_search_info.ignore_goal_heading && _search_info.goal_heading_tolerance_deg >= 0.0f &&
+    _goal_approach_length_m > 0.0)
+  {
+    const double frac = std::max(0.0, 1.0 - _goal_approach_length_m / std::max(1e-6, std::fabs(s_goal)));
+    const double off = off_axis_deg(th0 + k * s_goal * frac);
+    if (off > _search_info.goal_heading_tolerance_deg) {
+      reason = "approach heading " + std::to_string(off) + " deg off " +
+        std::to_string(_goal_approach_length_m) + " m before the goal";
       return false;
     }
   }
@@ -1325,6 +1373,8 @@ void SmacPlannerHybrid::reinitialize(
       _cusp_tail_length_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.motion_reversal_penalty = static_cast<float>(
       _motion_reversal_penalty_m / (_costmap->getResolution() * _downsampling_factor));
+    _search_info.goal_approach_length = static_cast<float>(
+      _goal_approach_length_m / (_costmap->getResolution() * _downsampling_factor));
     _search_info.analytic_expansion_max_length =
       static_cast<float>(_analytic_expansion_max_length_m / _costmap->getResolution());
     _search_resolution = _costmap->getResolution();

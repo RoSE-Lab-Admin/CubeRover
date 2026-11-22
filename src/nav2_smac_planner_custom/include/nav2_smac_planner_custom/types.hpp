@@ -83,6 +83,11 @@ struct SearchInfo
   // The path start is not a cusp. Configured in meters, held here in grid
   // cells. 0.0 = no-op.
   float cusp_tail_length{0.0};
+  // nav2_smac_planner_custom addition (11/21): false = cusp tail only AFTER a
+  // gear change -- before it the rover still has momentum, so turning into the
+  // cusp is not penalized (and reversing a moving rover no longer needs a
+  // straight run behind it). Default true = both sides, as before.
+  bool cusp_tail_before{true};
   // Escalating penalty for a path taking MORE than one TurnDirection change
   // (nav2_smac_planner_custom addition, no upstream equivalent): the FIRST
   // change on a path costs whatever change_penalty already costs; the
@@ -103,6 +108,15 @@ struct SearchInfo
   // entry after an earlier change is also escalated, which biases paths
   // after a cusp toward one turn plus long straights.
   bool escalate_only_on_reset{false};
+  // nav2_smac_planner_custom addition (lawnmower, 11/21): when true, a gear flip
+  // right out of a start seeded with the rover's moving gear (stop and reverse
+  // the moving rover where it is) does not count toward the
+  // extra_direction_change_penalty escalation -- only planned cusps do. It still
+  // pays motion_reversal_penalty and resets momentum. Without it a moving rover
+  // can never "stop, back up, then go" (= 2 changes, ~banned), so replans picked
+  // ~10 m loops instead and alternated with the 3-point turn as the rover's gear
+  // flipped (11/21 V5c bag_10). Default false = as before.
+  bool free_start_reversal{false};
   // Direction-aware replanning (nav2_smac_planner_custom addition): when the
   // search start is seeded with the gear the rover is already moving in
   // (SmacPlannerHybrid motion_pose_topic), a first primitive in the opposite
@@ -132,6 +146,19 @@ struct SearchInfo
   // start is exempt (the first move may be either gear). < 0 (default): off.
   // nav2_smac_planner_custom addition, Hybrid-A* only.
   float cusp_heading_tolerance_deg{-1.0f};
+  // With cusp_heading_tolerance_deg: a gear change right at the start (reversing
+  // the rover where it is while it is moving) may be up to this many degrees off
+  // instead -- the rover often reaches a planned cusp a bit further turned than
+  // planned (under-turning), and the stricter rule then forbade reversing there,
+  // flipping the plan. < 0 (default): same as cusp_heading_tolerance_deg.
+  float cusp_start_heading_tolerance_deg{-1.0f};
+  // With ignore_goal_heading and goal_heading_tolerance_deg: the last
+  // goal_approach_length (grid cells) of a plan must stay within the arrival
+  // tolerance, not only its last pose -- the controller's goal checker stops the
+  // rover short of the goal (xy_goal_tolerance), so a plan that only turns into the
+  // arrival heading at the very end left the rover 30-35 deg off (11/20 V3 bags).
+  // The start pose is exempt. <= 0 (default): off. nav2_smac_planner_custom addition.
+  float goal_approach_length{0.0f};
   float analytic_expansion_ratio{3.5};
   float analytic_expansion_max_length{60.0};
   float analytic_expansion_max_cost{200.0};

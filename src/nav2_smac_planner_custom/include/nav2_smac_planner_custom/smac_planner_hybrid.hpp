@@ -187,6 +187,7 @@ protected:
   double _momentum_zone_length_m{0.0};
   double _momentum_zone_min_radius_m{0.0};
   double _cusp_tail_length_m{0.0};
+  double _goal_approach_length_m{0.0};  // see SearchInfo::goal_approach_length
   double _analytic_expansion_max_length_m{3.0};
   double _motion_reversal_penalty_m{0.0};
 

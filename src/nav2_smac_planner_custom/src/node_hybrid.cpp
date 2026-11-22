@@ -147,10 +147,13 @@ void HybridMotionTable::initDubin(
   momentum_zone_min_radius = search_info.momentum_zone_min_radius;
   curvature_penalty = search_info.curvature_penalty;
   cusp_tail_length = search_info.cusp_tail_length;
+  cusp_tail_before = search_info.cusp_tail_before;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   escalate_only_on_reset = search_info.escalate_only_on_reset;
+  free_start_reversal = search_info.free_start_reversal;
   ignore_goal_heading = search_info.ignore_goal_heading;
   cusp_heading_tolerance_deg = search_info.cusp_heading_tolerance_deg;
+  cusp_start_heading_tolerance_deg = search_info.cusp_start_heading_tolerance_deg;
   motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
@@ -289,10 +292,13 @@ void HybridMotionTable::initReedsShepp(
   momentum_zone_min_radius = search_info.momentum_zone_min_radius;
   curvature_penalty = search_info.curvature_penalty;
   cusp_tail_length = search_info.cusp_tail_length;
+  cusp_tail_before = search_info.cusp_tail_before;
   extra_direction_change_penalty = search_info.extra_direction_change_penalty;
   escalate_only_on_reset = search_info.escalate_only_on_reset;
+  free_start_reversal = search_info.free_start_reversal;
   ignore_goal_heading = search_info.ignore_goal_heading;
   cusp_heading_tolerance_deg = search_info.cusp_heading_tolerance_deg;
+  cusp_start_heading_tolerance_deg = search_info.cusp_start_heading_tolerance_deg;
   motion_reversal_penalty = search_info.motion_reversal_penalty;
 
   // if nothing changed, no need to re-compute primitives
@@ -623,8 +629,8 @@ float NodeHybrid::getTraversalCost(const NodePtr & child)
     travel_cost *= motion_table.momentum_zone_penalty;
   }
 
-  if (motion_table.cusp_tail_length > 0.0f && isGearFlip(this, child_turn_dir) &&
-    getStraightRun() < motion_table.cusp_tail_length)
+  if (motion_table.cusp_tail_length > 0.0f && motion_table.cusp_tail_before &&
+    isGearFlip(this, child_turn_dir) && getStraightRun() < motion_table.cusp_tail_length)
   {
     // Cusp tail, before the cusp (see SearchInfo::cusp_tail_length): this
     // gear flip comes after too little gentle driving -- extra cost for the
@@ -1065,10 +1071,17 @@ void NodeHybrid::getNeighbors(
   NodePtr neighbor = nullptr;
   Coordinates initial_node_coords;
   const MotionPoses motion_projections = motion_table.getProjections(this);
-  // Cusps only near the goal yaw's axis (see SearchInfo::cusp_heading_tolerance_deg)
+  // Cusps only near the goal yaw's axis (see SearchInfo::cusp_heading_tolerance_deg);
+  // at the start node (no parent) the looser cusp_start_heading_tolerance_deg
+  float cusp_tol = motion_table.cusp_heading_tolerance_deg;
+  if (cusp_tol >= 0.0f && parent == nullptr &&
+    motion_table.cusp_start_heading_tolerance_deg >= 0.0f)
+  {
+    cusp_tol = std::max(cusp_tol, motion_table.cusp_start_heading_tolerance_deg);
+  }
   const bool cusp_heading_ok = goalHeadingBinOk(
     static_cast<unsigned int>(std::lround(pose.theta)), motion_table.cusp_axis_bin,
-    motion_table.num_angle_quantization, motion_table.cusp_heading_tolerance_deg);
+    motion_table.num_angle_quantization, cusp_tol);
 
   for (unsigned int i = 0; i != motion_projections.size(); i++) {
     if (!cusp_heading_ok && isGearFlip(this, motion_projections[i]._turn_dir)) {
@@ -1117,7 +1130,13 @@ void NodeHybrid::commitDirectionState(NodeHybrid * parent)
   const bool is_reset = isMomentumReset(parent, getTurnDirection());
   setDistanceSinceMomentumReset(
     is_reset ? 0.0f : (parent->getDistanceSinceMomentumReset() + motion_table.delta_dist));
-  setDirectionChangeCount(parent->getDirectionChangeCount() + (is_reset ? 1u : 0u));
+  // free_start_reversal: a gear flip out of the (seeded) start -- stopping and
+  // reversing the moving rover where it is -- is not counted (see SearchInfo in
+  // types.hpp); its momentum reset above still applies.
+  const bool free_start_flip = motion_table.free_start_reversal && parent->parent == nullptr &&
+    isGearFlip(parent, getTurnDirection());
+  setDirectionChangeCount(
+    parent->getDirectionChangeCount() + ((is_reset && !free_start_flip) ? 1u : 0u));
   // cusp tails (see SearchInfo::cusp_tail_length)
   const bool gear_flip = isGearFlip(parent, getTurnDirection());
   setDistanceSinceGearFlip(

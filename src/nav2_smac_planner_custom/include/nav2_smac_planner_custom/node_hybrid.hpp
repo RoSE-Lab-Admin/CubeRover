@@ -142,11 +142,14 @@ struct HybridMotionTable
   float momentum_zone_min_radius;  // grid cells, see SearchInfo in types.hpp
   float curvature_penalty;  // see SearchInfo in types.hpp
   float cusp_tail_length;  // grid cells, see SearchInfo in types.hpp
+  bool cusp_tail_before;  // see SearchInfo in types.hpp
   bool allow_primitive_interpolation{false};
   float delta_dist;
   // Escalating multi-reversal penalty (see SearchInfo in types.hpp).
   float extra_direction_change_penalty;
   bool escalate_only_on_reset;
+  // Start reversal not counted as a direction change (see SearchInfo in types.hpp).
+  bool free_start_reversal;
   // Cost of reversing a moving rover at a seeded start, grid cells (see SearchInfo in types.hpp).
   float motion_reversal_penalty;
   // Position-only goal (see SearchInfo in types.hpp).
@@ -154,6 +157,7 @@ struct HybridMotionTable
   // Cusps only near the goal yaw's axis (see SearchInfo in types.hpp);
   // cusp_axis_bin is the goal's heading bin, set by AStarAlgorithm::setGoal().
   float cusp_heading_tolerance_deg{-1.0f};
+  float cusp_start_heading_tolerance_deg{-1.0f};
   float cusp_axis_bin{0.0f};
   ompl::base::StateSpacePtr state_space;
   std::vector<std::vector<double>> delta_xs;

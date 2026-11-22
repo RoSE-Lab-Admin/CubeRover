@@ -278,6 +278,10 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
       // heading along the shortcut (OMPL: L adds the signed segment length, R subtracts)
       double heading = from[2];
       const float cusp_tol = node->motion_table.cusp_heading_tolerance_deg;
+      // a cusp at the junction with a start node (reversing the moving rover where
+      // it is) gets the looser start tolerance, as in NodeHybrid::getNeighbors()
+      const float start_tol = node->motion_table.cusp_start_heading_tolerance_deg;
+      bool first_motion = true;
       const double cusp_axis = node->motion_table.getAngleFromBin(
         static_cast<unsigned int>(std::lround(node->motion_table.cusp_axis_bin)));
       for (int i = 0; i < 5; ++i) {
@@ -295,13 +299,16 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
           since_reset = 0.0f;
           // Cusp heading (see SearchInfo::cusp_heading_tolerance_deg)
           if (cusp_tol >= 0.0f) {
+            const float tol = (first_motion && node->parent == nullptr && start_tol >= 0.0f) ?
+              std::max(cusp_tol, start_tol) : cusp_tol;
             double off = std::fabs(std::remainder(heading - cusp_axis, M_PI));
-            if (off * 180.0 / M_PI > cusp_tol + 1e-3) {
+            if (off * 180.0 / M_PI > tol + 1e-3) {
               return AnalyticExpansionNodes();
             }
           }
         }
         last_sign = seg_sign;
+        first_motion = false;
         if (rs_path.type_[i] == ompl::base::ReedsSheppStateSpace::RS_LEFT) {
           heading += rs_path.length_[i];
         } else if (rs_path.type_[i] == ompl::base::ReedsSheppStateSpace::RS_RIGHT) {
@@ -352,6 +359,10 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
   std::vector<float> node_costs;
   node_costs.reserve(num_intervals);
 
+  // Straight final approach (SearchInfo::goal_approach_length)
+  const bool check_approach = _search_info.goal_approach_length > 0.0f &&
+    _search_info.ignore_goal_heading && _search_info.goal_heading_tolerance_deg >= 0.0f;
+
   // Check intermediary poses (non-goal, non-start)
   for (float i = 1; i <= num_intervals; i++) {
     state_space->interpolate(from(), to(), i / num_intervals, s());
@@ -360,6 +371,19 @@ typename AnalyticExpansion<NodeT>::AnalyticExpansionNodes AnalyticExpansion<Node
     theta = (reals[2] < 0.0) ? (reals[2] + 2.0 * M_PI) : reals[2];
     theta = (theta > 2.0 * M_PI) ? (theta - 2.0 * M_PI) : theta;
     angle = node->motion_table.getAngle(theta);
+
+    if constexpr (std::is_same_v<NodeT, NodeHybrid>) {
+      const auto & mt = node->motion_table;
+      const unsigned int bins = mt.num_angle_quantization;
+      if (check_approach && d * (1.0f - i / num_intervals) <= _search_info.goal_approach_length &&
+        !goalHeadingBinOk(
+          static_cast<unsigned int>(std::lround(angle)) % bins, mt.cusp_axis_bin, bins,
+          _search_info.goal_heading_tolerance_deg))
+      {
+        failure = true;
+        break;
+      }
+    }
 
     // Turn the pose into a node, and check if it is valid
     index = NodeT::getIndex(
