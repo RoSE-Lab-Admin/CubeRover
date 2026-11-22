@@ -1,0 +1,12 @@
+# 11/20 V2 problem lanes (AL_scripts/rosbags_11_20_26_lawnmower_cusp30_V2) from the
+# live start poses, with the fixes: reversing where the rover is allowed up to 60 deg
+# off E-W (lawnmower_cusp_start_tolerance 60, default), barely-moving re-send in path_follower.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20,
+         lawnmower_cusp_tolerance: 30}
+cases:
+  - {name: lane15, start: [-1.48, 1.20, 2.740], resume_at: 15}
+  - {name: lane19, start: [-1.63, 1.31, 0.855], resume_at: 19}
+  - {name: lane22, start: [-1.02, 0.71, -3.054], resume_at: 22}
+  - {name: six, n: 6}

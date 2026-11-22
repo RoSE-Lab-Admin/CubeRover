@@ -1,0 +1,11 @@
+# 11/21 V6: lawnmower cusp tail 0.25 m after gear changes only + momentum zone 0.4 m (the new
+# autonomous_trials defaults for the zigzag drives), on top of V5c (enforce_path_inversion 0.5,
+# PathAlignCritic 14). V5c lanes 10 and 17 (loop/3-point alternation) from their live start poses, 6 lanes.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20,
+         lawnmower_cusp_tolerance: 30, lawnmower_path_align: true}
+cases:
+  - {name: v5c_lane10, start: [1.78, -0.73, -2.895], resume_at: 10}
+  - {name: v5c_lane17, start: [-2.31, 2.15, -3.498], resume_at: 17}
+  - {name: six, n: 6}

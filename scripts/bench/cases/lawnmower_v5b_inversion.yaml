@@ -1,0 +1,12 @@
+# 11/21 V5b: MPPI enforce_path_inversion (nav2_param2.yaml) -- drive the first leg up to the cusp
+# before the rest of the path. Start poses of live lanes where MPPI skipped a short first leg:
+# V5 bag_05 (101 s shuttle), V4 bag_04, V3 bag_15; plus 6 lanes from the start. No PathAlignCritic.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20,
+         lawnmower_cusp_tolerance: 30}
+cases:
+  - {name: v5_lane05, start: [-1.85, 1.05, 2.443], resume_at: 5}
+  - {name: v4_lane04, start: [1.10, 0.43, 0.601], resume_at: 4}
+  - {name: v3_lane15, start: [-1.45, 0.79, 2.478], resume_at: 15}
+  - {name: six, n: 6}

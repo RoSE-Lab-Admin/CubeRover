@@ -1,0 +1,14 @@
+# 11/21: lane 2's west end moved to (-3.35, -0.10) with the 11/21 costmap (pocket south of CraterW).
+# Bench "six" stalled there with enforce_path_inversion (both 0.2 and 0.5 m tolerance); live V5
+# (no inversion) drove it in 29 s. Lane 2 from the bench's lane-1 end (rover facing E: reverse
+# into the pocket) and from live V5's (facing W: forward), twice each.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20,
+         lawnmower_cusp_tolerance: 30}
+cases:
+  - {name: rev_a, start: [1.79, -0.69, -0.362], resume_at: 2}
+  - {name: rev_b, start: [1.79, -0.69, -0.362], resume_at: 2}
+  - {name: fwd_a, start: [1.76, -0.96, -2.967], resume_at: 2}
+  - {name: fwd_b, start: [1.76, -0.96, -2.967], resume_at: 2}
+  - {name: six, n: 6}

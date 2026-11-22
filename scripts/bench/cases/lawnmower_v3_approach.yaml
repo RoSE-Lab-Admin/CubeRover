@@ -1,0 +1,15 @@
+# 11/20 V3 problem lanes (AL_scripts/rosbags_11_20_26_lawnmower_cusp30_V3) from the live
+# start poses: straight final approach (lawnmower_approach_length 0.5, default) vs off.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20,
+         lawnmower_cusp_tolerance: 30}
+cases:
+  - {name: lane05_app, start: [-1.44, 1.20, 2.443], resume_at: 5}
+  - {name: lane15_app, start: [-1.45, 0.79, 2.478], resume_at: 15}
+  - {name: lane16_app, start: [0.85, 1.74, -2.321], resume_at: 16}
+  - {name: six_app, n: 6}
+  - {name: lane05_off, start: [-1.44, 1.20, 2.443], resume_at: 5, args: {lawnmower_approach_length: 0}}
+  - {name: lane15_off, start: [-1.45, 0.79, 2.478], resume_at: 15, args: {lawnmower_approach_length: 0}}
+  - {name: lane16_off, start: [0.85, 1.74, -2.321], resume_at: 16, args: {lawnmower_approach_length: 0}}
+  - {name: six_off, n: 6, args: {lawnmower_approach_length: 0}}

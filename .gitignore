@@ -21,3 +21,7 @@ scripts/planner_offline_test/
 __pycache__/
 scripts/mppi_offline_test/*results*/
 scripts/mppi_offline_test/results*.log
+
+# offline bench overlay (scripts/bench/build_bench.sh)
+build_bench/
+install_bench/

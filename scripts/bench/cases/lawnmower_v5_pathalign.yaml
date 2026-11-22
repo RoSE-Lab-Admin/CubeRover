@@ -1,0 +1,9 @@
+# 11/21 V5: PathAlignCritic on for zigzag_heading (lawnmower_path_align, cost_weight 14) --
+# smoke test that it is switched on and the lanes run; V3 lanes 05 and 16 from their live start poses.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading, lawnmower_heading_tolerance: 20,
+         lawnmower_cusp_tolerance: 30, lawnmower_path_align: true}
+cases:
+  - {name: lane05_pa, start: [-1.44, 1.20, 2.443], resume_at: 5}
+  - {name: lane16_pa, start: [0.85, 1.74, -2.321], resume_at: 16}
