@@ -124,18 +124,27 @@ CRATER_W_RIM = [(-2.7501, 0.4731), (-2.6787, 0.8012), (-3.2678, -0.0534), (-2.96
 CRATER_NE_RIM = [(1.4336, 1.7144), (1.4407, 1.3779), (2.145, 2.4195), (1.8302, 2.3022),
                  (1.7852, 0.6461), (2.0654, 0.4717), (2.652, 0.4326), (2.9852, 0.4792)]
 
-DEFAULT_OBSTACLES = [
-    _fit_circle(CRATER_NE_RIM),   # CraterNE rim: (2.480, 1.444) r 1.058
-    _fit_circle(CRATER_W_RIM),    # CraterW rim: (-3.677, 0.897) r 1.037
-    (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across
-]
+# 11/23: every crater circle drawn this much smaller than measured, for more room to manoeuvre
+# (the rims' own fits: CraterNE r 1.058, CraterW r 1.037; CraterS r 1.2906).
+CRATER_SHRINK = 0.10
+
+
+def _shrunk(c):
+    return (c[0], c[1], round(c[2] - CRATER_SHRINK, 4))
+
+
+DEFAULT_OBSTACLES = [_shrunk(c) for c in (
+    _fit_circle(CRATER_NE_RIM),   # CraterNE rim: (2.480, 1.444) r 1.058 -> 0.958
+    _fit_circle(CRATER_W_RIM),    # CraterW rim: (-3.677, 0.897) r 1.037 -> 0.937
+    (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across: 1.2906 -> 1.1906
+)]
 # Quadrants closed as obstacles: (x0, y0) = everything with x >= x0 and y >= y0 is occupied.
 # 11/22: the NE pocket between CraterNE and the north wall, closed from the crater's westernmost
 # point (cx - r, cy) so the north wall meets one straight wall down to the crater at 90 deg
 # (kinematics run 11/22, bag_40: stalled 78 s at the pocket mouth, plans reversing into it).
 _cne = DEFAULT_OBSTACLES[0]
 DEFAULT_CLOSED_QUADRANTS = [
-    (round(_cne[0] - _cne[2], 4), _cne[1]),   # NE pocket: x >= 1.422, y >= 1.444
+    (round(_cne[0] - _cne[2], 4), _cne[1]),   # NE pocket: x >= 1.522, y >= 1.444 (shrunk CraterNE)
 ]
 # Every arena edge is moved this far towards the inside before rasterizing (10/28/26:
 # 7 in tighter than the surveyed edges). --inset overrides it, 0 = the surveyed polygon.

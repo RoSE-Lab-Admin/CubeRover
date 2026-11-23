@@ -1,0 +1,8 @@
+# 11/23: --lawnmower-relax-after (zigzag_heading: drop the arrival-heading rule after 20 s without
+# progress) + craters drawn 10 cm smaller. relax4 forces it to fire (4 s) to check relax / restore.
+defaults:
+  yaw_scale: 0.7
+  args: {waypoint_mode: lawnmower, lawnmower_drive: zigzag_heading}
+cases:
+  - {name: relax20_six, n: 6}
+  - {name: relax4_six, n: 6, args: {lawnmower_relax_after: 4}}

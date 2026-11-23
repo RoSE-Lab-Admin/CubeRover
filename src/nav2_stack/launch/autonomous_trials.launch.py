@@ -99,6 +99,7 @@ def launch_setup(context):
             '--lawnmower-spacing', LaunchConfiguration('lawnmower_spacing'),
             '--lawnmower-drive', LaunchConfiguration('lawnmower_drive'),
             '--lawnmower-heading-tolerance', LaunchConfiguration('lawnmower_heading_tolerance'),
+            '--lawnmower-relax-after', LaunchConfiguration('lawnmower_relax_after'),
             '--lawnmower-cusp-tolerance', LaunchConfiguration('lawnmower_cusp_tolerance'),
             '--lawnmower-cusp-start-tolerance', LaunchConfiguration('lawnmower_cusp_start_tolerance'),
             '--lawnmower-approach-length', LaunchConfiguration('lawnmower_approach_length'),
@@ -204,6 +205,11 @@ def generate_launch_description():
         DeclareLaunchArgument('lawnmower_heading_tolerance', default_value='20.0',
                               description='lawnmower_drive zigzag_heading: allowed arrival '
                                           'heading off E-W (deg)'),
+        DeclareLaunchArgument('lawnmower_relax_after', default_value='20.0',
+                              description='lawnmower_drive zigzag_heading: after this many s '
+                                          'without progress toward the goal, the arrival-heading '
+                                          'rule is dropped for the rest of the trial (logged in '
+                                          'heading_relax.csv); <= 0 = off'),
         DeclareLaunchArgument('lawnmower_cusp_start_tolerance', default_value='60.0',
                               description='with lawnmower_cusp_tolerance: reversing the rover right '
                                           'where it is may be up to this many deg off E-W'),

@@ -197,7 +197,7 @@ def wait_for_nav2_active():
 
 
 def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=None,
-                  stop_on_distance=True) -> str:
+                  stop_on_distance=True, relax=None) -> str:
     """Spins until path_follower reports its authoritative trajectory
     outcome, the real pose is within XY_GOAL_TOLERANCE of goal_xy (a
     secondary/fallback "reached" signal -- see below), no progress has been
@@ -232,8 +232,14 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=N
     uses), so keeping it can't reintroduce that bug, only catch a reached
     goal if /trial_goal_result were ever dropped. stop_on_distance=False turns
     it off (path_follower follow_mode "pose": the rover may pass the goal
-    mid-manoeuvre, before it faces the right way)."""
+    mid-manoeuvre, before it faces the right way).
+
+    relax = (after_s, fn): once the rover has made progress, the first time it then goes
+    after_s without MIN_IMPROVEMENT_M of further progress, fn(dist) is called once
+    (lawnmower zigzag_heading: drop the arrival-heading rule; the stall window keeps
+    running from the same last improvement)."""
     node.reset_trial_state(trial_id)
+    relaxed = False
     best_dist = math.inf
     first_dist = None
     last_improve_t = time.monotonic()
@@ -274,6 +280,12 @@ def wait_for_goal(node: PoseWatcher, goal_xy, label: str, route=None, trial_id=N
             if dist < best_dist - MIN_IMPROVEMENT_M:
                 best_dist = dist
                 last_improve_t = time.monotonic()
+            if (relax is not None and not relaxed and _made_progress()
+                    and time.monotonic() - last_improve_t > relax[0]):
+                relaxed = True
+                log(f"{label}: no progress for {relax[0]:g}s (dist={dist:.3f}m, best "
+                    f"{best_dist:.3f}m) -- relaxing")
+                relax[1](dist)
         if time.monotonic() - last_improve_t > STALL_WINDOW_S:
             made_progress = _made_progress()
             log(f"{label}: STALLED (best_dist={best_dist:.3f}m, no improvement for "
@@ -324,10 +336,10 @@ def next_trial_start_index(bag_dir: Path) -> int:
 
 
 def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_node, label: str,
-                  follow_args=(), route=None, stop_on_distance=True) -> str:
+                  follow_args=(), route=None, stop_on_distance=True, relax=None) -> str:
     """Returns 'reached', 'stalled', 'no_movement', or 'safety_stop' (see wait_for_goal).
     follow_args: extra waypoint.launch.py arguments (follow_mode, advance_distance);
-    route: see wait_for_goal."""
+    route, relax: see wait_for_goal."""
     bag_path = bag_dir / bag_name
     trial_id = f"{label}@{int(time.time())}"  # unique per attempt (see PoseWatcher._goal_result_cb)
     bag_proc = start_process(["ros2", "bag", "record", *BAG_TOPICS,
@@ -341,7 +353,8 @@ def run_one_trial(bag_dir: Path, bag_name: str, pose_csv: Path, goal_xy, pose_no
     ])
 
     try:
-        outcome = wait_for_goal(pose_node, goal_xy, label, route, trial_id, stop_on_distance)
+        outcome = wait_for_goal(pose_node, goal_xy, label, route, trial_id, stop_on_distance,
+                                relax)
     finally:
         stop_process(wp_proc, "waypoint.launch.py")
         stop_process(bag_proc, "ros2 bag record")
@@ -923,6 +936,13 @@ def main():
     parser.add_argument("--lawnmower-heading-tolerance", default=20.0, type=float,
                         help="lawnmower-drive zigzag_heading: allowed arrival heading off E-W "
                              "(deg). Default: 20")
+    parser.add_argument("--lawnmower-relax-after", default=20.0, type=float,
+                        help="lawnmower-drive zigzag_heading: once the rover has made progress, "
+                             "this many s without 5 cm more progress toward the goal drop the "
+                             "arrival-heading rule (goal_heading_tolerance_deg, goal_approach_length) "
+                             "for the rest of the trial (11/23: stalls were shuttles at the goal "
+                             "at the wrong angle); per trial in heading_relax.csv. <= 0 = off. "
+                             "Default: 20")
     parser.add_argument("--lawnmower-cusp-tolerance", default=30.0, type=float,
                         help="lawnmower-drive zigzag / zigzag_heading: the planner only plans a "
                              "gear change (three-point turn) while the rover points within this "
@@ -1270,6 +1290,16 @@ def main():
             log(f"WARNING: could not set {planner}.{pname} ({e}) -- the planner needs the "
                 f"GridBasedCustom build with it; the zigzag runs without it")
 
+    # --lawnmower-relax-after: the arrival-heading params to drop in a stuck zigzag_heading trial
+    # (their run values, put back after that trial)
+    relax_params = {}
+    if (pattern is not None and pattern["drive"] == "zigzag_heading" and heading_tol_set is not None
+            and args.lawnmower_relax_after > 0):
+        relax_params = {p: planner_tols[p][0] for p in ("goal_heading_tolerance_deg", "goal_approach_length")
+                        if p in planner_tols}
+        log(f"arrival heading relaxed (any heading) after {args.lawnmower_relax_after:g}s without "
+            f"progress in a trial (heading_relax.csv)")
+
     live_mode = parsed["dynamics_mode"]   # dynamics_mode the controller runs right now
     if fs_cfg is not None and fs_cfg["current_weights_path"] is not None:
         log(f"train_from_scratch: deploying checkpoint {fs_cfg['current_weights_path']} "
@@ -1383,9 +1413,35 @@ def main():
                             if pattern["name"] == "spiral" else f"lawnmower {leg.label}")
                     log(f"{traj_name}: {what}, {leg.length:.1f} m, from ({leg.points[0][0]:.2f}, "
                         f"{leg.points[0][1]:.2f}) to ({goal_xy[0]:.2f}, {goal_xy[1]:.2f})")
-                    outcome = run_one_trial(bag_dir, bag_name, trial_csv, goal_xy, pose_node,
-                                            traj_name, pattern_follow_args(pattern["drive"], leg, args.lawnmower_cusp_tolerance >= 0),
-                                            None if pattern["drive"] in ZIGZAG_DRIVES else leg.points)
+                    relax, relax_state = None, {"t0": time.monotonic()}
+                    if relax_params:
+                        def _relax(dist, st=relax_state):
+                            st.update(t=time.monotonic() - st["t0"], dist=dist)
+                            for p in relax_params:
+                                try:
+                                    set_controller_param(pose_node, f"{heading_tol_set}.{p}",
+                                                         -1.0 if p == "goal_heading_tolerance_deg" else 0.0,
+                                                         server="planner_server")
+                                except Exception as e:
+                                    log(f"WARNING: could not relax {heading_tol_set}.{p} ({e})")
+                            log(f"{traj_name}: arrival heading relaxed (any heading) for the rest of "
+                                f"this trial")
+                        relax = (args.lawnmower_relax_after, _relax)
+                    try:
+                        outcome = run_one_trial(bag_dir, bag_name, trial_csv, goal_xy, pose_node,
+                                                traj_name, pattern_follow_args(pattern["drive"], leg, args.lawnmower_cusp_tolerance >= 0),
+                                                None if pattern["drive"] in ZIGZAG_DRIVES else leg.points,
+                                                relax=relax)
+                    finally:
+                        if "dist" in relax_state:
+                            for p, v in relax_params.items():
+                                try:
+                                    set_controller_param(pose_node, f"{heading_tol_set}.{p}", float(v),
+                                                         server="planner_server")
+                                except Exception as e:
+                                    log(f"WARNING: could not restore {heading_tol_set}.{p} ({e}) -- "
+                                        f"the next trials may run without the heading rule")
+                            log(f"{traj_name}: arrival heading rule restored")
                 else:
                     if not run_gp_explorer(gp_explorer_path, bag_dir, traj_name):
                         sys.exit(f"FATAL: gp_explorer_gpu.py failed {GP_EXPLORER_MAX_ATTEMPTS} "
@@ -1406,6 +1462,16 @@ def main():
                 outcome = "stalled"
 
             record_outcome(bag_dir, bag_name, outcome, goal_xy)
+            if relax_params:
+                path = bag_dir / "heading_relax.csv"
+                new = not path.exists()
+                with open(path, "a") as f:
+                    if new:
+                        f.write("bag,relaxed,t_relax_s,dist_at_relax_m,relax_after_s,outcome\n")
+                    rel = "dist" in relax_state
+                    f.write(f"{bag_name},{int(rel)},{relax_state['t'] if rel else float('nan'):.1f},"
+                            f"{relax_state['dist'] if rel else float('nan'):.3f},"
+                            f"{args.lawnmower_relax_after:g},{outcome}\n")
             run_gp_uncertainty(gp_uncertainty_path, bag_dir, bag_name)
             if fs_cfg is not None:
                 record_deployed_model(bag_dir, bag_name, fs_cfg)
