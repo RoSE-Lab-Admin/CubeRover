@@ -25,6 +25,44 @@ SPACING = 0.8      # m between lanes
 R_TURN = 1.5       # m, S-curve arcs (the planner's minimum turning radius)
 MIN_LANE = 3.0     # m, shorter lanes are left out
 PASS_SHIFTS = 3    # lane positions per spacing: each pass is shifted by spacing / PASS_SHIFTS
+# zigzag lane ends (the planner's goals) must fit the whole rover lying along the lane: the end point's
+# CLEARANCE alone let ends sit ~0.4 m from a crater edge, where no E-W pose is collision-free and the
+# planner fails ("no valid path found", 11/23 bag_05 / bag_07 at CraterNE's x = 1.00 ends). Each end is
+# pulled in along the lane in END_STEP steps until the footprint fits at every heading within
+# END_YAW_TOL of E-W, END_MARGIN clear of occupied map cells.
+ROVER_HALF = (0.37, 0.23)   # m, half length / width of the costmaps' footprint (nav2_param2.yaml)
+END_MARGIN = 0.05           # m (the global costmap's resolution)
+END_YAW_TOL = 20.0          # deg, = lawnmower_heading_tolerance
+END_STEP = 0.05             # m
+
+
+def _footprint_fits(clearance, x: float, y: float, yaw_tol_deg: float = END_YAW_TOL) -> bool:
+    """The rover footprint (+ END_MARGIN) centred at (x, y) touches no non-free map cell at any
+    heading within yaw_tol_deg of E-W (5 deg steps; the rectangle is symmetric, so W is the same)."""
+    hl, hw = ROVER_HALF[0] + END_MARGIN, ROVER_HALF[1] + END_MARGIN
+    u, v = np.meshgrid(np.linspace(-hl, hl, int(2 * hl / 0.02) + 1),
+                       np.linspace(-hw, hw, int(2 * hw / 0.02) + 1))
+    u, v = u.ravel(), v.ravel()
+    n = int(math.ceil(yaw_tol_deg / 5.0))
+    for yaw in np.radians(np.linspace(-yaw_tol_deg, yaw_tol_deg, 2 * n + 1) if n else [0.0]):
+        px = x + math.cos(yaw) * u - math.sin(yaw) * v
+        py = y + math.sin(yaw) * u + math.cos(yaw) * v
+        c = np.floor((px - clearance.ox) / clearance.res).astype(int)
+        r = clearance.h - 1 - np.floor((py - clearance.oy) / clearance.res).astype(int)
+        inside = (c >= 0) & (c < clearance.w) & (r >= 0) & (r < clearance.h)
+        if not inside.all() or (clearance.dist[r, c] <= 0).any():
+            return False
+    return True
+
+
+def _fit_ends(clearance, y: float, a: float, b: float, yaw_tol_deg: float):
+    """(a, b) pulled in until the footprint fits at both ends (see ROVER_HALF). Applied to the
+    lanes already chosen, so the lanes / passes themselves stay as without it."""
+    while b - a > 1.0 and not _footprint_fits(clearance, a, y, yaw_tol_deg):
+        a += END_STEP
+    while b - a > 1.0 and not _footprint_fits(clearance, b, y, yaw_tol_deg):
+        b -= END_STEP
+    return a, b
 
 
 class LaneLeg:
@@ -98,8 +136,10 @@ def _lanes(clearance, spacing, clr):
     return best
 
 
-def _sequence(clearance, spacing, clr, n):
-    """The lanes of the first n legs: (y, a, b, pass_no, shift, index in pass, lanes in pass, up)."""
+def _sequence(clearance, spacing, clr, n, fit_yaw=None):
+    """The lanes of the first n legs: (y, a, b, pass_no, shift, index in pass, lanes in pass, up).
+    fit_yaw (deg, zigzag): every lane end pulled in until the rover fits there within fit_yaw of
+    E-W (_fit_ends); None = as found."""
     base, first = _lanes(clearance, spacing, clr)
     if len(first) < 2:
         return []
@@ -110,6 +150,8 @@ def _sequence(clearance, spacing, clr, n):
         if k not in passes:
             off = (base + k * spacing / PASS_SHIFTS) % spacing
             passes[k] = first if k == 0 else _lanes_at(clearance, spacing, clr, off)
+            if fit_yaw is not None:
+                passes[k] = [(y, *_fit_ends(clearance, y, a, b, fit_yaw)) for y, a, b in passes[k]]
         lanes = passes[k]
         if len(lanes) < 2:                      # a shift with too few lanes: skip it
             p += 1
@@ -182,21 +224,24 @@ class ZigzagLeg:
                 f"{'east' if self.direction > 0 else 'west'} end")
 
 
-def zigzag_start(clearance, spacing: float = SPACING, clr: float = CLEARANCE):
+def zigzag_start(clearance, spacing: float = SPACING, clr: float = CLEARANCE,
+                 end_yaw_tol: float = END_YAW_TOL):
     """Where the zigzag starts (the first lane's west end) and a point 1 m east of it."""
-    seq = _sequence(clearance, spacing, clr, 1)
+    seq = _sequence(clearance, spacing, clr, 1, end_yaw_tol)
     if not seq:
         return None
     y, a = seq[0][0], seq[0][1]
     return [(a, y), (a + 1.0, y)]
 
 
-def zigzag_legs(clearance, n_legs: int, spacing: float = SPACING, clr: float = CLEARANCE) -> List[ZigzagLeg]:
-    """Zigzag across the lanes of lawnmower_legs (same lanes, passes and shifts): start
+def zigzag_legs(clearance, n_legs: int, spacing: float = SPACING, clr: float = CLEARANCE,
+                end_yaw_tol: float = END_YAW_TOL) -> List[ZigzagLeg]:
+    """Zigzag across the lanes of lawnmower_legs (same passes and shifts, but every lane end
+    pulled in until the rover fits there along E-W within end_yaw_tol, see ROVER_HALF): start
     at the first lane's west end, then every leg's goal is the next lane's end on the
     other side -- east, west, east, ... -- one lane further north (south on the way
     back). [] if fewer than 2 lanes fit."""
-    seq = _sequence(clearance, spacing, clr, n_legs + 1)
+    seq = _sequence(clearance, spacing, clr, n_legs + 1, end_yaw_tol)
     if len(seq) < 2:
         return []
     legs, d = [], +1

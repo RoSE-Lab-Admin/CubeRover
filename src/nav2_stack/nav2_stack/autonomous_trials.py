@@ -1125,9 +1125,14 @@ def main():
                                   args.lawnmower_clearance)
             start = None
         else:
+            # lane ends pulled in until the rover fits there along E-W (11/23: CraterNE ends at
+            # x = 1.00 had no collision-free E-W pose -> "no valid path found")
+            end_tol = (args.lawnmower_heading_tolerance if args.lawnmower_drive == "zigzag_heading"
+                       else 20.0)
             legs = zigzag_legs(clearance, args.n_trajectories, args.lawnmower_spacing,
-                               args.lawnmower_clearance)
-            start = zigzag_start(clearance, args.lawnmower_spacing, args.lawnmower_clearance)
+                               args.lawnmower_clearance, end_tol)
+            start = zigzag_start(clearance, args.lawnmower_spacing, args.lawnmower_clearance,
+                                 end_tol)
         if not legs:
             sys.exit(f"FATAL: fewer than 2 lawnmower lanes {args.lawnmower_spacing} m apart fit the map")
         pattern = {"name": "lawnmower", "legs": legs, "drive": args.lawnmower_drive, "start": start}
