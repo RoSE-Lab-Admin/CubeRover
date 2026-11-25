@@ -92,59 +92,33 @@ DEFAULT_LABELS = ["1 SE", "2 SSW", "3 SWW", "4 W", "5 NW", "6 N", "7 NE"]
 # radius = diameter / 2 + a 0.3 m safety margin. Until 11/17 only the south crater, at its
 # 10/27 centre (-0.1587, -3.6945) with r 1.0.
 # 11/18: CraterW and CraterNE instead from the closest the rover (OptiTrack pose) should get,
-# given on 11/18: radius = that point's distance from the centre - ROVER_REACH, the rule used
-# for the crater figures (the rover centre gets about this close to a drawn circle).
+# given on 11/18: radius = that point's distance from the centre - ROVER_REACH.
+# 11/22: CraterW and CraterNE = circles fitted through the rover's front-wheel contacts at the rim
+# (CraterNE (2.480, 1.444) r 1.058, CraterW (-3.677, 0.897) r 1.037); 11/23 all craters drawn
+# 0.10 m smaller (CRATER_SHRINK). Earlier: 11/21 CraterNE (2.376, 1.523) r 0.655 / CraterW
+# (-3.140, 1.063) r 0.559; 11/18 (2.6848, 1.4989) r 0.82 / (-3.7534, 0.9315) r 1.10.
+# 11/24: CraterNE and CraterW MOVED. Centres from one OptiTrack marker held in each crater's
+# centre (/mnt/e/mlss/costmaps/11242026/Crater{NE,W}, marker std <= 1 cm), diameters from that
+# folder's README (inches); radius = diameter / 2 + TAPE_MARGIN_1124. CraterS unchanged.
 FT = 0.3048
+IN = 0.0254
 CRATER_MARGIN = 0.3
-ROVER_REACH = 0.4
-
-
-def _radius_to(cx, cy, px, py):
-    return math.hypot(px - cx, py - cy) - ROVER_REACH
-
-
-def _fit_circle(points):
-    """(cx, cy, r) of the least-squares circle through the points."""
-    p = np.asarray(points, dtype=float)
-    a = np.c_[2.0 * p, np.ones(len(p))]
-    cx, cy, c = np.linalg.lstsq(a, (p ** 2).sum(axis=1), rcond=None)[0]
-    return round(float(cx), 4), round(float(cy), 4), round(math.sqrt(c + cx * cx + cy * cy), 3)
-
-
-# 11/22: CraterW and CraterNE = the RIM itself: the rover driven nose-first until its front wheels
-# reached the rim (3 stops W, 4 NE; ~/AL_scripts/crater_rims_11_22), front-wheel contact points from
-# the OptiTrack pose through config/rover_geometry.yaml (rigid body -> base_link -> wheel contacts),
-# circle fitted through them (residuals <= 5 cm). Not shrunk: the planner's footprint (centred on
-# base_link since 11/22) keeps the body out, and the lawnmower plans its lanes into the inflation
-# instead (lawnmower_clearance). Earlier: 11/21 CraterNE (2.376, 1.523) r 0.655 / CraterW
-# (-3.140, 1.063) r 0.559 from rigid-body (rear-right marker) poses minus ROVER_REACH; 11/18
-# (2.6848, 1.4989) r 0.82 / (-3.7534, 0.9315) r 1.10.
-CRATER_W_RIM = [(-2.7501, 0.4731), (-2.6787, 0.8012), (-3.2678, -0.0534), (-2.9688, 0.0996),
-                (-2.8341, 1.5893), (-3.1293, 1.7371)]
-CRATER_NE_RIM = [(1.4336, 1.7144), (1.4407, 1.3779), (2.145, 2.4195), (1.8302, 2.3022),
-                 (1.7852, 0.6461), (2.0654, 0.4717), (2.652, 0.4326), (2.9852, 0.4792)]
-
-# 11/23: every crater circle drawn this much smaller than measured, for more room to manoeuvre
-# (the rims' own fits: CraterNE r 1.058, CraterW r 1.037; CraterS r 1.2906).
 CRATER_SHRINK = 0.10
+TAPE_MARGIN_1124 = 0.15
 
 
-def _shrunk(c):
-    return (c[0], c[1], round(c[2] - CRATER_SHRINK, 4))
-
-
-DEFAULT_OBSTACLES = [_shrunk(c) for c in (
-    _fit_circle(CRATER_NE_RIM),   # CraterNE rim: (2.480, 1.444) r 1.058 -> 0.958
-    _fit_circle(CRATER_W_RIM),    # CraterW rim: (-3.677, 0.897) r 1.037 -> 0.937
-    (-0.0440, -3.6411, 6.5 * FT / 2 + CRATER_MARGIN),   # CraterS (the south crater, 11/17 centre), 6.5 ft across: 1.2906 -> 1.1906
-)]
+DEFAULT_OBSTACLES = [
+    (2.5594, 2.0641, round(67 * IN / 2 + TAPE_MARGIN_1124, 4)),    # CraterNE (11/24), 67 in across: r 1.0009
+    (-3.7021, -0.1684, round(55 * IN / 2 + TAPE_MARGIN_1124, 4)),  # CraterW (11/24), 55 in across: r 0.8485
+    (-0.0440, -3.6411, round(6.5 * FT / 2 + CRATER_MARGIN - CRATER_SHRINK, 4)),   # CraterS (11/17 centre), 6.5 ft across: 1.1906
+]
 # Quadrants closed as obstacles: (x0, y0) = everything with x >= x0 and y >= y0 is occupied.
 # 11/22: the NE pocket between CraterNE and the north wall, closed from the crater's westernmost
 # point (cx - r, cy) so the north wall meets one straight wall down to the crater at 90 deg
 # (kinematics run 11/22, bag_40: stalled 78 s at the pocket mouth, plans reversing into it).
 _cne = DEFAULT_OBSTACLES[0]
 DEFAULT_CLOSED_QUADRANTS = [
-    (round(_cne[0] - _cne[2], 4), _cne[1]),   # NE pocket: x >= 1.522, y >= 1.444 (shrunk CraterNE)
+    (round(_cne[0] - _cne[2], 4), _cne[1]),   # NE pocket: x >= 1.5585, y >= 2.0641 (11/24 CraterNE)
 ]
 # Every arena edge is moved this far towards the inside before rasterizing (10/28/26:
 # 7 in tighter than the surveyed edges). --inset overrides it, 0 = the surveyed polygon.
